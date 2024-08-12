@@ -1,0 +1,16 @@
+location: external_addons
+sources:
+  - repo: https://github.com/OCA/maintenance
+    name: oca_maintenance
+    rev: "16.0"
+    type: git
+    params:
+    sparse_paths:
+      - "base_maintenance"
+    links:
+      -
+    scripts:
+      - sh /usr/lib/python3/dist-packages/odoo/install_dependencies.sh
+default_group: ''
+groups:
+  -
