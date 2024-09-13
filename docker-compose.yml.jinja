@@ -1,22 +1,22 @@
 services:
   web:
-    restart: unless-stopped
-    image: 
-    container_name: 
+    restart: {{restart}}
+    image: {{odoo_image}}
+    container_name: {{odoo_container}}
     depends_on:
       - db
     ports:
-      - "8069:8069"
-      - "8888:8888"
+      - "{{odoo_port}}:8069"
+      - "{{vsc_port}}:8888"
     volumes:
       - odoo-web-data:/var/lib/odoo
       - ./config:/etc/odoo
       - ./addons:/usr/lib/python3/dist-packages/odoo/extra-addons
       - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
   db:
-    restart: unless-stopped
-    image: postgres:14
-    container_name: 
+    restart: {{restart}}
+    image: postgres:{{db_version}}
+    container_name: {{db_container}}
     environment:
       - POSTGRES_DB=postgres
       - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
