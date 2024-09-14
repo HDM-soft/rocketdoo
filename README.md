@@ -20,8 +20,6 @@ Repositorio base para desarrollos en Odoo.
 
   - Utiliza Gitman para la descarga e instalacion de repositorios externos.
 
-  - Utilice la rama **main** para los desarrollos en ediciones community.
-
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Como utilizar el repositorio:
@@ -43,7 +41,7 @@ Repositorio base para desarrollos en Odoo.
  
  4. Clonar su repositorio una vez creado con el comando:
  
-    ```git clone -b "nombre_de_la_rama´ "url_del_repo```
+    ```git clone -b "nombre_de_la_rama´ "url_del_repo"```
  
  5. Una vez clonado su repo, debe ingresar al directorio del mismo y ejecutar el siguiente comando: 
     ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino``` 
@@ -73,12 +71,12 @@ esto hara que el proyecto de inicio en el directorio de su repositorio.
 
  ### Sugerencias y Consideraciones:
 
- - Recomendamos utilizar Extensiones de Visual Studio Code, como **Docker**, **Dev Conainer**, y todas aquellas que considere de utilidad
+ - Recomendamos utilizar Extensiones de Visual Studio Code, como **Docker**, **Dev Container**, y todas aquellas que considere de utilidad
  para poder trabajar comodamente en VSCode.
  
   - Si usted necesita ocupar addons de terceros, sobre todo aquellos que son paquetes que contienen un conjunto de modulos como lo son el repositorio
   de OCA "web", o repositorios de ADHOC, como "account-financial-tools", le recomendamos utilizar la herramienta **gitman.yml**
-  puede acceder a ella con el comando ´sudo nano gitman.yml´ y completar cada linea, comenzando por la url del repositorio, la version
+  puede acceder a ella con el comando ```sudo nano gitman.yml``` y completar cada linea, comenzando por la url del repositorio, la version
   del mismo, acorde a la version de su despliegue de desarrollo. Debera replicar el conjunto de lineas para agregar mas repositorios de terceros.
   Si tiene dudas con el uso, puede revisar la guia oficial de [gitman](https://gitman.readthedocs.io/en/latest/)
   - Todos los repositorios declarados en "gitman" deberan ser declarados en el archivo **odoo.conf** en la linea de **addons_path**
@@ -108,8 +106,8 @@ sin necesidad de reiniciar sus contenedores.
 
 ### Soporte Técnico
 
-- Si usted tiene alguna duda o inconveniente con el funcionamiento de nuestro ambiente de desarrollo, puede contactarse y enviar su consuslta o ticket
-de soporte presionando en el siguiente link. 
+- Si usted tiene alguna duda o inconveniente con el funcionamiento de nuestro ambiente de desarrollo, puede contactarse y enviar su consulta o ticket
+de soporte presionando en el siguiente link.
 
  - [Link de Soporte](https://odoo.hdmsoft.com.ar/contactus)
 
