@@ -28,11 +28,11 @@ Repositorio base para desarrollos en Odoo.
  puede servirse de la guia oficial de Docker para instalar, [(https://docs.docker.com/engine/install/ubuntu/)]
 
  1. El primer paso antes de comenzar usted debera instalar en su maquina la libreria de Python **copier** con el siguiente comando: 
- _ pip3 install copier
+    ```pip3 install copier```
  o 
- _ sudo apt install python3-copier
+    ```sudo apt install python3-copier```
  , si usted esta trabajando en un ambiente de Python use el siguiente comando 
- _pipx install copier
+    ```pipx install copier```
 
  2. Como segundo paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **odoo-skeleton**, creando un repositorio a partir de la misma con el boton
  **use this template** que se encuentra en la esquina superior derecha en color verde.
@@ -41,28 +41,30 @@ Repositorio base para desarrollos en Odoo.
  
  4. Clonar su repositorio una vez creado con el comando:
  
- _ git clone -b "nombre_de_la_rama´ "url_del_repo"
+    ```git clone -b "nombre_de_la_rama´ "url_del_repo```
  
  5. Una vez clonado su repo, debe ingresar al directorio del mismo y ejecutar el siguiente comando: 
- _ copier copy "/ruta-absoluta/de/mi/repo /ruta/destino 
+    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino``` 
  es idea que la ruta destino, sea la misma donde se encuentra para eso en ruta destino
-use el siguiente comando _ ./
+use el siguiente comando "./"
 esto hara que el proyecto de inicio en el directorio de su repositorio.
 
  6. Siga los pasos indicados por el software de lanzamiento.
 
  7. Una vez finalizado su proyecto, debe crear la imagen con el siguiente comando de docker 
- _ docker build . -t nombre-de-mi-imagen
+    ```docker build . -t nombre-de-mi-imagen```
 
  8. Ahora podra lanzar su ambiente de desarrollo con el comando 
- _ docker compose up -d
+    ```docker compose up -d```
 
  9. Puede verificar que su instancia este corriendo con el comando 
- _ docker compose ps
+    ```docker compose ps```
+    
  o dirigiendose a su navegador de preferencia y usando la url **localhost:puerto**
  
  7. Si su proyecto finalizo con exito, podra ejecutar el comando 
- _ code .
+    ```code .```
+    
  para comenzar a desarrollar en Visual Studio Code.
 
  ------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -79,17 +81,18 @@ esto hara que el proyecto de inicio en el directorio de su repositorio.
   Si tiene dudas con el uso, puede revisar la guia oficial de [gitman](https://gitman.readthedocs.io/en/latest/)
   - Todos los repositorios declarados en "gitman" deberan ser declarados en el archivo **odoo.conf** en la linea de **addons_path**
   Ejemplo:
-  - _ addons_path: usr/lib/python/dist-packages/odoo/extra_addons/,usr/lib/python/dist-packages/odoo/external_addons/account-financial-tools
-   Siendo la segunda linea declarada, la que corresponde con los paquetes de modulos de ADHOC. 
+    ```addons_path: usr/lib/python/dist-packages/odoo/extra_addons/,usr/lib/python/dist-packages/odoo/external_addons/account-financial-tools```
+    
+  Siendo la segunda linea declarada, la que corresponde con los paquetes de modulos de ADHOC. 
   - Gitman crea una carpeta donde contendra todos los modulos declarados con el nombre de **external_addons** los mismos los puede localizar 
   dentro de su contenedor web Odoo en la ruta declarada en el **odoo.conf**
   - Todos los paths deberan estar separados por una coma ","
   - Una vez declarados los modulos de terceros en "gitman" sera necesario hacer un rebuild de su imagen, respetando el mismo nombre 
   de la imagen creada en un principio, con el comando 
-  _ docker build . -t nombre-de-mi-imagen
+    ```docker build . -t nombre-de-mi-imagen```
   
   - Luego reiniciar el serivcio Odoo o el contenedor con el comando 
-  _ docker compose restart
+    ```docker compose restart```
   y una vez dentro de su instancia Odoo
   actualizar la lista de aplicaciones en modo "desarrollador" para poder tener los modulos nuevos visibles. 
 
