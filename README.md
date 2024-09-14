@@ -20,6 +20,8 @@ Repositorio base para desarrollos en Odoo.
 
   - Utiliza Gitman para la descarga e instalacion de repositorios externos.
 
+  - Utilice la rama **main** para los desarrollos en ediciones community.
+
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Como utilizar el repositorio:
