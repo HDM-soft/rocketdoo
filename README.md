@@ -19,50 +19,53 @@ Repositorio base para desarrollos en Odoo.
   - Dispone de una serie de configuraciones preparadas para su uso en VScode como configuraciones para depuracion y lanzamiento de contenedores.
 
   - Utiliza Gitman para la descarga e instalacion de repositorios externos.
-
-------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-### Como utilizar el repositorio:
- 
- 0. Antes de comenzar asegurese de tener instalado **Docker** y **Docker compose** en su computadora, en el caso de no tener instalada dicha herramienta,
+  
+  -  Asegurese de tener instalado **Docker** y **Docker compose** en su computadora, en el caso de no tener instalada dicha herramienta,
  puede servirse de la guia oficial de Docker para instalar, [(https://docs.docker.com/engine/install/ubuntu/)]
-
- 1. El primer paso antes de comenzar usted debera instalar en su maquina la libreria de Python **copier** con el siguiente comando: 
+ 
+  - Antes de comenzar usted debera instalar en su maquina la libreria de Python **copier** con el siguiente comando: 
     ```pip3 install copier```
  o 
     ```sudo apt install python3-copier```
  , si usted esta trabajando en un ambiente de Python use el siguiente comando 
     ```pipx install copier```
 
- 2. Como segundo paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **odoo-skeleton**, creando un repositorio a partir de la misma con el boton
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+### Como utilizar el repositorio:
+ 
+
+ 1. Como primer paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **odoo-skeleton**, creando un repositorio a partir de la misma con el boton
  **use this template** que se encuentra en la esquina superior derecha en color verde.
  
- 3. Determinar el nombre que desea para su repo de desarrollo, asi como tambien verificar si desea incluir todas las ramas o alguna en especial.
+ 2. Determinar el nombre que desea para su repo de desarrollo, asi como tambien verificar si desea incluir todas las ramas o alguna en especial.
  
- 4. Clonar su repositorio una vez creado con el comando:
+ 3. Clonar su repositorio una vez creado con el comando:
  
     ```git clone -b "nombre_de_la_rama´ "url_del_repo"```
  
- 5. Una vez clonado su repo, debe ingresar al directorio del mismo y ejecutar el siguiente comando: 
-    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino``` 
- es idea que la ruta destino, sea la misma donde se encuentra para eso en ruta destino
+ 4. Una vez clonado su repo, debe ingresar al directorio del mismo y ejecutar el siguiente comando: 
+ 
+    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino``` o tambien puede hacerlo asi ''' copier copy ./ ./ ''' para indicar que va a trabajar en la ruta donde esta posicionado.
+ 
+ es ideal que la ruta destino, sea la misma donde se encuentra para eso en ruta destino
 use el siguiente comando "./"
 esto hara que el proyecto de inicio en el directorio de su repositorio.
 
- 6. Siga los pasos indicados por el software de lanzamiento.
+ 5. Siga los pasos indicados por el software de lanzamiento.
 
- 7. Una vez finalizado su proyecto, debe crear la imagen con el siguiente comando de docker 
+ 6. Una vez finalizado su proyecto, debe crear la imagen con el siguiente comando de docker 
     ```docker build . -t nombre-de-mi-imagen```
 
- 8. Ahora podra lanzar su ambiente de desarrollo con el comando 
+ 7. Ahora podra lanzar su ambiente de desarrollo con el comando 
     ```docker compose up -d```
 
- 9. Puede verificar que su instancia este corriendo con el comando 
+ 8. Puede verificar que su instancia este corriendo con el comando 
     ```docker compose ps```
     
  o dirigiendose a su navegador de preferencia y usando la url **localhost:puerto**
  
- 7. Si su proyecto finalizo con exito, podra ejecutar el comando 
+ 9. Si su proyecto finalizo con exito, podra ejecutar el comando 
     ```code .```
     
  para comenzar a desarrollar en Visual Studio Code.
