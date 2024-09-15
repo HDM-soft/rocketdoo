@@ -46,7 +46,10 @@ Repositorio base para desarrollos en Odoo.
  
  4. Una vez clonado su repo, debe ingresar al directorio del mismo y ejecutar el siguiente comando: 
  
-    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino``` o tambien puede hacerlo asi ``` copier copy ./ ./ ```,  para indicar que va a trabajar en la ruta donde esta posicionado.
+    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino``` o tambien puede hacerlo asi 
+    ``` copier copy ./ ./ ```
+    
+    para indicar que va a trabajar en la ruta donde esta posicionado.
  
  es ideal que la ruta destino, sea la misma donde se encuentra para eso en ruta destino
 use el siguiente comando "./"
