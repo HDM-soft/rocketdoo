@@ -14,9 +14,9 @@ welcome_message: |
   | |  | | |__| | |  | |____) | |__| | |       | |
   |_|  |_|_____/|_|  |_|_____/ \____/|_|       |_|
 
-  =========================================
+  ========================================================
   ¡Bienvenido al generador de entornos de Desarrollo Odoo!
-  =========================================
+  ========================================================
   Este asistente te guiará en la creación de un entorno de desarrollo de Odoo dockerizado.
   Por favor, responde a las siguientes preguntas para personalizar tu proyecto. En el caso 
   de no necesitar modificar los valores presione ENTER.
@@ -24,6 +24,9 @@ welcome_message: |
   construida la imagen, podrás lanzar tu entorno con el comando "docker compose up -d".
 
   Si tienes alguna duda, revisa la documentación o contacta al administrador.
+
+  PRESIONE "ENTER" PARA COMENZAR ...
+
   https://odoo.hdmsoft.com.ar
 
 # Preguntas de la plantilla
