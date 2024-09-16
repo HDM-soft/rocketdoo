@@ -25,9 +25,9 @@ welcome_message: |
 
   Si tienes alguna duda, revisa la documentación o contacta al administrador.
 
-  PRESIONE "ENTER" PARA COMENZAR ...
-
   https://odoo.hdmsoft.com.ar
+
+  PRESIONE "ENTER" PARA COMENZAR ...
 
 # Preguntas de la plantilla
 odoo_version:
