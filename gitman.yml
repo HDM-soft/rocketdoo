@@ -1,12 +1,12 @@
 location: external_addons
 sources:
-  - repo: https://github.com/OCA/maintenance
-    name: oca_maintenance
-    rev: "16.0"
+  - repo: 
+    name: 
+    rev: ""
     type: git
     params:
     sparse_paths:
-      - "base_maintenance"
+      - ""
     links:
       -
     scripts:

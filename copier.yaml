@@ -92,3 +92,10 @@ restart:
     - "always"
     - "unless-stopped"
   default: "unless-stopped"
+
+_add_repos_script:
+  type: str
+  default: "config_gitman.py"
+
+_tasks:
+  - command: "python3 config_gitman.py"
