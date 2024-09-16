@@ -69,11 +69,7 @@ esto hará que el proyecto de inicio en el directorio de su repositorio.
 
  7. La segunda etapa del LANZADOR le ofrece la opcion de usar **GITMAN** para repositorios de terceros, si le indica que sí! Deberá completar las preguntas.
 
- 8. Luego de finalizar con el lanzamiento, si usted opto por cargar repositorios de terceros con Gitman, deberá agregar el path de esos repositorios al archivo 
-    **odoo.conf** con la ruta absoluta
-
-    Ejemplo:
-    ```addons_path: usr/lib/python/dist-packages/odoo/extra_addons/,usr/lib/python/dist-packages/odoo/external_addons/account-financial-tools```
+ 8. Nuestro lanzador se encargara de modificar el archivo odoo.conf en la linea "addons_path" con los nuevos repositorios.
 
  9. Una vez finalizado su proyecto, debe construir la imagen con el siguiente comando de docker: 
    
@@ -102,26 +98,29 @@ esto hará que el proyecto de inicio en el directorio de su repositorio.
  - Recomendamos utilizar Extensiones de Visual Studio Code, como **Docker**, **Dev Container**, y todas aquellas que considere de utilidad
  para poder trabajar en VSCode.
  
-  - Si usted necesita ocupar addons de terceros, sobre todo aquellos que son paquetes que contienen un conjunto de módulos como lo son el repositorio
-  de OCA "web", o repositorios de ADHOC, como "account-financial-tools", le recomendamos utilizar la herramienta **gitman.yml**
-  puede acceder a ella con el comando 
+### ¿COMO CARGAR MAS MODULOS EN GITMAN SI NO LO HICE CON EL LANZADOR?
+ 
+  - Si usted necesita ocupar addons de terceros, luego de haber construido su entorno de desarrollo con nuestro lanzador, debera editar a mano el arhivo **gitman.yml** y a su vez deberá también agregar las lineas al path del **odoo.conf** addons_path con el comando:
   
       ```sudo nano gitman.yml``` 
   
   y completar cada linea, comenzando por la URL del repositorio, la versión
   del mismo, acorde a la versión de su despliegue de desarrollo. Deberá replicar el conjunto de lineas para agregar mas repositorios de terceros.
   Si tiene dudas con el uso, puede revisar la guía oficial de [gitman](https://gitman.readthedocs.io/en/latest/)
-  - Todos los repositorios declarados en "gitman" deberán ser declarados en el archivo **odoo.conf** en la linea de **addons_path**
+
+  - En este ejemplo puede ver como agregar las rutas de sus nuevos paquetes de modulos.
   Ejemplo:
       ```addons_path: usr/lib/python/dist-packages/odoo/extra_addons/,usr/lib/python/dist-packages/odoo/external_addons/account-financial-tools```
     
-  Siendo la segunda linea declarada, la que corresponde con los paquetes de modulos de ADHOC. 
   - Gitman crea una carpeta donde contendrá todos los módulos declarados con el nombre de **external_addons** los mismos los puede localizar 
   dentro de su contenedor web Odoo en la ruta declarada en el **odoo.conf**
+
   - Todos los paths deberán estar separados por una coma ","
   - Una vez declarados los módulos de terceros en "gitman" sera necesario hacer un rebuild de su imagen, respetando el mismo nombre 
   de la imagen creada en un principio, con el comando 
-    
+
+  - **RECUERDE QUE CUANDO INICIE POR PRIMERA VEZ NUESTRO LANZADOR, EL MISMO LO GUIA PARA EVITAR CARGAR LOS MODULOS A MANO EN GITMAN**
+
       ```docker build . -t nombre-de-mi-imagen```
   
   - Luego reiniciar el serivcio Odoo o el contenedor con el comando 

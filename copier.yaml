@@ -99,3 +99,9 @@ _add_repos_script:
 
 _tasks:
   - command: "python3 config_gitman.py"
+
+# Mensaje Final
+post_gen_message: |
+  ¡Gracias por usar este generador de plantillas!
+
+  Tu proyecto {{project_name}} ha sido creado con éxito.
