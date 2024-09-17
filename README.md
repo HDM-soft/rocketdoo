@@ -1,7 +1,7 @@
 # HDMsoft
 [visite nuestra pagina](https://odoo.hdmsoft.com.ar)
 
-## Odoo Skeleton
+## ROCKETDOO
 
 Repositorio base para desarrollos en Odoo.
 
@@ -45,7 +45,7 @@ Repositorio base para desarrollos en Odoo.
  
     ```git clone -b "nombre_de_la_rama´ "url_del_repo"``` 
     
-> Si quiere clonar el repositorio completo, desestime la bandera "-b"
+> Si quiere clonar el repositorio completo, desestime la bandera "-b y el nombre de la rama"
 
  4. Antes de comenzar con la ejecución del lanzador, ingrese al directorio de su repositorio e instale las dependencias con el comando:
  
@@ -67,7 +67,7 @@ esto hará que el proyecto de inicio en el directorio de su repositorio.
 
  6. Siga los pasos indicados por el software de lanzamiento.
 
- 7. La segunda etapa del LANZADOR le ofrece la opcion de usar **GITMAN** para repositorios de terceros, si le indica que sí! Deberá completar las preguntas.
+ 7. La segunda etapa del LANZADOR le ofrece la opción de usar **GITMAN** para repositorios de terceros, si le indica que sí! Deberá completar las preguntas.
 
  8. Nuestro lanzador se encargara de modificar el archivo odoo.conf en la linea "addons_path" con los nuevos repositorios.
 
@@ -100,7 +100,7 @@ esto hará que el proyecto de inicio en el directorio de su repositorio.
  
 ### ¿COMO CARGAR MAS MODULOS EN GITMAN SI NO LO HICE CON EL LANZADOR?
  
-  - Si usted necesita ocupar addons de terceros, luego de haber construido su entorno de desarrollo con nuestro lanzador, debera editar a mano el arhivo **gitman.yml** y a su vez deberá también agregar las lineas al path del **odoo.conf** addons_path con el comando:
+  - Si usted necesita ocupar addons de terceros, luego de haber construido su entorno de desarrollo con nuestro lanzador, deberá editar a mano el archivo **gitman.yml** y a su vez deberá también agregar las lineas al path del **odoo.conf** addons_path con el comando:
   
       ```sudo nano gitman.yml``` 
   
@@ -108,7 +108,7 @@ esto hará que el proyecto de inicio en el directorio de su repositorio.
   del mismo, acorde a la versión de su despliegue de desarrollo. Deberá replicar el conjunto de lineas para agregar mas repositorios de terceros.
   Si tiene dudas con el uso, puede revisar la guía oficial de [gitman](https://gitman.readthedocs.io/en/latest/)
 
-  - En este ejemplo puede ver como agregar las rutas de sus nuevos paquetes de modulos.
+  - En este ejemplo puede ver como agregar las rutas de sus nuevos paquetes de módulos.
   Ejemplo:
       ```addons_path: usr/lib/python/dist-packages/odoo/extra_addons/,usr/lib/python/dist-packages/odoo/external_addons/account-financial-tools```
     
@@ -133,7 +133,7 @@ esto hará que el proyecto de inicio en el directorio de su repositorio.
 Si usted modifica su archivo **gitman.yml** antes de realizar la construcción con el comando "build" sera mas que suficiente para poder ver los módulos
 sin necesidad de reiniciar sus contenedores.
 
-  - Todos los módulos de terceros simples, aconsejamos que los coloque en la carpeta **addons** que se encuentra dentro del directorio de trabajo.
+  - Todos los módulos de terceros simples, como también el modulo que este por desarrollar, aconsejamos que los coloque en la carpeta **addons** que se encuentra dentro del directorio de trabajo.
 
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
