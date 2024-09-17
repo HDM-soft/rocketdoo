@@ -53,11 +53,11 @@ Repositorio base para desarrollos en Odoo.
  
  5. Ahora puede ejecutar su LANZADOR con el comando: 
  
-    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino``` 
+    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino --trust``` 
     
     o también puede hacerlo de la siguiente forma:
     
-    ``` copier copy ./ ./ ```
+    ``` copier copy ./ ./ --trust```
     
     para indicar que va a trabajar en la ruta donde esta posicionado.
  
