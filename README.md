@@ -51,19 +51,17 @@ Repositorio base para desarrollos en Odoo.
  
     ```sudo pip3 install -r requirements.txt```
  
- 5. Ahora puede ejecutar su LANZADOR con el comando: 
+ 5. Ahora puede ejecutar su ROCKETDOO con el comando: 
  
-    ```copier copy "/ruta-absoluta/de/mi/repo /ruta/destino --trust``` 
+    ```bash run.sh```
     
-    o también puede hacerlo de la siguiente forma:
-    
-    ``` copier copy ./ ./ --trust```
-    
-    para indicar que va a trabajar en la ruta donde esta posicionado.
- 
-> es ideal que la ruta destino, sea la misma donde se encuentra para eso en ruta destino
-use el siguiente comando "./"
-esto hará que el proyecto de inicio en el directorio de su repositorio.
+> También pude otorgarle permisos de ejecución a run.sh con el comando: 
+
+    ```sudo chmod +x run.sh``` 
+
+Con los permisos de ejecución podrá iniciar su proyecto con el comando:
+
+    ```./run.sh```
 
  6. Siga los pasos indicados por el software de lanzamiento.
 
