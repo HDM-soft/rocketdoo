@@ -1,17 +1,40 @@
 # Importamos las librerías necesarias
 import sys
 import os
+import subprocess
 import yaml
 
 
 # Preguntar si el usuario quiere usar gitman
 usar_gitman = input("¿Desea utilizar gitman? (s/n): ").strip().lower()
 
+dockerfile_path = "Dockerfile"
+copy_line = "COPY ./gitman.yml /usr/lib/python3/dist-packages/odoo/\n"
+gitman_line = "RUN gitman install -r /usr/lib/python3/dist-packages/odoo/\n"
+
+
+def comentar_lineas():
+    """Comenta las líneas específicas en el Dockerfile."""
+    with open(dockerfile_path, "r") as file:
+        lines = file.readlines()
+
+    with open(dockerfile_path, "w") as file:
+        for line in lines:
+            if line == copy_line or line == gitman_line:
+                file.write(f"# {line}")
+            else:
+                file.write(line)
+
+
 if usar_gitman != "s":
     if os.path.exists("gitman.yml"):
         os.remove("gitman.yml")
-    print("Sin cambios en gitman")
-    sys.exit(0)  # Finalizar el script
+
+    print("Sin cambios en gitman. Comentando líneas del Dockerfile...")
+
+    comentar_lineas()
+    sys.exit(0)
+
 
 # Definimos la estructura inicial del archivo de configuración
 config = {
@@ -37,31 +60,31 @@ def agregar_repositorio():
         "name": get_input("Ingresa el nombre (name): "),
         "rev": get_input("Ingresa la revisión (branch): "),
         "type": "git",  # Se mantiene fijo
-        "params": get_input(
-            "Ingresa los parámetros (params) (opcional, presiona Enter para omitir): ",
-            required=False,
-        ),
-        "sparse_paths": [
-            get_input(
-                "Ingresa el sparse_path (opcional, presiona Enter para omitir): ",
-                required=False,
-            )
-        ],
-        "links": [],
+        # "params": get_input(
+        #     "Ingresa los parámetros (params) (opcional, presiona Enter para omitir): ",
+        #     required=False,
+        # ),
+        # "sparse_paths": [
+        #     get_input(
+        #         "Ingresa el sparse_path (opcional, presiona Enter para omitir): ",
+        #         required=False,
+        #     )
+        # ],
+        # "links": [],
         "scripts": [
             "sh /usr/lib/python3/dist-packages/odoo/install_dependencies.sh"
         ],  # Se mantiene fijo
     }
 
     # Preguntamos si quiere agregar algún link opcional
-    while True:
-        link = get_input(
-            "Ingresa un link (opcional, presiona Enter para omitir): ", required=False
-        )
-        if link:
-            repo_info["links"].append(link)
-        else:
-            break
+    # while True:
+    #     link = get_input(
+    #         "Ingresa un link (opcional, presiona Enter para omitir): ", required=False
+    #     )
+    #     if link:
+    #         repo_info["links"].append(link)
+    #     else:
+    #         break
 
     # Agregamos la información del repositorio a la lista de sources
     config["sources"].append(repo_info)
