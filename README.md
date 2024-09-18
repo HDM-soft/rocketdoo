@@ -36,7 +36,7 @@ Repositorio base para desarrollos en Odoo.
 ### INSTRUCCIONES:
  
 
- 1. Como primer paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **odoo-skeleton**, creando un repositorio a partir de la misma con el botón
+ 1. Como primer paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **rocketdoo**, creando un repositorio a partir de la misma con el botón
  **use this template** que se encuentra en la esquina superior derecha en color verde.
  
  2. Determinar el nombre que desea para su repositorio de desarrollo, así como también verificar si desea incluir todas las ramas o alguna en especial.
