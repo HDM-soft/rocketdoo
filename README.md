@@ -57,14 +57,6 @@ Repositorio base para desarrollos en Odoo.
  5. Ahora puede ejecutar su ROCKETDOO con el comando: 
  
     ```./run.sh```
-    
-> También pude otorgarle permisos de ejecución a run.sh con el comando: 
-
-    ```sudo chmod +x run.sh``` 
-
-Con los permisos de ejecución podrá iniciar su proyecto con el comando:
-
-    ```./run.sh```
 
  6. Siga los pasos indicados por el software de lanzamiento.
 
