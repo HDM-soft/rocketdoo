@@ -1,7 +1,12 @@
 FROM odoo{{odoo_version}}
 
 COPY ./config/odoo.conf /etc/odoo/
+<<<<<<< HEAD
 COPY ./gitman.yml /usr/lib/python3/dist-packages/odoo/
+=======
+#COPY ./gitman.yml /usr/lib/python3/dist-packages/odoo/
+RUN if [ -f ./gitman.yml ]; then COPY ./gitman.yml /usr/lib/python3/dist-packages/odoo/; fi
+>>>>>>> 6221429c3c898c25cb131bb0d5198ac827903435
 COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
 
 USER root
@@ -13,9 +18,22 @@ RUN apt update && apt install git -y
 #RUN chmod 700 /root/.ssh/id_rsa
 #RUN echo "StrictHostKeyChecking no" >> /root/.ssh/config
 
+<<<<<<< HEAD
+=======
+<<<<<<<< HEAD:Dockerfile
+>>>>>>> 6221429c3c898c25cb131bb0d5198ac827903435
 RUN python3 -m pip install debugpy gitman
 RUN git config --global http.postBuffer 104857600
 #RUN git config --global http.retry 5
 RUN gitman install -r /usr/lib/python3/dist-packages/odoo/
+<<<<<<< HEAD
+=======
+========
+RUN python3 -m pip install gitman
+
+#RUN gitman install -r /usr/lib/python3/dist-packages/odoo/
+RUN if [ -f gitman.yml ]; then gitman install -r /usr/lib/python3/dist-packages/odoo/; fi
+>>>>>>>> 6221429c3c898c25cb131bb0d5198ac827903435:Dockerfile.jinja
+>>>>>>> 6221429c3c898c25cb131bb0d5198ac827903435
 
 CMD python3 -m debugpy --listen 0.0.0.0:8888 /usr/bin/odoo -c /etc/odoo/odoo.conf
