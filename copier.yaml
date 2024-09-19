@@ -20,8 +20,7 @@ welcome_message: |
   Este asistente te guiará en la creación de un entorno de desarrollo de Odoo dockerizado.
   Por favor, responde a las siguientes preguntas para personalizar tu proyecto. En el caso 
   de no necesitar modificar los valores presione ENTER.
-  Luego de finalizar la guía, podrás ejecutar "docker build . -t nombre-de-mi-imagen" y una vez
-  construida la imagen, podrás lanzar tu entorno con el comando "docker compose up -d".
+  Luego de finalizar la guía, podrás ejecutar tu proyecto con el comando "docker compose up".
 
   Si tienes alguna duda, revisa la documentación o contacta al administrador.
 
@@ -96,7 +95,7 @@ restart:
 
 _add_repos_script:
   type: str
-  default: "rocket.py"
+  default: "config.py"
 
 _tasks: 
-  - command: "python3 rocket.py"
+  - command: "python3 config.py"

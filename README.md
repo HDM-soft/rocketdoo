@@ -29,6 +29,9 @@ Repositorio base para desarrollos en Odoo.
   
   -  Asegúrese de tener instalado **Docker** y **Docker compose** en su computadora, en el caso de no tener instalada dicha herramienta,
  puede servirse de la guia oficial de Docker para instalar, [Guía para la Instalación de Doker](https://docs.docker.com/engine/install/ubuntu/)
+
+  - Este ambiente cuenta con la posibilidad de trabajar con repositorios privados. Para esto, se le solicita al usuario desarrollador que copie su llave
+  privada, la misma con la que tiene configurado su repo de github, en la carpeta **.ssh** de este directorio.
  
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -53,7 +56,7 @@ Repositorio base para desarrollos en Odoo.
  
  5. Ahora puede ejecutar su ROCKETDOO con el comando: 
  
-    ```bash run.sh```
+    ```./run.sh```
     
 > También pude otorgarle permisos de ejecución a run.sh con el comando: 
 
