@@ -1,0 +1,102 @@
+welcome_message: |
+  _____   ____   _____ _  ________ _______ _____   ____   ____    _
+  |  __ \ / __ \ / ____| |/ /  ____|__   __|  __ \ / __ \ / __ \  | |
+  | |__) | |  | | |    | ' /| |__     | |  | |  | | |  | | |  | | | |__  _   _
+  |  _  /| |  | | |    |  < |  __|    | |  | |  | | |  | | |  | | | '_ \| | | |
+  | | \ \| |__| | |____| . \| |____   | |  | |__| | |__| | |__| | | |_) | |_| |
+  |_|  \_\\____/ \_____|_|\_\______|  |_|  |_____/ \____/ \____/  |_.__/ \__, |
+                                                                          __/ |
+                                                                        |___/
+  _    _ _____  __  __  _____  ____  ______ _______
+  | |  | |  __ \|  \/  |/ ____|/ __ \|  ____|__   __|
+  | |__| | |  | | \  / | (___ | |  | | |__     | |
+  |  __  | |  | | |\/| |\___ \| |  | |  __|    | |
+  | |  | | |__| | |  | |____) | |__| | |       | |
+  |_|  |_|_____/|_|  |_|_____/ \____/|_|       |_|
+
+  ========================================================
+  ¡Bienvenido al generador de entornos de Desarrollo Odoo!
+  ========================================================
+  Este asistente te guiará en la creación de un entorno de desarrollo de Odoo dockerizado.
+  Por favor, responde a las siguientes preguntas para personalizar tu proyecto. En el caso 
+  de no necesitar modificar los valores presione ENTER.
+  Luego de finalizar la guía, podrás ejecutar "docker build . -t nombre-de-mi-imagen" y una vez
+  construida la imagen, podrás lanzar tu entorno con el comando "docker compose up -d".
+
+  Si tienes alguna duda, revisa la documentación o contacta al administrador.
+
+  https://odoo.hdmsoft.com.ar
+
+  PRESIONE "ENTER" PARA COMENZAR ...
+
+
+# Preguntas de la plantilla
+odoo_version:
+  type: str
+  help: "Selecciona la versión de Odoo que deseas instalar"
+  choices:
+    - ":15.0"
+    - ":16.0"
+    - ":17.0"
+  default: ":17.0"
+
+project_name:
+  type: str
+  help: "Nombre del proyecto"
+  default: "mi_proyecto_odoo"
+
+# Configuracion del servicio PostgreSql
+db_version:
+  type: int
+  help: "Seleccione la version de PostgreSql que desea usar"
+  choices:
+    - 13
+    - 14
+  default: 14
+
+db_container:
+  type: str
+  help: "Nombre su contenedor del servicio base de datos"
+  default: "ps-container"
+
+admin_passwd:
+  type: str
+  help: "Escriba la contraseña para su Master Password de Odoo, por defecto (admin)"
+  default: "admin"
+
+# Configuracion del servicio Odoo
+odoo_image:
+  type: str
+  help: "Determine el nombre de la imagen a construir, por defecto (odoo-skeleton)"
+  default: "odoo-skeleton"
+
+odoo_container:
+  type: str
+  help: "Escriba el nombre de su contenedor para el servicio Odoo"
+  default: "odoo-dev"
+
+odoo_port:
+  type: int
+  help: "Puerto en el cual correrá Odoo, por defecto (8069), solo se recomienda cambiar si tiene mas de un ambiente corriendo"
+  default: 8069
+
+vsc_port:
+  type: int
+  help: "Puerto para la conexion con Visual Studio Code, por defecto (8888), solo se recomienda cambiar si tiene mas de un ambiente corriendo"
+  default: 8888
+
+restart:
+  type: str
+  help: "Configura si quieres que tus contenedores se reinicien en automatico"
+  choices: 
+    - "no"
+    - "always"
+    - "unless-stopped"
+  default: "unless-stopped"
+
+_add_repos_script:
+  type: str
+  default: "rocket.py"
+
+_tasks: 
+  - command: "python3 rocket.py"

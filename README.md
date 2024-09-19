@@ -1,28 +1,146 @@
 # HDMsoft
-## Odoo Skeleton
-Repositorio base para desarrollos de Odoo version 17.0
+[visite nuestra pagina](https://odoo.hdmsoft.com.ar)
 
-La descripcion del repositorio debe ser modificada para brindar mayor claridad en su uso.
+## ROCKETDOO
+
+Repositorio base para desarrollos en Odoo.
+
+## Desarrollado por:
+
+   - "Elias Braceras"
+   - "Horacio Montaño"
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Descripcion simple:
-  Este repositorio debe ser utilizado como molde para cualquier desarrollo de Odoo. El repositorio esta equipado con una seria de herramientas para agilizar el trabajo durante la preparación para el desarrollo.
 
-  - Se utiliza docker para la creacion de instancias de Odoo y docker compose para levantarlas junto con una base de datos.
+  Este repositorio debe ser utilizado como molde para cualquier desarrollo de Odoo. El repositorio esta equipado con una serie de herramientas para agilizar el trabajo durante la preparación para el desarrollo.
 
-  - Dispone de una serie de configuraciones preparadas para su uso en VScode como configuraciones para depuracion y lanzamiento de contenedores.
+  - Este entorno de desarrollo esta pensado para quienes desarrollen en sistemas operativos Linux, tales como Ubuntu, Debian, etc. Sin embargo
+    para quienes prefieran desarrollar en Windows les sugerimos que instalen en sus máquinas **WSL2** Subsistema de Linux para Windows.
+  
+  - Usted dispone en esta versión de un lanzador de proyecto CLI, diseñado para facilitar el armado de su proyecto de desarrollo.
+  
+  - Se utiliza docker para la creación de instancias de Odoo y docker compose para levantarlas junto con una base de datos.
 
-  - Utiliza Gitman para la descarga en instalaciones de repositorios externos.
+  - Dispone de una serie de configuraciones preparadas para su uso en VScode como configuraciones para depuración y lanzamiento de contenedores.
 
----
+  - Utiliza Gitman para la descarga e instalación de repositorios externos.
+  
+  -  Asegúrese de tener instalado **Docker** y **Docker compose** en su computadora, en el caso de no tener instalada dicha herramienta,
+ puede servirse de la guia oficial de Docker para instalar, [Guía para la Instalación de Doker](https://docs.docker.com/engine/install/ubuntu/)
+ 
+ 
+------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-### Como utilizar el repositorio:
- 1. En el archivo docker compose modificar el nombre de los contenedores a gusto.
- 2. Si se modifico el nombre del contenedor de la base de datos, modificar en el archivo "config/odoo.conf" el campo "db_host" indicando el nuevo nombre del contenedor.
- 3. Incluir cualquier configuraciones personalizada en el archivo "config/odoo.conf"
- 4. En el archivo "gitman.yml" incluir los enlaces a repositorios externos requeridos por el desarrollo. La herramienta se encargara de descargar el addon en el directorio especificado en el campo "location" e instalar las dependencias de python si existieran.
-    1. En el caso de que ocurra un error instalando las dependencias el desarrollador debera entrar al contenedor manualmente e instalarlas o modificar el dockerfile para que se instalen automaticamente.
- 5. Incluir en el archivo "config/odoo.conf" los path correspondientes a los addons externos, por ejemplo, utilizando la configuracion ya incluida en el archivo gitman la ruta que debe ser añadida seria: `/usr/lib/python3/dist-packages/odoo/external_addons/oca_maintenance`
-    1. El path esta compuesto por el path donde se instala odoo dentro del contenedor seguido por "location" definida en el "gitman.yml" y finalmente "name" definido en el gitman.yml para ese "source".
- 6. Ejecutar el comando `docker build . -t odoo-skeleton`
-    1. El parametro -t es para darle un nombre y un tag a la imagen, puede reemplazarse por cualquier valos, pero en el caso de que lo reemplace debe modificar el campo "image" del docker compose indicando el nombre que le designo a la imagen.
- 7. Si la imagen se construye con exito puede ejecutar el comando `docker compose up -d` para levantar los contenedores o levantarlos directamente desde VScode
+### INSTRUCCIONES:
+ 
+
+ 1. Como primer paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **rocketdoo**, creando un repositorio a partir de la misma con el botón
+ **use this template** que se encuentra en la esquina superior derecha en color verde.
+ 
+ 2. Determinar el nombre que desea para su repositorio de desarrollo, así como también verificar si desea incluir todas las ramas o alguna en especial.
+ 
+ 3. Una vez creado su repositorio, debe clonar el mismo:
+ 
+    ```git clone -b "nombre_de_la_rama´ "url_del_repo"``` 
+    
+> Si quiere clonar el repositorio completo, desestime la bandera "-b y el nombre de la rama"
+
+ 4. Antes de comenzar con la ejecución del lanzador, ingrese al directorio de su repositorio e instale las dependencias con el comando:
+ 
+    ```sudo pip3 install -r requirements.txt```
+ 
+ 5. Ahora puede ejecutar su ROCKETDOO con el comando: 
+ 
+    ```bash run.sh```
+    
+> También pude otorgarle permisos de ejecución a run.sh con el comando: 
+
+    ```sudo chmod +x run.sh``` 
+
+Con los permisos de ejecución podrá iniciar su proyecto con el comando:
+
+    ```./run.sh```
+
+ 6. Siga los pasos indicados por el software de lanzamiento.
+
+ 7. La segunda etapa del LANZADOR le ofrece la opción de usar **GITMAN** para repositorios de terceros, si le indica que sí! Deberá completar las preguntas.
+
+ 8. Nuestro lanzador se encargara de modificar el archivo odoo.conf en la linea "addons_path" con los nuevos repositorios.
+
+ 9. Una vez finalizado su proyecto, debe construir la imagen con el siguiente comando de docker: 
+   
+    ```docker build . -t nombre-de-mi-imagen```
+
+ 10. Ahora podrá lanzar su ambiente de desarrollo con el comando: 
+   
+    ```docker compose up -d```
+
+ 11. Puede verificar que su instancia este corriendo con el comando 
+    
+    ```docker compose ps```
+    
+ o en su navegador de preferencia colocando la URL **localhost:puerto**
+ 
+ 12. Si su proyecto finalizo con éxito, podrá ejecutar el comando:
+    
+    ```code .```
+    
+    ¡AHORA PUEDE COMENZAR A DESARROLLAR CON "VISUAL STUDIO CODE"! 
+
+ ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+### Sugerencias y Consideraciones:
+
+ - Recomendamos utilizar Extensiones de Visual Studio Code, como **Docker**, **Dev Container**, y todas aquellas que considere de utilidad
+ para poder trabajar en VSCode.
+ 
+### ¿COMO CARGAR MAS MODULOS EN GITMAN SI NO LO HICE CON EL LANZADOR?
+ 
+  - Si usted necesita ocupar addons de terceros, luego de haber construido su entorno de desarrollo con nuestro lanzador, deberá editar a mano el archivo **gitman.yml** y a su vez deberá también agregar las lineas al path del **odoo.conf** addons_path con el comando:
+  
+      ```sudo nano gitman.yml``` 
+  
+  y completar cada linea, comenzando por la URL del repositorio, la versión
+  del mismo, acorde a la versión de su despliegue de desarrollo. Deberá replicar el conjunto de lineas para agregar mas repositorios de terceros.
+  Si tiene dudas con el uso, puede revisar la guía oficial de [gitman](https://gitman.readthedocs.io/en/latest/)
+
+  - En este ejemplo puede ver como agregar las rutas de sus nuevos paquetes de módulos.
+  Ejemplo:
+      ```addons_path: usr/lib/python/dist-packages/odoo/extra_addons/,usr/lib/python/dist-packages/odoo/external_addons/account-financial-tools```
+    
+  - Gitman crea una carpeta donde contendrá todos los módulos declarados con el nombre de **external_addons** los mismos los puede localizar 
+  dentro de su contenedor web Odoo en la ruta declarada en el **odoo.conf**
+
+  - Todos los paths deberán estar separados por una coma ","
+  - Una vez declarados los módulos de terceros en "gitman" sera necesario hacer un rebuild de su imagen, respetando el mismo nombre 
+  de la imagen creada en un principio, con el comando 
+
+  - **RECUERDE QUE CUANDO INICIE POR PRIMERA VEZ NUESTRO LANZADOR, EL MISMO LO GUIA PARA EVITAR CARGAR LOS MODULOS A MANO EN GITMAN**
+
+      ```docker build . -t nombre-de-mi-imagen```
+  
+  - Luego reiniciar el serivcio Odoo o el contenedor con el comando 
+    
+      ```docker compose restart```
+  
+  y una vez dentro de su instancia Odoo
+  actualizar la lista de aplicaciones en modo "desarrollador" para poder tener los módulos nuevos visibles. 
+
+Si usted modifica su archivo **gitman.yml** antes de realizar la construcción con el comando "build" sera mas que suficiente para poder ver los módulos
+sin necesidad de reiniciar sus contenedores.
+
+  - Todos los módulos de terceros simples, como también el modulo que este por desarrollar, aconsejamos que los coloque en la carpeta **addons** que se encuentra dentro del directorio de trabajo.
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+
+### Soporte Técnico
+
+- Si usted tiene alguna duda o inconveniente con el funcionamiento de nuestro ambiente de desarrollo, puede contactarse y enviar su consulta o ticket
+de soporte presionando en el siguiente link.
+
+ - [Link de Soporte](https://odoo.hdmsoft.com.ar/contactus)
+
+
