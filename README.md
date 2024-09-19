@@ -69,19 +69,12 @@ Con los permisos de ejecución podrá iniciar su proyecto con el comando:
 
  8. Nuestro lanzador se encargara de modificar el archivo odoo.conf en la linea "addons_path" con los nuevos repositorios.
 
- 9. Una vez finalizado su proyecto, debe construir la imagen con el siguiente comando de docker: 
-   
-    ```docker build . -t nombre-de-mi-imagen```
-
- 10. Ahora podrá lanzar su ambiente de desarrollo con el comando: 
-   
-    ```docker compose up -d```
-
- 11. Puede verificar que su instancia este corriendo con el comando 
+ 9. Una vez finalizado su proyecto, debe ejecutar el siguiente comando para levantar su instancia en local: 
     
-    ```docker compose ps```
-    
- o en su navegador de preferencia colocando la URL **localhost:puerto**
+    ```docker compose up```
+
+ 11. RocketDoo comenzará a construir la imagen de su entorno y seguido de esto, levanta su sistema. 
+    Una vez finlizado con éxtio puede verificar ingresando la siguiente URL en si navegador web; **localhost:puerto**
  
  12. Si su proyecto finalizo con éxito, podrá ejecutar el comando:
     

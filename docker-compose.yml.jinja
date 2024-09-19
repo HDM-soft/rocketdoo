@@ -1,5 +1,6 @@
 services:
   web:
+    build: .
     restart: {{restart}}
     image: {{odoo_image}}
     container_name: {{odoo_container}}
