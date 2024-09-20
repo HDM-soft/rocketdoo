@@ -2,7 +2,6 @@
 import sys
 import os
 import yaml
-import subprocess
 
 
 # # Preguntar si el usuario quiere usar gitman
