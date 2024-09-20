@@ -200,14 +200,6 @@ config = {
 }
 
 
-def get_input(prompt, required=True):
-    """Función que recibe un input del usuario, con opción de no ser obligatorio"""
-    value = input(prompt)
-    while required and not value:
-        value = input("Este campo no puede estar vacío. " + prompt)
-    return value
-
-
 def agregar_repositorio():
     """Función para agregar un nuevo repositorio"""
     repo_info = {
