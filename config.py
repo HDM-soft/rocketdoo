@@ -28,6 +28,11 @@ def get_input(prompt, required=True):
 
 def manejar_ssh(repos_privados, dockerfile_path):
     """Descomenta o comenta las líneas relacionadas con SSH en el Dockerfile, y reemplaza 'rsa' por la llave privada correcta."""
+    if usar_repos_privados == 's':
+        manejar_claves_ssh
+    else:
+        return
+    
     # Buscar la clave privada en la carpeta ./.ssh
     ssh_folder = "./.ssh"
     try:
@@ -117,7 +122,8 @@ def comentar_lineas():
 
 
 def manejar_claves_ssh():
-    """Descomentar las líneas para manejar claves SSH privadas en el Dockerfile."""
+    
+    "Manejar claves SSH solo si se desean utilizar repositorios privados."
     try:
         # Obtener el nombre de la clave privada en la carpeta ./.ssh
         ssh_folder = "./.ssh"
@@ -163,21 +169,23 @@ def manejar_claves_ssh():
     except Exception as e:
         print(f"Error al manejar las claves SSH: {e}")
 
-
+# Función para validar la entrada del usuario
+def obtener_respuesta_si_no(mensaje):
+    while True:
+        respuesta = input(mensaje).strip().lower()
+        if respuesta in ["s", "n"]:
+            return respuesta
+        else:
+            print("Por favor, ingrese 's' para sí o 'n' para no.")
+            
 # Preguntar si el usuario quiere usar repositorios privados
-usar_repos_privados = (
-    input("¿Desea utilizar repositorios privados? (s/n): ").strip().lower()
-)
-if usar_repos_privados == "s":
-    manejar_claves_ssh()
-else:
-    print("No se utilizaran repositorios privados")
+usar_repos_privados = input("¿Desea utilizar repositorios privados? (s/n): ").strip().lower()
 
 # Manejar SSH en el Dockerfile según la respuesta del usuario
 manejar_ssh(usar_repos_privados == "s", dockerfile_path)
 
 # Preguntar si el usuario quiere usar gitman
-usar_gitman = input("¿Desea utilizar gitman? (s/n): ").strip().lower()
+usar_gitman = input("¿Desea utilizar gitman, con repositorios de terceros? (s/n): ").strip().lower()
 
 if usar_gitman != "s":
     if os.path.exists("gitman.yml"):
