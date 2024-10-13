@@ -10,11 +10,15 @@ Repositorio base para desarrollos en Odoo.
    - "Elias Braceras"
    - "Horacio Montaño"
 
+## Version: 
+   - "1.0"
+
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Descripcion simple:
 
-  Este repositorio debe ser utilizado como molde para cualquier desarrollo de Odoo. El repositorio esta equipado con una serie de herramientas para agilizar el trabajo durante la preparación para el desarrollo.
+  Este repositorio debe ser utilizado como molde para cualquier desarrollo de Odoo. El repositorio esta equipado con una serie de herramientas para agilizar el trabajo durante la preparación para el desarrollo. Este entorno de desarrollo esta pensado como una libreria de Python, por tanto, es importante instalarla
+  como tal.
 
   - Este entorno de desarrollo esta pensado para quienes desarrollen en sistemas operativos Linux, tales como Ubuntu, Debian, etc. Sin embargo
     para quienes prefieran desarrollar en Windows les sugerimos que instalen en sus máquinas **WSL2** Subsistema de Linux para Windows.
@@ -56,7 +60,7 @@ Repositorio base para desarrollos en Odoo.
  
  5. Ahora puede ejecutar su ROCKETDOO con el comando: 
  
-    ```./run.sh```
+    ```rocketdoo```
 
  6. Siga los pasos indicados por el software de lanzamiento.
 
