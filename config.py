@@ -1,14 +1,78 @@
 # Importamos las librerías necesarias
 import sys
 import os
+import re
 import yaml
 
 
 # # Preguntar si el usuario quiere usar gitman
 # usar_gitman = input("¿Desea utilizar gitman? (s/n): ").strip().lower()
 
+docker_compose_path = "docker-compose.yml"
 dockerfile_path = "Dockerfile"
 
+# Función para modificar el archivo docker-compose.yml
+def modificar_docker_compose(edicion):
+    if edicion.lower() == 'ee':
+        try:
+            # Lee el contenido del archivo primero
+            with open(docker_compose_path, 'r') as file:
+                contenido = file.readlines()
+
+            # Modifica el contenido en memoria
+            contenido_modificado = []
+            for linea in contenido:
+                # Verificar si la línea tiene el patrón específico
+                if linea.lstrip().startswith('#- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise'):
+                    # Remover solo el símbolo '#' que aparece después de los espacios, sin afectar la indentación
+                    indentacion = len(linea) - len(linea.lstrip())
+                    linea = ' ' * indentacion + linea.lstrip().lstrip('#').lstrip()
+                    contenido_modificado.append(linea)
+                else:
+                    contenido_modificado.append(linea)
+
+            # Escribe el contenido modificado de vuelta al archivo
+            with open(docker_compose_path, 'w') as file:
+                file.writelines(contenido_modificado)
+
+            print("Ambiente preparado para la edición Enterprise. Asegurese de subir a la raiz del proyecto su carpeta Enterprise.")
+        except FileNotFoundError:
+            print(f"El archivo {docker_compose_path} no se encontró.")
+        except Exception as e:
+            print(f"Error al modificar {docker_compose_path}: {e}")
+
+# Función para modificar el archivo odoo.conf
+def modificar_odoo_conf(edicion):
+    odoo_conf_path = os.path.join("config", "odoo.conf")
+    
+    if edicion.lower() == 'ee':
+        # Asegurarse de que el archivo existe
+        if not os.path.exists(odoo_conf_path):
+            print(f"El archivo {odoo_conf_path} no existe.")
+            return
+
+        with open(odoo_conf_path, 'r') as file:
+            contenido = file.read()
+
+        # Añadir el path de enterprise al addons_path
+        addons_path = "/usr/lib/python3/dist-packages/odoo/enterprise"
+        contenido_modificado = re.sub(r'(addons_path\s*=\s*)(.*)', r'\1\2,{}'.format(addons_path), contenido)
+
+        with open(odoo_conf_path, 'w') as file:
+            file.write(contenido_modificado)
+
+        print("Archivo odoo.conf modificado para incluir el path de Enterprise.")
+
+# Preguntar la edición de Odoo
+edicion = input("¿En qué edición de Odoo va a desarrollar? Community o Enterprise (ce/ee): ").strip().lower()
+
+# Aplicar modificaciones si es edición Enterprise
+if edicion == 'ee':
+    modificar_docker_compose(edicion)
+    modificar_odoo_conf(edicion)
+else:
+    print("Edición Community seleccionada")
+    
 # Líneas SSH a buscar y descomentar/comentar según sea necesario
 ssh_lines = [
     "#RUN mkdir -p /root/.ssh\n",
@@ -177,9 +241,18 @@ def obtener_respuesta_si_no(mensaje):
             return respuesta
         else:
             print("Por favor, ingrese 's' para sí o 'n' para no.")
-            
+    
+    
 # Preguntar si el usuario quiere usar repositorios privados
 usar_repos_privados = input("¿Desea utilizar repositorios privados? (s/n): ").strip().lower()
+
+# if usar_repos_privados == "s":
+#     manejar_claves_ssh()  # Solo se ejecuta si la respuesta es "s"
+#     manejar_ssh(True, dockerfile_path)  # Manejar SSH solo si la respuesta es sí
+# else:
+#     print("No se utilizarán repositorios privados")
+#     manejar_ssh(False, dockerfile_path)  # No manejar SSH si la respuesta es no
+
 
 # Manejar SSH en el Dockerfile según la respuesta del usuario
 manejar_ssh(usar_repos_privados == "s", dockerfile_path)

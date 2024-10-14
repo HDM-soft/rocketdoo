@@ -13,6 +13,7 @@ services:
       - odoo-web-data:/var/lib/odoo
       - ./config:/etc/odoo
       - ./addons:/usr/lib/python3/dist-packages/odoo/extra-addons
+      #- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise
       - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
   db:
     restart: {{restart}}
