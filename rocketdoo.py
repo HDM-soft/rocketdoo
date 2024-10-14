@@ -1,8 +1,18 @@
 import argparse
 import subprocess
+import signal
+import sys
 
 # Define la versión del paquete
 VERSION = "1.0"
+
+# Maneja la interrupción con Ctrl+C
+def signal_handler(sig, frame):
+    print("\nRocketdoo ha sido cancelado.")
+    sys.exit(0)
+
+# Registra el manejador de señal para SIGINT (Ctrl+C)
+signal.signal(signal.SIGINT, signal_handler)
 
 def main():
     # Configura el analizador de argumentos
