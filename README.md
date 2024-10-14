@@ -46,13 +46,12 @@ Repositorio base para desarrollos en Odoo.
  1. Como primer paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **rocketdoo**, creando un repositorio a partir de la misma con el botón
  **use this template** que se encuentra en la esquina superior derecha en color verde.
  
- 2. Determinar el nombre que desea para su repositorio de desarrollo, así como también verificar si desea incluir todas las ramas o alguna en especial.
+ 2. Determinar el nombre que desea para su repositorio de desarrollo.
  
  3. Una vez creado su repositorio, debe clonar el mismo:
  
-    ```git clone -b "nombre_de_la_rama´ "url_del_repo"``` 
+    ```git clone "url_de_su_repo"``` 
     
-> Si quiere clonar el repositorio completo, desestime la bandera "-b y el nombre de la rama"
 
  4. Antes de comenzar con la ejecución del lanzador, ingrese al directorio de su repositorio e instale las dependencias con el comando:
  
@@ -87,6 +86,9 @@ Repositorio base para desarrollos en Odoo.
 
  - Recomendamos utilizar Extensiones de Visual Studio Code, como **Docker**, **Dev Container**, y todas aquellas que considere de utilidad
  para poder trabajar en VSCode.
+
+ - Si desea desarrollar en edición Enterprise, Rocketdoo se lo preguntará, y realizará las configuraciones necesarias; pero deberá usted considerar
+ disponer de la carpet "enterprise" con todos los modulos y dejarla en la raíz de este proyecto.
  
 ### ¿COMO CARGAR MAS MODULOS EN GITMAN SI NO LO HICE CON EL LANZADOR?
  
