@@ -66,8 +66,8 @@ admin_passwd:
 # Configuracion del servicio Odoo
 odoo_image:
   type: str
-  help: "Determine el nombre de la imagen a construir, por defecto (odoo-skeleton)"
-  default: "odoo-skeleton"
+  help: "Determine el nombre de la imagen a construir, por defecto (odoo-rocketdoo)"
+  default: "odoo-rocketdoo"
 
 odoo_container:
   type: str
