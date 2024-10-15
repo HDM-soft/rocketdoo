@@ -1,11 +1,11 @@
 # HDMsoft
-[visite nuestra pagina](https://odoo.hdmsoft.com.ar)
+[visit our page](https://odoo.hdmsoft.com.ar)
 
 ## ROCKETDOO
 
-Repositorio base para desarrollos en Odoo.
+Base repository for Odoo development.
 
-## Desarrollado por:
+## Developed by:
 
    - "Elias Braceras"
    - "Horacio Montaño"
@@ -15,126 +15,109 @@ Repositorio base para desarrollos en Odoo.
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
-### Descripcion simple:
+### Simple Description:
 
-  Este repositorio debe ser utilizado como molde para cualquier desarrollo de Odoo. El repositorio esta equipado con una serie de herramientas para agilizar el trabajo durante la preparación para el desarrollo. Este entorno de desarrollo esta pensado como una libreria de Python, por tanto, es importante instalarla
-  como tal.
+  This repository should be used as a template for any Odoo development. It comes equipped with a set of tools to streamline work during the development preparation process. This development environment is designed as a Python library, so it’s important to install it as such.
 
-  - Este entorno de desarrollo esta pensado para quienes desarrollen en sistemas operativos Linux, tales como Ubuntu, Debian, etc. Sin embargo
-    para quienes prefieran desarrollar en Windows les sugerimos que instalen en sus máquinas **WSL2** Subsistema de Linux para Windows.
+  - This development environment is intended for those developing on Linux operating systems, such as Ubuntu, Debian, etc. However, for those who prefer to develop on Windows, we suggest installing **WSL2**, the Windows Subsystem for Linux.
   
-  - Usted dispone en esta versión de un lanzador de proyecto CLI, diseñado para facilitar el armado de su proyecto de desarrollo.
+  - This version includes a CLI project launcher designed to make setting up your development project easier.
   
-  - Se utiliza docker para la creación de instancias de Odoo y docker compose para levantarlas junto con una base de datos.
+  - Docker is used to create Odoo instances, and Docker Compose is used to spin them up along with a database.
 
-  - Dispone de una serie de configuraciones preparadas para su uso en VScode como configuraciones para depuración y lanzamiento de contenedores.
+  - A set of configurations is provided for use in VSCode, including debugging and container launch configurations.
 
-  - Utiliza Gitman para la descarga e instalación de repositorios externos.
+  - Gitman is used for downloading and installing external repositories.
   
-  -  Asegúrese de tener instalado **Docker** y **Docker compose** en su computadora, en el caso de no tener instalada dicha herramienta,
- puede servirse de la guia oficial de Docker para instalar, [Guía para la Instalación de Doker](https://docs.docker.com/engine/install/ubuntu/)
+  - Make sure you have **Docker** and **Docker Compose** installed on your computer. If not, you can follow the official Docker installation guide, [Docker Installation Guide](https://docs.docker.com/engine/install/ubuntu/).
 
-  - Este ambiente cuenta con la posibilidad de trabajar con repositorios privados. Para esto, se le solicita al usuario desarrollador que copie su llave
-  privada y su par pública, las mismas con la que tiene configurado su repo de github, en la carpeta **.ssh** de este directorio.
- 
+  - This environment allows for working with private repositories. For this, the developer user needs to copy their private key and corresponding public key—those used for their GitHub repo configuration—into the **.ssh** folder in this directory.
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-### INSTRUCCIONES:
- 
+### INSTRUCTIONS:
 
- 1. Como primer paso usted debe utilizar el repositorio de HDMSOFT, nuestra plantilla **rocketdoo**, creando un repositorio a partir de la misma con el botón
- **use this template** que se encuentra en la esquina superior derecha en color verde.
+ 1. The first step is to use the HDMSOFT repository, our **rocketdoo** template, by creating a repository from it using the green **use this template** button at the top right corner.
  
- 2. Determinar el nombre que desea para su repositorio de desarrollo.
+ 2. Decide on a name for your development repository.
  
- 3. Una vez creado su repositorio, debe clonar el mismo:
- 
-    ```git clone "url_de_su_repo"``` 
+ 3. Once your repository is created, clone it:
+
+    ```git clone "your_repo_url"``` 
     
 
- 4. Antes de comenzar con la ejecución del lanzador, ingrese al directorio de su repositorio e instale las dependencias con el comando:
+ 4. Before running the launcher, navigate to your repository directory and install the dependencies using the command:
  
     ```sudo pip3 install -r requirements.txt```
  
- 5. Ahora puede ejecutar su ROCKETDOO con el comando: 
+ 5. Now you can run ROCKETDOO with the command: 
  
     ```rocketdoo```
 
- 6. Siga los pasos indicados por el software de lanzamiento.
+ 6. Follow the steps provided by the launch software.
 
- 7. La segunda etapa del LANZADOR le ofrece la opción de usar **GITMAN** para repositorios de terceros, si le indica que sí! Deberá completar las preguntas.
+ 7. The second stage of the LAUNCHER offers you the option to use **GITMAN** for third-party repositories. If you say yes, you’ll need to answer some questions.
 
- 8. Nuestro lanzador se encargara de modificar el archivo odoo.conf en la linea "addons_path" con los nuevos repositorios.
+ 8. Our launcher will modify the odoo.conf file in the "addons_path" line with the new repositories.
 
- 9. Una vez finalizado su proyecto, debe ejecutar el siguiente comando para levantar su instancia en local: 
+ 9. Once your project is ready, you can bring up your local instance with: 
     
     ```docker compose up```
 
- 11. RocketDoo comenzará a construir la imagen de su entorno y seguido de esto, levanta su sistema. 
-    Una vez finlizado con éxtio puede verificar ingresando la siguiente URL en si navegador web; **localhost:puerto**
+ 11. RocketDoo will start building the environment image and then launch the system. Once successfully completed, you can check by entering the following URL in your web browser: **localhost:port**
  
- 12. Si su proyecto finalizo con éxito, podrá ejecutar el comando:
+ 12. If your project has launched successfully, you can run the command:
     
     ```code .```
     
-    ¡AHORA PUEDE COMENZAR A DESARROLLAR CON "VISUAL STUDIO CODE"! 
+    NOW YOU CAN START DEVELOPING WITH "VISUAL STUDIO CODE"! 
 
  ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-### Sugerencias y Consideraciones:
+### Suggestions and Considerations:
 
- - Recomendamos utilizar Extensiones de Visual Studio Code, como **Docker**, **Dev Container**, y todas aquellas que considere de utilidad
- para poder trabajar en VSCode.
+ - We recommend using Visual Studio Code Extensions, such as **Docker**, **Dev Container**, and any others you find useful for working in VSCode.
 
- - Si desea desarrollar en edición Enterprise, Rocketdoo se lo preguntará, y realizará las configuraciones necesarias; pero deberá usted considerar
- disponer de la carpet "enterprise" con todos los modulos y dejarla en la raíz de este proyecto.
+ - If you wish to develop in the Enterprise edition, Rocketdoo will ask you, and will make the necessary configurations. However, you should ensure that you have the "enterprise" folder with all the modules and place it in the root of this project.
  
-### ¿COMO CARGAR MAS MODULOS EN GITMAN SI NO LO HICE CON EL LANZADOR?
- 
-  - Si usted necesita ocupar addons de terceros, luego de haber construido su entorno de desarrollo con nuestro lanzador, deberá editar a mano el archivo **gitman.yml** y a su vez deberá también agregar las lineas al path del **odoo.conf** addons_path con el comando:
-  
+### HOW TO ADD MORE MODULES TO GITMAN IF YOU DID NOT DO IT WITH THE LAUNCHER?
+
+  - If you need to use third-party addons after setting up your development environment with our launcher, you’ll need to manually edit the **gitman.yml** file and also add lines to the **odoo.conf** addons_path using:
+
       ```sudo nano gitman.yml``` 
   
-  y completar cada linea, comenzando por la URL del repositorio, la versión
-  del mismo, acorde a la versión de su despliegue de desarrollo. Deberá replicar el conjunto de lineas para agregar mas repositorios de terceros.
-  Si tiene dudas con el uso, puede revisar la guía oficial de [gitman](https://gitman.readthedocs.io/en/latest/)
+  and complete each line, starting with the repository URL and version, according to your development deployment version. You’ll need to replicate the set of lines to add more third-party repositories.
+  
+  If you need help, you can refer to the [gitman official guide](https://gitman.readthedocs.io/en/latest/).
 
-  - En este ejemplo puede ver como agregar las rutas de sus nuevos paquetes de módulos.
-  Ejemplo:
+  - In this example, you can see how to add your new module package paths.
+  
+  Example:
       ```addons_path: usr/lib/python/dist-packages/odoo/extra_addons/,usr/lib/python/dist-packages/odoo/external_addons/account-financial-tools```
     
-  - Gitman crea una carpeta donde contendrá todos los módulos declarados con el nombre de **external_addons** los mismos los puede localizar 
-  dentro de su contenedor web Odoo en la ruta declarada en el **odoo.conf**
+  - Gitman creates a folder containing all declared modules under **external_addons**, which can be found inside your Odoo web container at the path declared in **odoo.conf**.
 
-  - Todos los paths deberán estar separados por una coma ","
-  - Una vez declarados los módulos de terceros en "gitman" sera necesario hacer un rebuild de su imagen, respetando el mismo nombre 
-  de la imagen creada en un principio, con el comando 
+  - All paths should be separated by a comma ","
+  - Once third-party modules are declared in "gitman," you’ll need to rebuild your image, keeping the same image name as initially created, using the command:
 
-  - **RECUERDE QUE CUANDO INICIE POR PRIMERA VEZ NUESTRO LANZADOR, EL MISMO LO GUIA PARA EVITAR CARGAR LOS MODULOS A MANO EN GITMAN**
-
-      ```docker build . -t nombre-de-mi-imagen```
+      ```docker build . -t my-image-name```
   
-  - Luego reiniciar el serivcio Odoo o el contenedor con el comando 
+  - Then restart the Odoo service or container with the command:
     
       ```docker compose restart```
   
-  y una vez dentro de su instancia Odoo
-  actualizar la lista de aplicaciones en modo "desarrollador" para poder tener los módulos nuevos visibles. 
+  and once in your Odoo instance, refresh the application list in "developer" mode to see the new modules.
 
-Si usted modifica su archivo **gitman.yml** antes de realizar la construcción con el comando "build" sera mas que suficiente para poder ver los módulos
-sin necesidad de reiniciar sus contenedores.
+If you modify your **gitman.yml** file before building with the "build" command, it will be sufficient to see the modules without needing to restart your containers.
 
-  - Todos los módulos de terceros simples, como también el modulo que este por desarrollar, aconsejamos que los coloque en la carpeta **addons** que se encuentra dentro del directorio de trabajo.
-
+  - For simpler third-party modules, as well as the module you’re developing, we recommend placing them in the **addons** folder within your working directory.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 
-### Soporte Técnico
+### Technical Support
 
-- Si usted tiene alguna duda o inconveniente con el funcionamiento de nuestro ambiente de desarrollo, puede contactarse y enviar su consulta o ticket
-de soporte presionando en el siguiente link.
+- If you have any questions or issues with our development environment, you can contact us and submit your inquiry or support ticket by clicking on the link below.
 
- - [Link de Soporte](https://odoo.hdmsoft.com.ar/contactus)
+ - [Support Link](https://odoo.hdmsoft.com.ar/contactus)
 
 
