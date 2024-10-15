@@ -1,0 +1,37 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    image: odoo-rocketdoo
+    container_name: odoo-dev
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+      - "8888:8888"
+    volumes:
+      - odoo-web-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/usr/lib/python3/dist-packages/odoo/extra-addons
+      #- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise
+      - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
+  db:
+    restart: unless-stopped
+    image: postgres:14
+    container_name: ps-container
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER=root
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data/pgdata
+    secrets:
+      - postgresql_password
+volumes:
+  odoo-web-data:
+  odoo-db-data:
+
+secrets:
+  postgresql_password:
+    file: odoo_pg_pass

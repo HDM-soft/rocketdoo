@@ -1,37 +1,35 @@
-# Importamos las librerías necesarias
+
 import sys
 import os
 import re
 import yaml
 
 
-# # Preguntar si el usuario quiere usar gitman
-# usar_gitman = input("¿Desea utilizar gitman? (s/n): ").strip().lower()
-
 docker_compose_path = "docker-compose.yml"
 dockerfile_path = "Dockerfile"
 
-# Función para modificar el archivo docker-compose.yml
+# Function to modify docker-compose.yml
+
 def modificar_docker_compose(edicion):
     if edicion.lower() == 'ee':
         try:
-            # Lee el contenido del archivo primero
+            # Read docker compose at first
             with open(docker_compose_path, 'r') as file:
                 contenido = file.readlines()
 
-            # Modifica el contenido en memoria
+            # Modify content memory
             contenido_modificado = []
             for linea in contenido:
-                # Verificar si la línea tiene el patrón específico
+                # Check if the line has the specific pattern
                 if linea.lstrip().startswith('#- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise'):
-                    # Remover solo el símbolo '#' que aparece después de los espacios, sin afectar la indentación
+                    # Remove only the '#' symbol that appears after the spaces, without affecting the indentation.
                     indentacion = len(linea) - len(linea.lstrip())
                     linea = ' ' * indentacion + linea.lstrip().lstrip('#').lstrip()
                     contenido_modificado.append(linea)
                 else:
                     contenido_modificado.append(linea)
 
-            # Escribe el contenido modificado de vuelta al archivo
+            # Writes the modified content back to the file
             with open(docker_compose_path, 'w') as file:
                 file.writelines(contenido_modificado)
 
@@ -41,12 +39,12 @@ def modificar_docker_compose(edicion):
         except Exception as e:
             print(f"Error al modificar {docker_compose_path}: {e}")
 
-# Función para modificar el archivo odoo.conf
+# Function to modify the odoo.conf file
 def modificar_odoo_conf(edicion):
     odoo_conf_path = os.path.join("config", "odoo.conf")
     
     if edicion.lower() == 'ee':
-        # Asegurarse de que el archivo existe
+        # Ensure that the file exists
         if not os.path.exists(odoo_conf_path):
             print(f"El archivo {odoo_conf_path} no existe.")
             return
@@ -54,7 +52,7 @@ def modificar_odoo_conf(edicion):
         with open(odoo_conf_path, 'r') as file:
             contenido = file.read()
 
-        # Añadir el path de enterprise al addons_path
+        # Add enterprise path to addons_path
         addons_path = "/usr/lib/python3/dist-packages/odoo/enterprise"
         contenido_modificado = re.sub(r'(addons_path\s*=\s*)(.*)', r'\1\2,{}'.format(addons_path), contenido)
 
@@ -63,27 +61,27 @@ def modificar_odoo_conf(edicion):
 
         print("Archivo odoo.conf modificado para incluir el path de Enterprise.")
 
-# Preguntar la edición de Odoo
+# Ask for the odoo edition
 edicion = input("¿En qué edición de Odoo va a desarrollar? Community o Enterprise (ce/ee): ").strip().lower()
 
-# Aplicar modificaciones si es edición Enterprise
+# Apply modifications if Enterprise edition
 if edicion == 'ee':
     modificar_docker_compose(edicion)
     modificar_odoo_conf(edicion)
 else:
     print("Edición Community seleccionada")
     
-# Líneas SSH a buscar y descomentar/comentar según sea necesario
+# SSH lines to be searched and uncommented/commented as needed
 ssh_lines = [
     "#RUN mkdir -p /root/.ssh\n",
-    "#COPY ./.ssh/rsa /root/.ssh/id_rsa\n",  # Se reemplazará "rsa" con el nombre correcto de la llave
+    "#COPY ./.ssh/rsa /root/.ssh/id_rsa\n",  # The “rsa” will be replaced with the correct key name.
     "#RUN chmod 700 /root/.ssh/id_rsa\n",
     '#RUN echo "StrictHostKeyChecking no" >> /root/.ssh/config\n',
 ]
 
 
 def get_input(prompt, required=True):
-    """Función que recibe un input del usuario, con opción de no ser obligatorio"""
+    """Function that receives an input from the user, with the option of not being mandatory."""
     value = input(prompt)
     while required and not value:
         value = input("Este campo no puede estar vacío. " + prompt)
@@ -91,13 +89,13 @@ def get_input(prompt, required=True):
 
 
 def manejar_ssh(repos_privados, dockerfile_path):
-    """Descomenta o comenta las líneas relacionadas con SSH en el Dockerfile, y reemplaza 'rsa' por la llave privada correcta."""
+    """Uncomment or comment out the SSH-related lines in the Dockerfile, and replace 'rsa' with the correct private key."""
     if usar_repos_privados == 's':
         manejar_claves_ssh
     else:
         return
     
-    # Buscar la clave privada en la carpeta ./.ssh
+    # Search for the private key in the ./.ssh folder.
     ssh_folder = "./.ssh"
     try:
         ssh_keys = [
@@ -109,7 +107,7 @@ def manejar_ssh(repos_privados, dockerfile_path):
             print(f"No se encontraron claves privadas en {ssh_folder}.")
             return
 
-        # Preguntar al usuario qué clave usar si hay más de una
+        # Ask the user which password to use if there is more than one.
         ssh_key = ssh_keys[0]
         if len(ssh_keys) > 1:
             print("Se encontraron las siguientes claves privadas en ./.ssh:")
@@ -120,36 +118,35 @@ def manejar_ssh(repos_privados, dockerfile_path):
             )
             ssh_key = ssh_keys[key_index]
 
-        # Modificar el Dockerfile
+        # Modify Dockerfile
         with open(dockerfile_path, "r") as file:
             lines = file.readlines()
 
         with open(dockerfile_path, "w") as file:
             for line in lines:
-                # Si el usuario quiere usar repos privados, descomentamos las líneas relacionadas con SSH
+                # If the user wants to use private repos, we uncomment the lines related to SSH
                 if repos_privados and any(
                     ssh_line.strip().lstrip("# ") in line for ssh_line in ssh_lines
                 ):
-                    # Solo descomentar líneas comentadas y modificar "rsa" por el nombre correcto de la llave
+                    # Just uncomment commented lines and modify “rsa” to the correct key name.
                     if line.startswith("#RUN mkdir -p /root/.ssh"):
                         file.write(line.lstrip("# "))  # Descomentar
                     elif "COPY ./.ssh/rsa" in line:
                         file.write(
                             line.replace("rsa", ssh_key).lstrip("# ")
-                        )  # Descomentar y reemplazar
+                        )  # Uncomment and replace
                     elif "RUN chmod 700 /root/.ssh/id_rsa" in line:
                         file.write(
                             line.replace("id_rsa", ssh_key).lstrip("# ")
-                        )  # Descomentar y reemplazar
+                        )  # Uncomment and replace
                     elif '#RUN echo "StrictHostKeyChecking no"' in line:
-                        file.write(line.lstrip("# "))  # Descomentar
-                    else:
+                        file.write(line.lstrip("# "))  # Uncomment
                         file.write(line)
-                # Si no quiere usar repos privados, mantener o agregar comentarios
+                # If you don't want to use private repos, keep or add comments
                 elif not repos_privados and any(
                     ssh_line.strip().lstrip("# ") in line for ssh_line in ssh_lines
                 ):
-                    file.write(f"# {line.lstrip('# ')}")  # Asegurar que esté comentada
+                    file.write(f"# {line.lstrip('# ')}")  # Ensure to be commented
                 else:
                     file.write(line)
 
@@ -162,7 +159,7 @@ def manejar_ssh(repos_privados, dockerfile_path):
 
 
 def comentar_lineas():
-    """Comenta las líneas específicas en el Dockerfile."""
+    """Comment out specific lines in the Dockerfile."""
     copy_line = "COPY ./gitman.yml /usr/lib/python3/dist-packages/odoo/\n"
     gitman_line = "RUN gitman install -r /usr/lib/python3/dist-packages/odoo/\n"
 
@@ -189,22 +186,22 @@ def manejar_claves_ssh():
     
     "Manejar claves SSH solo si se desean utilizar repositorios privados."
     try:
-        # Obtener el nombre de la clave privada en la carpeta ./.ssh
+        # Get the name of the private key in the folder ./.ssh
         ssh_folder = "./.ssh"
         private_key_name = ""
 
-        # Verificar si hay archivos en la carpeta ./.ssh
+        # Check for files in the folder ./.ssh
         if os.path.exists(ssh_folder) and os.path.isdir(ssh_folder):
             files = os.listdir(ssh_folder)
             private_key_name = next(
                 (f for f in files if not f.startswith(".")), None
-            )  # Evitar archivos ocultos
+            )  # Send hidden folders
 
         if not private_key_name:
             print("No se encontró ninguna clave privada en la carpeta ./.ssh")
             return
 
-        # Modificar el Dockerfile
+        # Modify Dockefile
         dockerfile_path = "Dockerfile"
         copy_ssh_line = (
             f"COPY ./.ssh/{private_key_name} /root/.ssh/id_{private_key_name}\n"
@@ -214,7 +211,7 @@ def manejar_claves_ssh():
         with open(dockerfile_path, "r") as file:
             lines = file.readlines()
 
-        # Verificar si ya existen las líneas, y descomentar si es necesario
+        # Check if the lines already exist, and uncomment if necessary.
         new_lines = []
         for line in lines:
             if line.strip() == "#RUN mkdir -p /root/.ssh":
@@ -233,7 +230,7 @@ def manejar_claves_ssh():
     except Exception as e:
         print(f"Error al manejar las claves SSH: {e}")
 
-# Función para validar la entrada del usuario
+# Function to validate user input
 def obtener_respuesta_si_no(mensaje):
     while True:
         respuesta = input(mensaje).strip().lower()
@@ -243,21 +240,14 @@ def obtener_respuesta_si_no(mensaje):
             print("Por favor, ingrese 's' para sí o 'n' para no.")
     
     
-# Preguntar si el usuario quiere usar repositorios privados
+# Ask if the user wants to use private repositories
 usar_repos_privados = input("¿Desea utilizar repositorios privados? (s/n): ").strip().lower()
 
-# if usar_repos_privados == "s":
-#     manejar_claves_ssh()  # Solo se ejecuta si la respuesta es "s"
-#     manejar_ssh(True, dockerfile_path)  # Manejar SSH solo si la respuesta es sí
-# else:
-#     print("No se utilizarán repositorios privados")
-#     manejar_ssh(False, dockerfile_path)  # No manejar SSH si la respuesta es no
 
-
-# Manejar SSH en el Dockerfile según la respuesta del usuario
+# Handle SSH in the Dockerfile based on user response
 manejar_ssh(usar_repos_privados == "s", dockerfile_path)
 
-# Preguntar si el usuario quiere usar gitman
+# Ask if the user wants to user gitman with public repositorie
 usar_gitman = input("¿Desea utilizar gitman, con repositorios de terceros? (s/n): ").strip().lower()
 
 if usar_gitman != "s":
@@ -269,9 +259,9 @@ if usar_gitman != "s":
     sys.exit(0)
 
 
-# Aquí seguiría el resto de tu código para configurar Gitman y modificar odoo.conf...
+# Here I would follow the rest of your code to configure Gitman and modify odoo.conf...
 
-# Definimos la estructura inicial del archivo de configuración
+# Define the initial structure of the configuration file
 config = {
     "location": "external_addons",
     "sources": [],
@@ -281,33 +271,33 @@ config = {
 
 
 def agregar_repositorio():
-    """Función para agregar un nuevo repositorio"""
+    """Functions to add new repositories"""
     repo_info = {
         "repo": get_input("Ingresa el repositorio (repo): "),
         "name": get_input("Ingresa el nombre (name): "),
         "rev": get_input("Ingresa la revisión (branch): "),
-        "type": "git",  # Se mantiene fijo,
+        "type": "git",  # keeping fixed,
         "scripts": [
             "sh /usr/lib/python3/dist-packages/odoo/install_dependencies.sh"
-        ],  # Se mantiene fijo
+        ],  # keeping fixed
     }
 
-    # Agregamos la información del repositorio a la lista de sources
+    # Add the repository information to the source list
     config["sources"].append(repo_info)
 
 
-# Función para modificar el archivo odoo.conf en la carpeta config
+# Function to modify the odoo.conf file in the config folder
 def modificar_odoo_conf():
-    """Modifica la línea addons_path en config/odoo.conf agregando los nuevos repositorios"""
+    """Modify the addons_path line in config/odoo.conf by adding the new repositories"""
     try:
-        # Ruta al archivo odoo.conf en la carpeta config
+        # Path to the odoo.conf file in the config folder
         odoo_conf_path = os.path.join("config", "odoo.conf")
 
-        # Verificación de la existencia del archivo odoo.conf
+        # Verifying the existence of the odoo.conf file
         if not os.path.exists(odoo_conf_path):
             raise FileNotFoundError(f"El archivo {odoo_conf_path} no existe.")
 
-        # Verificamos si tenemos permisos de lectura y escritura
+        # We check if we have read and write permissions
         if not os.access(odoo_conf_path, os.R_OK):
             raise PermissionError(
                 f"No se puede leer el archivo {odoo_conf_path}. Verifica los permisos."
@@ -319,22 +309,22 @@ def modificar_odoo_conf():
 
         print(f"Modificando el archivo {odoo_conf_path}...")
 
-        # Leemos el archivo gitman.yml para obtener los nombres
+        # We read the gitman.yml file to obtain the names
         with open("gitman.yml", "r") as file:
             gitman_data = yaml.safe_load(file)
 
-        # Extraemos los valores de 'name' de cada repositorio en sources, asegurándonos de no incluir vacíos
+        # We extract the values of 'name' from each repository in sources, making sure not to include empty ones.
         nombres_repositorios = [
             repo["name"] for repo in gitman_data["sources"] if repo["name"]
         ]
         print(f"Repositorios extraídos: {nombres_repositorios}")
 
-        # Si no hay nombres de repositorios, no hacemos nada
+        # If there are no repository names, we do nothing.
         if not nombres_repositorios:
             print("No se encontraron repositorios para agregar.")
             return
 
-        # Creamos la nueva cadena para addons_path con las nuevas rutas
+        # We create the new string for addons_path with the new paths
         nuevas_rutas = ",".join(
             [
                 f"/usr/lib/python3/dist-packages/odoo/external_addons/{nombre}"
@@ -342,19 +332,19 @@ def modificar_odoo_conf():
             ]
         )
 
-        # Leemos el archivo odoo.conf
+        # Read the odoo.conf file
         with open(odoo_conf_path, "r") as file:
             lines = file.readlines()
 
-        # Buscamos la línea que contiene addons_path
+        # We look for the line containing addons_path
         addons_path_encontrado = False
         for i, line in enumerate(lines):
             if line.startswith("addons_path ="):
-                # Añadimos las nuevas rutas a la línea existente, si no están ya
+                # We add the new routes to the existing line, if they are not already there.
                 linea_actual = line.strip().split(" = ")[1]
                 lineas_rutas_existentes = linea_actual.split(",")
 
-                # Añadimos las nuevas rutas a las existentes, si no están ya
+                # We add the new routes to the existing ones, if they are not already there.
                 rutas_actualizadas = lineas_rutas_existentes + [
                     ruta
                     for ruta in nuevas_rutas.split(",")
@@ -365,12 +355,12 @@ def modificar_odoo_conf():
                 print(f"Línea addons_path modificada: {lines[i]}")
                 break
 
-        # Si no se encuentra addons_path, lo añadimos al final
+        # If addons_path is not found, we add it at the end
         if not addons_path_encontrado:
             lines.append(f"addons_path = {nuevas_rutas}\n")
             print("Se agregó una nueva línea addons_path.")
 
-        # Guardamos los cambios en el archivo odoo.conf
+        # Save the changes in the odoo.conf file.
         with open(odoo_conf_path, "w") as file:
             file.writelines(lines)
 
@@ -384,23 +374,23 @@ def modificar_odoo_conf():
         print(f"Error inesperado al modificar odoo.conf: {e}")
 
 
-# Ciclo principal para agregar repositorios
+# Main to add repositories
 while True:
     agregar_repositorio()
 
-    # Preguntamos si se quiere agregar otro repositorio
+    # We ask if the user wants to add more repositories
     agregar_mas = input("¿Deseas agregar otro repositorio? (s/n): ").strip().lower()
 
-    # Validamos la respuesta
+    # Validating answer
     if agregar_mas != "s":
         print("Finalizó la configuración de gitman.")
         break
 
-# Guardamos el archivo de configuración en formato YAML
+# Save the gitman files and their configurations on a YAML format
 with open("gitman.yml", "w") as file:
     yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
 print("Archivo gitman.yml generado exitosamente.")
 
-# Llamamos a la función para modificar odoo.conf
+# Calling function to modify odoo.conf
 modificar_odoo_conf()
