@@ -1,8 +1,8 @@
 services:
   web:
     build: .
-    restart: unless-stopped
-    image: odoo-rocketdoo
+    restart: 
+    image: odoo-skeleton
     container_name: odoo-dev
     depends_on:
       - db
@@ -16,7 +16,7 @@ services:
       #- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise
       - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
   db:
-    restart: unless-stopped
+    restart: 
     image: postgres:14
     container_name: ps-container
     environment:

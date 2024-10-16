@@ -17,7 +17,11 @@ Base repository for Odoo development.
 
 ### Simple Description:
 
-  This repository should be used as a template for any Odoo development. It comes equipped with a set of tools to streamline work during the development preparation process. This development environment is designed as a Python library, so it’s important to install it as such.
+  RocketDoo is an automated development Framework, designed for ERP-ODOO; in all its versions and editions.
+   This repository is a template, which allows you to create your own repository to be able to develop with comfort.
+   In order to use it, it is important to install the framework, after creating and cloning its repository created from the template. 
+
+   ``` pip install rocketdoo``` 
 
   - This development environment is intended for those developing on Linux operating systems, such as Ubuntu, Debian, etc. However, for those who prefer to develop on Windows, we suggest installing **WSL2**, the Windows Subsystem for Linux.
   
@@ -50,7 +54,7 @@ Base repository for Odoo development.
  
     ```sudo pip3 install -r requirements.txt```
  
- 5. Now you can run ROCKETDOO with the command: 
+ 5. Now you can run ROCKETDOO into the folder /rocketdoo, with the command: 
  
     ```rocketdoo```
 

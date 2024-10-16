@@ -1,5 +1,9 @@
+LICENSE
 README.md
 setup.py
+rocketdoo/__init__.py
+rocketdoo/config.py
+rocketdoo/rocketdoo.py
 rocketdoo.egg-info/PKG-INFO
 rocketdoo.egg-info/SOURCES.txt
 rocketdoo.egg-info/dependency_links.txt

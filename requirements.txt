@@ -1,3 +1,2 @@
-rocketdoo
 copier
 jinja2

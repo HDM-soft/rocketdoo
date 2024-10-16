@@ -5,6 +5,8 @@ Summary: This library allows you to build an automated local development environ
 Home-page: https://github.com/HDM-soft/rocketdoo.git
 Author: Horacio Montaño and Elias Braceras
 Author-email: horaciomontano@hdmsoft.com.ar
+Description-Content-Type: text/markdown
+License-File: LICENSE
 
 # HDMsoft
 [visit our page](https://odoo.hdmsoft.com.ar)

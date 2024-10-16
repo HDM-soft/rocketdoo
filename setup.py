@@ -1,10 +1,15 @@
 from setuptools import setup, find_packages
+from pathlib import Path
+
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
 
 setup(
     name='rocketdoo',
     version='1.0',
     description='This library allows you to build an automated local development environment for Odoo EE and CE.',
-    long_description=open('README.md',encoding='utf-8').read(),
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     author='Horacio Montaño and Elias Braceras',
     author_email='horaciomontano@hdmsoft.com.ar',
     url='https://github.com/HDM-soft/rocketdoo.git',
