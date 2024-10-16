@@ -1,4 +1,4 @@
-FROM odoo:18.0
+FROM odoo:17.0
 
 COPY ./config/odoo.conf /etc/odoo/
 # COPY ./gitman.yml /usr/lib/python3/dist-packages/odoo/

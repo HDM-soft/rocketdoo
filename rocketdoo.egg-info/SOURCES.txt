@@ -1,0 +1,8 @@
+README.md
+setup.py
+rocketdoo.egg-info/PKG-INFO
+rocketdoo.egg-info/SOURCES.txt
+rocketdoo.egg-info/dependency_links.txt
+rocketdoo.egg-info/entry_points.txt
+rocketdoo.egg-info/requires.txt
+rocketdoo.egg-info/top_level.txt
