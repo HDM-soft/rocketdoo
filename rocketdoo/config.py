@@ -1,8 +1,8 @@
-
 import sys
 import os
 import re
 import yaml
+import shutil
 
 
 docker_compose_path = "docker-compose.yml"
@@ -88,74 +88,78 @@ def get_input(prompt, required=True):
     return value
 
 
+
 def manejar_ssh(repos_privados, dockerfile_path):
-    """Uncomment or comment out the SSH-related lines in the Dockerfile, and replace 'rsa' with the correct private key."""
-    if usar_repos_privados == 's':
-        manejar_claves_ssh
-    else:
+    """Maneja las claves SSH según si se utilizan repositorios privados."""
+    if not repos_privados:
+        print("No se utilizarán repositorios privados. No se modificarán las claves SSH.")
         return
-    
-    # Search for the private key in the ./.ssh folder.
-    ssh_folder = "./.ssh"
+
+    ssh_folder = os.path.expanduser("~/.ssh")  # Carpeta del usuario
+    build_context_ssh_folder = os.path.join(os.path.dirname(dockerfile_path), ".ssh")  # Contexto de construcción
+
     try:
+        # Buscar claves privadas en ~/.ssh
+        if not os.path.exists(ssh_folder):
+            print(f"No se encontró la carpeta {ssh_folder}. Asegúrate de tener claves SSH configuradas.")
+            return
+
         ssh_keys = [
-            f
-            for f in os.listdir(ssh_folder)
-            if os.path.isfile(os.path.join(ssh_folder, f))
+            f for f in os.listdir(ssh_folder)
+            if os.path.isfile(os.path.join(ssh_folder, f)) and not f.endswith('.pub')
         ]
+
         if not ssh_keys:
             print(f"No se encontraron claves privadas en {ssh_folder}.")
             return
 
-        # Ask the user which password to use if there is more than one.
-        ssh_key = ssh_keys[0]
-        if len(ssh_keys) > 1:
-            print("Se encontraron las siguientes claves privadas en ./.ssh:")
-            for i, key in enumerate(ssh_keys):
-                print(f"{i + 1}. {key}")
-            key_index = (
-                int(get_input("Selecciona el número de la clave que deseas usar: ")) - 1
-            )
-            ssh_key = ssh_keys[key_index]
+        print("Se encontraron las siguientes claves privadas en ~/.ssh:")
+        for i, key in enumerate(ssh_keys):
+            print(f"{i + 1}. {key}")
 
-        # Modify Dockerfile
+        key_index = int(get_input("Selecciona el número de la clave que deseas usar: ")) - 1
+        selected_key = ssh_keys[key_index]
+        print(f"Has seleccionado la clave: {selected_key}")
+
+        # Crear la carpeta .ssh en el contexto de construcción si no existe
+        if not os.path.exists(build_context_ssh_folder):
+            os.makedirs(build_context_ssh_folder)
+
+        # Copiar la clave seleccionada al contexto de construcción
+        source_key_path = os.path.join(ssh_folder, selected_key)
+        dest_key_path = os.path.join(build_context_ssh_folder, selected_key)
+        shutil.copy(source_key_path, dest_key_path)
+
+        print(f"Clave {selected_key} copiada al contexto de construcción: {dest_key_path}")
+
+        # Modificar el Dockerfile para usar la clave copiada
         with open(dockerfile_path, "r") as file:
             lines = file.readlines()
 
         with open(dockerfile_path, "w") as file:
             for line in lines:
-                # If the user wants to use private repos, we uncomment the lines related to SSH
-                if repos_privados and any(
-                    ssh_line.strip().lstrip("# ") in line for ssh_line in ssh_lines
-                ):
-                    # Just uncomment commented lines and modify “rsa” to the correct key name.
-                    if line.startswith("#RUN mkdir -p /root/.ssh"):
-                        file.write(line.lstrip("# "))  # Descomentar
-                    elif "COPY ./.ssh/rsa" in line:
-                        file.write(
-                            line.replace("rsa", ssh_key).lstrip("# ")
-                        )  # Uncomment and replace
-                    elif "RUN chmod 700 /root/.ssh/id_rsa" in line:
-                        file.write(
-                            line.replace("id_rsa", ssh_key).lstrip("# ")
-                        )  # Uncomment and replace
-                    elif '#RUN echo "StrictHostKeyChecking no"' in line:
-                        file.write(line.lstrip("# "))  # Uncomment
-                        file.write(line)
-                # If you don't want to use private repos, keep or add comments
-                elif not repos_privados and any(
-                    ssh_line.strip().lstrip("# ") in line for ssh_line in ssh_lines
-                ):
-                    file.write(f"# {line.lstrip('# ')}")  # Ensure to be commented
+                if line.startswith("#RUN mkdir -p /root/.ssh"):
+                    file.write("RUN mkdir -p /root/.ssh\n")
+                elif "#COPY ./.ssh/rsa" in line:
+                    file.write(
+                        f"COPY ./.ssh/{selected_key} /root/.ssh/{selected_key}\n"
+                    )
+                elif "#RUN chmod 700 /root/.ssh/id_rsa" in line:
+                    file.write(
+                        f"RUN chmod 700 /root/.ssh/{selected_key}\n"
+                    )
+                elif '#RUN echo "StrictHostKeyChecking no"' in line:
+                    file.write('RUN echo "StrictHostKeyChecking no" >> /root/.ssh/config\n')
                 else:
                     file.write(line)
 
-        print(
-            f"Líneas relacionadas con SSH {'descomentadas' if repos_privados else 'comentadas'} en {dockerfile_path}."
-        )
+        print(f"El Dockerfile se ha actualizado para usar la clave {selected_key}.")
 
+    except IndexError:
+        print("Selección inválida. Por favor, intenta nuevamente.")
     except Exception as e:
         print(f"Error al manejar las claves SSH: {e}")
+
 
 
 def comentar_lineas():
@@ -182,53 +186,53 @@ def comentar_lineas():
         print(f"Error inesperado: {e}")
 
 
-def manejar_claves_ssh():
+# def manejar_claves_ssh():
     
-    "Manejar claves SSH solo si se desean utilizar repositorios privados."
-    try:
-        # Get the name of the private key in the folder ./.ssh
-        ssh_folder = "./.ssh"
-        private_key_name = ""
+#     "Manejar claves SSH solo si se desean utilizar repositorios privados."
+#     try:
+#         # Get the name of the private key in the folder ./.ssh
+#         ssh_folder = "./.ssh"
+#         private_key_name = ""
 
-        # Check for files in the folder ./.ssh
-        if os.path.exists(ssh_folder) and os.path.isdir(ssh_folder):
-            files = os.listdir(ssh_folder)
-            private_key_name = next(
-                (f for f in files if not f.startswith(".")), None
-            )  # Send hidden folders
+#         # Check for files in the folder ./.ssh
+#         if os.path.exists(ssh_folder) and os.path.isdir(ssh_folder):
+#             files = os.listdir(ssh_folder)
+#             private_key_name = next(
+#                 (f for f in files if not f.startswith(".")), None
+#             )  # Send hidden folders
 
-        if not private_key_name:
-            print("No se encontró ninguna clave privada en la carpeta ./.ssh")
-            return
+#         if not private_key_name:
+#             print("No se encontró ninguna clave privada en la carpeta ./.ssh")
+#             return
 
-        # Modify Dockefile
-        dockerfile_path = "Dockerfile"
-        copy_ssh_line = (
-            f"COPY ./.ssh/{private_key_name} /root/.ssh/id_{private_key_name}\n"
-        )
-        chmod_ssh_line = f"RUN chmod 700 /root/.ssh/id_{private_key_name}\n"
+#         # Modify Dockefile
+#         dockerfile_path = "Dockerfile"
+#         copy_ssh_line = (
+#             f"COPY ./.ssh/{private_key_name} /root/.ssh/id_{private_key_name}\n"
+#         )
+#         chmod_ssh_line = f"RUN chmod 700 /root/.ssh/id_{private_key_name}\n"
 
-        with open(dockerfile_path, "r") as file:
-            lines = file.readlines()
+#         with open(dockerfile_path, "r") as file:
+#             lines = file.readlines()
 
-        # Check if the lines already exist, and uncomment if necessary.
-        new_lines = []
-        for line in lines:
-            if line.strip() == "#RUN mkdir -p /root/.ssh":
-                new_lines.append("RUN mkdir -p /root/.ssh\n")
-            elif line.strip() == "#COPY ./.ssh/rsa /root/.ssh/id_rsa":
-                new_lines.append(copy_ssh_line)
-            elif line.strip() == "#RUN chmod 700 /root/.ssh/id_rsa":
-                new_lines.append(chmod_ssh_line)
-            else:
-                new_lines.append(line)
+#         # Check if the lines already exist, and uncomment if necessary.
+#         new_lines = []
+#         for line in lines:
+#             if line.strip() == "#RUN mkdir -p /root/.ssh":
+#                 new_lines.append("RUN mkdir -p /root/.ssh\n")
+#             elif line.strip() == "#COPY ./.ssh/rsa /root/.ssh/id_rsa":
+#                 new_lines.append(copy_ssh_line)
+#             elif line.strip() == "#RUN chmod 700 /root/.ssh/id_rsa":
+#                 new_lines.append(chmod_ssh_line)
+#             else:
+#                 new_lines.append(line)
 
-        with open(dockerfile_path, "w") as file:
-            file.writelines(new_lines)
+#         with open(dockerfile_path, "w") as file:
+#             file.writelines(new_lines)
 
-        print("Se ha actualizado el Dockerfile con las claves SSH privadas.")
-    except Exception as e:
-        print(f"Error al manejar las claves SSH: {e}")
+#         print("Se ha actualizado el Dockerfile con las claves SSH privadas.")
+#     except Exception as e:
+#         print(f"Error al manejar las claves SSH: {e}")
 
 # Function to validate user input
 def obtener_respuesta_si_no(mensaje):
