@@ -34,8 +34,6 @@ Base repository for Odoo development.
   - Gitman is used for downloading and installing external repositories.
   
   - Make sure you have **Docker** and **Docker Compose** installed on your computer. If not, you can follow the official Docker installation guide, [Docker Installation Guide](https://docs.docker.com/engine/install/ubuntu/).
-
-  - This environment allows for working with private repositories. For this, the developer user needs to copy their private key and corresponding public key—those used for their GitHub repo configuration—into the **.ssh** folder in this directory.
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
