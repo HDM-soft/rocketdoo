@@ -4,7 +4,7 @@ import signal
 import sys
 
 # Define la versión del paquete
-VERSION = "1.1"
+VERSION = "1.2"
 
 # Maneja la interrupción con Ctrl+C
 def signal_handler(sig, frame):
