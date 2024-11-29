@@ -15,24 +15,26 @@ welcome_message: |
   |_|  |_|_____/|_|  |_|_____/ \____/|_|       |_|
 
   ========================================================
-  ¡Bienvenido al generador de entornos de Desarrollo Odoo!
+  Welcome to the Odoo Development environment generator!
   ========================================================
-  Este asistente te guiará en la creación de un entorno de desarrollo de Odoo dockerizado.
-  Por favor, responde a las siguientes preguntas para personalizar tu proyecto. En el caso 
-  de no necesitar modificar los valores presione ENTER.
-  Luego de finalizar la guía, podrás ejecutar tu proyecto con el comando "docker compose up".
+  This wizard will guide you through the creation of a dockerized Odoo development environment.
+  Please answer the following questions to customize your project. In case you do not 
+  you do not need to modify the values press ENTER.
+  After finishing the guide, you will be able to run your project with the “docker compose up” command.
 
-  Si tienes alguna duda, revisa la documentación o contacta al administrador.
+  If you have any questions, please check the documentation or contact the administrator.
+
+  Version 1.1
 
   https://odoo.hdmsoft.com.ar
 
-  PRESIONE "ENTER" PARA COMENZAR ...
+  PRESS "ENTER" TO START ...
 
 
 # Preguntas de la plantilla
 odoo_version:
   type: str
-  help: "Selecciona la versión de Odoo que deseas instalar"
+  help: "Select the version of Odoo you want to install"
   choices:
     - ":15.0"
     - ":16.0"
@@ -42,13 +44,13 @@ odoo_version:
 
 project_name:
   type: str
-  help: "Nombre del proyecto"
-  default: "mi_proyecto_odoo"
+  help: "Proyect Name"
+  default: "my_proyect"
 
 # Configuracion del servicio PostgreSql
 db_version:
   type: int
-  help: "Seleccione la version de PostgreSql que desea usar"
+  help: "Select Postgresql version"
   choices:
     - 13
     - 14
@@ -56,38 +58,38 @@ db_version:
 
 db_container:
   type: str
-  help: "Nombre su contenedor del servicio base de datos"
+  help: "Name your database service container"
   default: "ps-container"
 
 admin_passwd:
   type: str
-  help: "Escriba la contraseña para su Master Password de Odoo, por defecto (admin)"
+  help: "Type the password for your Odoo Master Password, default (admin)"
   default: "admin"
 
 # Configuracion del servicio Odoo
 odoo_image:
   type: str
-  help: "Determine el nombre de la imagen a construir, por defecto (odoo-rocketdoo)"
+  help: "Determine the name of the image to build, default (odoo-rocketdoo)"
   default: "odoo-rocketdoo"
 
 odoo_container:
   type: str
-  help: "Escriba el nombre de su contenedor para el servicio Odoo"
+  help: "Type the name of your container for the Odoo service"
   default: "odoo-dev"
 
 odoo_port:
   type: int
-  help: "Puerto en el cual correrá Odoo, por defecto (8069), solo se recomienda cambiar si tiene mas de un ambiente corriendo"
+  help: "Port on which Odoo will run, by default (8069), only recommended to change if you have more than one environment running."
   default: 8069
 
 vsc_port:
   type: int
-  help: "Puerto para la conexion con Visual Studio Code, por defecto (8888), solo se recomienda cambiar si tiene mas de un ambiente corriendo"
+  help: "Port for connection to Visual Studio Code, by default (8888), only recommended to change if you have more than one environment running."
   default: 8888
 
 restart:
   type: str
-  help: "Configura si quieres que tus contenedores se reinicien en automatico"
+  help: "Configure how you want your containers to be restarted"
   choices: 
     - "no"
     - "always"

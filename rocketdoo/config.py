@@ -33,11 +33,11 @@ def modificar_docker_compose(edicion):
             with open(docker_compose_path, 'w') as file:
                 file.writelines(contenido_modificado)
 
-            print("Ambiente preparado para la edición Enterprise. Asegurese de subir a la raiz del proyecto su carpeta Enterprise.")
+            print("Environment prepared for the Enterprise edition. Be sure to upload your Enterprise folder to the root of the project.")
         except FileNotFoundError:
-            print(f"El archivo {docker_compose_path} no se encontró.")
+            print(f"The file {docker_compose_path} was not found.")
         except Exception as e:
-            print(f"Error al modificar {docker_compose_path}: {e}")
+            print(f"Error modifying {docker_compose_path}: {e}")
 
 # Function to modify the odoo.conf file
 def modificar_odoo_conf(edicion):
@@ -46,7 +46,7 @@ def modificar_odoo_conf(edicion):
     if edicion.lower() == 'ee':
         # Ensure that the file exists
         if not os.path.exists(odoo_conf_path):
-            print(f"El archivo {odoo_conf_path} no existe.")
+            print(f"The file {odoo_conf_path} does not exist.")
             return
 
         with open(odoo_conf_path, 'r') as file:
@@ -59,17 +59,17 @@ def modificar_odoo_conf(edicion):
         with open(odoo_conf_path, 'w') as file:
             file.write(contenido_modificado)
 
-        print("Archivo odoo.conf modificado para incluir el path de Enterprise.")
+        print("Modified odoo.conf file to include the Enterprise path.")
 
 # Ask for the odoo edition
-edicion = input("¿En qué edición de Odoo va a desarrollar? Community o Enterprise (ce/ee): ").strip().lower()
+edicion = input("In which Odoo edition will you develop? Community or Enterprise (ce/ee): ").strip().lower()
 
 # Apply modifications if Enterprise edition
 if edicion == 'ee':
     modificar_docker_compose(edicion)
     modificar_odoo_conf(edicion)
 else:
-    print("Edición Community seleccionada")
+    print("Community Edition Selected")
     
 # SSH lines to be searched and uncommented/commented as needed
 ssh_lines = [
@@ -84,7 +84,7 @@ def get_input(prompt, required=True):
     """Function that receives an input from the user, with the option of not being mandatory."""
     value = input(prompt)
     while required and not value:
-        value = input("Este campo no puede estar vacío. " + prompt)
+        value = input("This field can not empty " + prompt)
     return value
 
 
@@ -92,7 +92,7 @@ def get_input(prompt, required=True):
 def manejar_ssh(repos_privados, dockerfile_path):
     """Maneja las claves SSH según si se utilizan repositorios privados."""
     if not repos_privados:
-        print("No se utilizarán repositorios privados. No se modificarán las claves SSH.")
+        print("No private repositories will be used. SSH keys will not be modified.")
         return
 
     ssh_folder = os.path.expanduser("~/.ssh")  # Carpeta del usuario
@@ -101,7 +101,7 @@ def manejar_ssh(repos_privados, dockerfile_path):
     try:
         # Buscar claves privadas en ~/.ssh
         if not os.path.exists(ssh_folder):
-            print(f"No se encontró la carpeta {ssh_folder}. Asegúrate de tener claves SSH configuradas.")
+            print(f"The {ssh_folder} folder was not found. Make sure you have SSH keys configured.")
             return
 
         ssh_keys = [
@@ -110,16 +110,16 @@ def manejar_ssh(repos_privados, dockerfile_path):
         ]
 
         if not ssh_keys:
-            print(f"No se encontraron claves privadas en {ssh_folder}.")
+            print(f"No private keys were found in {ssh_folder}.")
             return
 
-        print("Se encontraron las siguientes claves privadas en ~/.ssh:")
+        print("The following private keys were found in ~/.ssh:")
         for i, key in enumerate(ssh_keys):
             print(f"{i + 1}. {key}")
 
         key_index = int(get_input("Selecciona el número de la clave que deseas usar: ")) - 1
         selected_key = ssh_keys[key_index]
-        print(f"Has seleccionado la clave: {selected_key}")
+        print(f"You have selected the key: {selected_key}")
 
         # Crear la carpeta .ssh en el contexto de construcción si no existe
         if not os.path.exists(build_context_ssh_folder):
@@ -130,7 +130,7 @@ def manejar_ssh(repos_privados, dockerfile_path):
         dest_key_path = os.path.join(build_context_ssh_folder, selected_key)
         shutil.copy(source_key_path, dest_key_path)
 
-        print(f"Clave {selected_key} copiada al contexto de construcción: {dest_key_path}")
+        print(f"Key {selected_key} copied to the construction context: {dest_key_path}")
 
         # Modificar el Dockerfile para usar la clave copiada
         with open(dockerfile_path, "r") as file:
@@ -153,12 +153,12 @@ def manejar_ssh(repos_privados, dockerfile_path):
                 else:
                     file.write(line)
 
-        print(f"El Dockerfile se ha actualizado para usar la clave {selected_key}.")
+        print(f"Dockerfile has been updated to use the key {selected_key}.")
 
     except IndexError:
-        print("Selección inválida. Por favor, intenta nuevamente.")
+        print("Invalid selection. Please try again.")
     except Exception as e:
-        print(f"Error al manejar las claves SSH: {e}")
+        print(f"Error handling SSH keys: {e}")
 
 
 
@@ -178,87 +178,39 @@ def comentar_lineas():
                 else:
                     file.write(line)
 
-        print("Líneas comentadas correctamente en el Dockerfile.")
+        print("Lines commented correctly in the Dockerfile.")
 
     except FileNotFoundError:
-        print(f"El archivo {dockerfile_path} no se encontró.")
+        print(f"The file {dockerfile_path} was not found.")
     except Exception as e:
-        print(f"Error inesperado: {e}")
+        print(f"Unexpected error: {e}")
 
-
-# def manejar_claves_ssh():
-    
-#     "Manejar claves SSH solo si se desean utilizar repositorios privados."
-#     try:
-#         # Get the name of the private key in the folder ./.ssh
-#         ssh_folder = "./.ssh"
-#         private_key_name = ""
-
-#         # Check for files in the folder ./.ssh
-#         if os.path.exists(ssh_folder) and os.path.isdir(ssh_folder):
-#             files = os.listdir(ssh_folder)
-#             private_key_name = next(
-#                 (f for f in files if not f.startswith(".")), None
-#             )  # Send hidden folders
-
-#         if not private_key_name:
-#             print("No se encontró ninguna clave privada en la carpeta ./.ssh")
-#             return
-
-#         # Modify Dockefile
-#         dockerfile_path = "Dockerfile"
-#         copy_ssh_line = (
-#             f"COPY ./.ssh/{private_key_name} /root/.ssh/id_{private_key_name}\n"
-#         )
-#         chmod_ssh_line = f"RUN chmod 700 /root/.ssh/id_{private_key_name}\n"
-
-#         with open(dockerfile_path, "r") as file:
-#             lines = file.readlines()
-
-#         # Check if the lines already exist, and uncomment if necessary.
-#         new_lines = []
-#         for line in lines:
-#             if line.strip() == "#RUN mkdir -p /root/.ssh":
-#                 new_lines.append("RUN mkdir -p /root/.ssh\n")
-#             elif line.strip() == "#COPY ./.ssh/rsa /root/.ssh/id_rsa":
-#                 new_lines.append(copy_ssh_line)
-#             elif line.strip() == "#RUN chmod 700 /root/.ssh/id_rsa":
-#                 new_lines.append(chmod_ssh_line)
-#             else:
-#                 new_lines.append(line)
-
-#         with open(dockerfile_path, "w") as file:
-#             file.writelines(new_lines)
-
-#         print("Se ha actualizado el Dockerfile con las claves SSH privadas.")
-#     except Exception as e:
-#         print(f"Error al manejar las claves SSH: {e}")
 
 # Function to validate user input
 def obtener_respuesta_si_no(mensaje):
     while True:
         respuesta = input(mensaje).strip().lower()
-        if respuesta in ["s", "n"]:
+        if respuesta in ["y", "n"]:
             return respuesta
         else:
-            print("Por favor, ingrese 's' para sí o 'n' para no.")
+            print("Please enter 'y' for yes or 'n' for no.")
     
     
 # Ask if the user wants to use private repositories
-usar_repos_privados = input("¿Desea utilizar repositorios privados? (s/n): ").strip().lower()
+usar_repos_privados = input("Do you want to use private repositories (y/n): ").strip().lower()
 
 
 # Handle SSH in the Dockerfile based on user response
-manejar_ssh(usar_repos_privados == "s", dockerfile_path)
+manejar_ssh(usar_repos_privados == "y", dockerfile_path)
 
 # Ask if the user wants to user gitman with public repositorie
-usar_gitman = input("¿Desea utilizar gitman, con repositorios de terceros? (s/n): ").strip().lower()
+usar_gitman = input("Do you want to use third-party repositories (y/n): ").strip().lower()
 
-if usar_gitman != "s":
+if usar_gitman != "y":
     if os.path.exists("gitman.yml"):
         os.remove("gitman.yml")
 
-    print("Sin cambios en gitman. Comentando líneas del Dockerfile...")
+    print("Not use third-party repositories. Commenting lines of the Dockerfile...")
     comentar_lineas()
     sys.exit(0)
 
@@ -277,9 +229,9 @@ config = {
 def agregar_repositorio():
     """Functions to add new repositories"""
     repo_info = {
-        "repo": get_input("Ingresa el repositorio (repo): "),
-        "name": get_input("Ingresa el nombre (name): "),
-        "rev": get_input("Ingresa la revisión (branch): "),
+        "repo": get_input("Write or paste the repository (URL): "),
+        "name": get_input("Write a name (name): "),
+        "rev": get_input("Write revision/version (branch): "),
         "type": "git",  # keeping fixed,
         "scripts": [
             "sh /usr/lib/python3/dist-packages/odoo/install_dependencies.sh"
@@ -299,19 +251,19 @@ def modificar_odoo_conf():
 
         # Verifying the existence of the odoo.conf file
         if not os.path.exists(odoo_conf_path):
-            raise FileNotFoundError(f"El archivo {odoo_conf_path} no existe.")
+            raise FileNotFoundError(f"The file {odoo_conf_path} does not exist.")
 
         # We check if we have read and write permissions
         if not os.access(odoo_conf_path, os.R_OK):
             raise PermissionError(
-                f"No se puede leer el archivo {odoo_conf_path}. Verifica los permisos."
+                f"Cannot read the {odoo_conf_path} file. Check the permissions."
             )
         if not os.access(odoo_conf_path, os.W_OK):
             raise PermissionError(
-                f"No se puede escribir en el archivo {odoo_conf_path}. Verifica los permisos."
+                f"Cannot write to the {odoo_conf_path} file. Check the permissions."
             )
 
-        print(f"Modificando el archivo {odoo_conf_path}...")
+        print(f"Modifying the {odoo_conf_path} file...")
 
         # We read the gitman.yml file to obtain the names
         with open("gitman.yml", "r") as file:
@@ -321,11 +273,11 @@ def modificar_odoo_conf():
         nombres_repositorios = [
             repo["name"] for repo in gitman_data["sources"] if repo["name"]
         ]
-        print(f"Repositorios extraídos: {nombres_repositorios}")
+        print(f"Extracted repositories: {nombres_repositorios}")
 
         # If there are no repository names, we do nothing.
         if not nombres_repositorios:
-            print("No se encontraron repositorios para agregar.")
+            print("No repositories were found to add.")
             return
 
         # We create the new string for addons_path with the new paths
@@ -356,26 +308,26 @@ def modificar_odoo_conf():
                 ]
                 lines[i] = f"addons_path = {','.join(rutas_actualizadas)}\n"
                 addons_path_encontrado = True
-                print(f"Línea addons_path modificada: {lines[i]}")
+                print(f"addons_path line modified: {lines[i]}")
                 break
 
         # If addons_path is not found, we add it at the end
         if not addons_path_encontrado:
             lines.append(f"addons_path = {nuevas_rutas}\n")
-            print("Se agregó una nueva línea addons_path.")
+            print("A new addons_path line was added.")
 
         # Save the changes in the odoo.conf file.
         with open(odoo_conf_path, "w") as file:
             file.writelines(lines)
 
-        print("Archivo odoo.conf actualizado exitosamente.")
+        print("odoo.conf file successfully updated.")
 
     except FileNotFoundError as fnf_error:
         print(fnf_error)
     except PermissionError as perm_error:
         print(perm_error)
     except Exception as e:
-        print(f"Error inesperado al modificar odoo.conf: {e}")
+        print(f"Unexpected error when modifying odoo.conf: {e}")
 
 
 # Main to add repositories
@@ -383,18 +335,18 @@ while True:
     agregar_repositorio()
 
     # We ask if the user wants to add more repositories
-    agregar_mas = input("¿Deseas agregar otro repositorio? (s/n): ").strip().lower()
+    agregar_mas = input("Do you want to add another repository? (y/n): ").strip().lower()
 
     # Validating answer
-    if agregar_mas != "s":
-        print("Finalizó la configuración de gitman.")
+    if agregar_mas != "y":
+        print("Finished configuring gitman to third-party repository.")
         break
 
 # Save the gitman files and their configurations on a YAML format
 with open("gitman.yml", "w") as file:
     yaml.dump(config, file, default_flow_style=False, sort_keys=False)
 
-print("Archivo gitman.yml generado exitosamente.")
+print("File gitman.yml generated successfully.")
 
 # Calling function to modify odoo.conf
 modificar_odoo_conf()
