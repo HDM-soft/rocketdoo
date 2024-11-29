@@ -6,7 +6,7 @@ long_description = (this_directory / "README.md").read_text()
 
 setup(
     name='rocketdoo',
-    version='1.0',
+    version='1.2',
     description='This library allows you to build an automated local development environment for Odoo EE and CE.',
     long_description=long_description,
     long_description_content_type='text/markdown',
