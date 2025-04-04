@@ -1,9 +1,12 @@
-# HDMsoft
-[visit our page](https://odoo.hdmsoft.com.ar)
+# HDMSOFT
+
+[Visit our page](https://odoo.hdmsoft.com.ar)
+
+[Official Documentation](https://rocketdoo-docs.readthedocs.io/en/latest/)
 
 ## ROCKETDOO
 
-Base repository for Odoo development.
+Odoo Development Framework
 
 ## Developed by:
 
@@ -125,6 +128,6 @@ If you modify your **gitman.yml** file before building with the "build" command,
 
 - If you have any questions or issues with our development environment, you can contact us and submit your inquiry or support ticket by clicking on the link below.
 
- - [Support Link](https://odoo.hdmsoft.com.ar/contactus)
+ - [Support Link](https://odoo.hdmsoft.com.ar/mesa-de-ayuda)
 
 
