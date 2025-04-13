@@ -15,6 +15,7 @@ services:
       - ./addons:/usr/lib/python3/dist-packages/odoo/extra-addons
       #- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise
       - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
+      - odoo-py-env:/usr/lib/python3/site-packages
   db:
     restart: unless-stopped
     image: postgres:14
@@ -31,6 +32,7 @@ services:
 volumes:
   odoo-web-data:
   odoo-db-data:
+  odoo-py-env:
 
 secrets:
   postgresql_password:
