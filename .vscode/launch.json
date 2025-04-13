@@ -1,0 +1,40 @@
+{
+    // Use IntelliSense para saber los atributos posibles.
+    // Mantenga el puntero para ver las descripciones de los existentes atributos.
+    // Para más información, visite: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+      // {
+      //   "name": "Odoo: Attach Debug",
+      //   "type": "python",
+      //   "request": "attach",
+      //   "port": 8888,
+      //   "debugServer": 8888,
+      //   "host": "localhost",
+      //   "pathMappings": [
+      //       {
+      //           "localRoot": "${workspaceFolder}",
+      //           "remoteRoot": "/usr/lib/python3/dist-packages/odoo",
+      //       }
+      //   ],
+      //   "logToFile": true
+      // },
+      {
+        "name": "Odoo: Debug",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "/usr/bin/odoo",
+        "args": [
+          "-c",
+          "/etc/odoo/odoo.conf",
+          "-u",
+          "cheque_report"
+        ],
+        "console": "integratedTerminal",
+        "justMyCode": false
+        "env": {
+          "GEVENT_SUPPORT": "True"
+        }
+      }
+    ]
+  }
