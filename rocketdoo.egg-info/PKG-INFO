@@ -1,12 +1,21 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: rocketdoo
-Version: 1.0
+Version: 1.2.1
 Summary: This library allows you to build an automated local development environment for Odoo EE and CE.
 Home-page: https://github.com/HDM-soft/rocketdoo.git
 Author: Horacio Montaño and Elias Braceras
 Author-email: horaciomontano@hdmsoft.com.ar
 Description-Content-Type: text/markdown
 License-File: LICENSE
+Requires-Dist: copier
+Dynamic: author
+Dynamic: author-email
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: requires-dist
+Dynamic: summary
 
 # HDMsoft
 [visit our page](https://odoo.hdmsoft.com.ar)
@@ -21,13 +30,17 @@ Base repository for Odoo development.
    - "Horacio Montaño"
 
 ## Version: 
-   - "1.0"
+   - "1.2.1"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Simple Description:
 
-  This repository should be used as a template for any Odoo development. It comes equipped with a set of tools to streamline work during the development preparation process. This development environment is designed as a Python library, so it’s important to install it as such.
+  RocketDoo is an automated development Framework, designed for ERP-ODOO; in all its versions and editions.
+   This repository is a template, which allows you to create your own repository to be able to develop with comfort.
+   In order to use it, it is important to install the framework, after creating and cloning its repository created from the template. 
+
+   ``` pip install rocketdoo``` 
 
   - This development environment is intended for those developing on Linux operating systems, such as Ubuntu, Debian, etc. However, for those who prefer to develop on Windows, we suggest installing **WSL2**, the Windows Subsystem for Linux.
   
@@ -40,8 +53,6 @@ Base repository for Odoo development.
   - Gitman is used for downloading and installing external repositories.
   
   - Make sure you have **Docker** and **Docker Compose** installed on your computer. If not, you can follow the official Docker installation guide, [Docker Installation Guide](https://docs.docker.com/engine/install/ubuntu/).
-
-  - This environment allows for working with private repositories. For this, the developer user needs to copy their private key and corresponding public key—those used for their GitHub repo configuration—into the **.ssh** folder in this directory.
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -60,7 +71,7 @@ Base repository for Odoo development.
  
     ```sudo pip3 install -r requirements.txt```
  
- 5. Now you can run ROCKETDOO with the command: 
+ 5. To start, you must enter the subdirectory “rocketdoo” located in the root of rocketdoo; and then execute the following command: 
  
     ```rocketdoo```
 
@@ -89,7 +100,12 @@ Base repository for Odoo development.
  - We recommend using Visual Studio Code Extensions, such as **Docker**, **Dev Container**, and any others you find useful for working in VSCode.
 
  - If you wish to develop in the Enterprise edition, Rocketdoo will ask you, and will make the necessary configurations. However, you should ensure that you have the "enterprise" folder with all the modules and place it in the root of this project.
- 
+
+ - This development framework allows you to use private repositories for your developments. For this, the system will ask you if you want to use “private repositories” and if your answer is YES, it will map your local user folder “~/.ssh/” and ask you to choose which ssh key to use. 
+Don't worry, these private keys are not saved in your repository after the commit and push; it simply stores them locally and inside the development docker container. 
+Remember that your selected key must be previously configured with your GitHub repository.
+This private information is as ephemeral as your environment.
+
 ### HOW TO ADD MORE MODULES TO GITMAN IF YOU DID NOT DO IT WITH THE LAUNCHER?
 
   - If you need to use third-party addons after setting up your development environment with our launcher, you’ll need to manually edit the **gitman.yml** file and also add lines to the **odoo.conf** addons_path using:
