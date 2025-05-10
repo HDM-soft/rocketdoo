@@ -10,12 +10,11 @@ services:
       - "{{odoo_port}}:8069"
       - "{{vsc_port}}:8888"
     volumes:
-      - odoo-web-data:/var/lib/odoo
+      - {{project-name}}-web-data:/var/lib/odoo
       - ./config:/etc/odoo
       - ./addons:/usr/lib/python3/dist-packages/odoo/extra-addons
       #- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise
       - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
-      - odoo-py-env:/usr/lib/python3/site-packages
   db:
     restart: {{restart}}
     image: postgres:{{db_version}}
@@ -26,13 +25,12 @@ services:
       - POSTGRES_USER=root
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
-      - odoo-db-data:/var/lib/postgresql/data/pgdata
+      - {{project-name}}-db-data:/var/lib/postgresql/data/pgdata
     secrets:
       - postgresql_password
 volumes:
-  odoo-web-data:
-  odoo-db-data:
-  odoo-py-env:
+  {{project-name}}-web-data:
+  {{project-name}}-db-data:
 
 secrets:
   postgresql_password:
