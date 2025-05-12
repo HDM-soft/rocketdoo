@@ -127,4 +127,8 @@ If you modify your **gitman.yml** file before building with the "build" command,
 
  - [Support Link](https://odoo.hdmsoft.com.ar/contactus)
 
+- If you like this project and want to collaborate, you can do it here !!! 
+
+ - [Cafecito](https://cafecito.app/horacio1986)
+ - [Patreon](https://cafecito.app/horacio1986)
 
