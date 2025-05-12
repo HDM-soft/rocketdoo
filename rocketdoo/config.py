@@ -1,9 +1,45 @@
+import socket
 import sys
 import os
+import subprocess
 import re
 import yaml
 import shutil
 
+def is_port_in_use(port):
+    """Check if a TCP port is currently in use on localhost."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+def is_port_used_by_rocketdoo(port):
+    """Check if the port is used by any running Docker container related to Rocketdoo."""
+    try:
+        output = subprocess.check_output(['docker', 'ps', '--format', '{{.Names}} {{.Ports}}']).decode()
+        for line in output.strip().splitlines():
+            if 'rocketdoo' in line and str(port) in line:
+                return True
+    except Exception as e:
+        print(f"[ERROR] Could not inspect Docker containers: {e}")
+    return False
+
+def validate_port(env_var_name, default_port, label):
+    try:
+        port = int(os.getenv(env_var_name, str(default_port)))
+    except ValueError:
+        print(f"[ERROR] Invalid {label} port. Please ensure it is a valid number.")
+        sys.exit(1)
+
+    if is_port_in_use(port):
+        if is_port_used_by_rocketdoo(port):
+            print(f"[ERROR] Port {port} is already used by another Rocketdoo project ({label}).")
+        else:
+            print(f"[ERROR] Port {port} is already in use by another application ({label}).")
+        sys.exit(1)
+    print(f"[INFO] {label} port {port} is available.")
+
+# Validate Odoo and VSCode ports using expected Copier environment variable names
+validate_port("COPIER_odoo_port", 8069, "Odoo")
+validate_port("COPIER_vsc_port", 8888, "VSCode")
 
 docker_compose_path = "docker-compose.yml"
 dockerfile_path = "Dockerfile"
