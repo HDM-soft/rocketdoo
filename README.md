@@ -130,4 +130,8 @@ If you modify your **gitman.yml** file before building with the "build" command,
 
  - [Support Link](https://odoo.hdmsoft.com.ar/mesa-de-ayuda)
 
+- If you like this project, and you want to collaborate with a donation, you can do it here !!!
+
+ - [Cafecito](https://cafecito.app/horacio1986)
+ - [Patreon](https://cafecito.app/horacio1986)
 

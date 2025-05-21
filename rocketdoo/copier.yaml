@@ -18,8 +18,9 @@ welcome_message: |
   Welcome to the Odoo Development environment generator!
   ========================================================
   This wizard will guide you through the creation of a dockerized Odoo development environment.
-  Please answer the following questions to customize your project. In case you do not 
-  you do not need to modify the values press ENTER.
+  Please answer the following questions to customize your project.
+  If you don't need to modify the values, just press ENTER.
+
   After finishing the guide, you will be able to run your project with the “docker compose up” command.
 
   If you have any questions, please check the documentation or contact the administrator.
@@ -46,8 +47,10 @@ project_name:
   type: str
   help: "Proyect Name"
   default: "my_proyect"
+  validator: "lambda x: x.isidentifier()"
 
 # Configuracion del servicio PostgreSql
+
 db_version:
   type: int
   help: "Select Postgresql version"
@@ -81,11 +84,13 @@ odoo_port:
   type: int
   help: "Port on which Odoo will run, by default (8069), only recommended to change if you have more than one environment running."
   default: 8069
+  validator: "lambda x: 1024 <= x <= 65535"
 
 vsc_port:
   type: int
   help: "Port for connection to Visual Studio Code, by default (8888), only recommended to change if you have more than one environment running."
   default: 8888
+  validator: "lambda x: 1024 <= x <= 65535"
 
 restart:
   type: str
