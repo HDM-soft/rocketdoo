@@ -125,7 +125,7 @@ def get_input(prompt, required=True):
 
 
 
-def drive_ssh(private_repos, dockerfile_path):
+def manage_ssh(private_repos, dockerfile_path):
     """Handles SSH keys depending on whether private repositories are used."""
     if not private_repos:
         print("No private repositories will be used. SSH keys will not be modified.")
@@ -237,7 +237,7 @@ use_private_repos = input("Do you want to use private repositories (y/n): ").str
 
 
 # Handle SSH in the Dockerfile based on user response
-drive_ssh(use_private_repos == "y", dockerfile_path)
+manage_ssh(use_private_repos == "y", dockerfile_path)
 
 # Ask if the user wants to user gitman with public repositorie
 use_gitman = input("Do you want to use third-party repositories (y/n): ").strip().lower()
