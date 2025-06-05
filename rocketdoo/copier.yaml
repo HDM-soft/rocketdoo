@@ -83,13 +83,11 @@ odoo_port:
   type: int
   help: "Port on which Odoo will run, by default (8069), only recommended to change if you have more than one environment running."
   default: 8069
-  validator: "lambda x: 1024 <= x <= 65535"
 
 vsc_port:
   type: int
   help: "Port for connection to Visual Studio Code, by default (8888), only recommended to change if you have more than one environment running."
   default: 8888
-  validator: "lambda x: 1024 <= x <= 65535"
 
 restart:
   type: str
