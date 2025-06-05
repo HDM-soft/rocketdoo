@@ -47,7 +47,6 @@ project_name:
   type: str
   help: "Proyect Name"
   default: "my_proyect"
-  validator: "lambda x: x.isidentifier()"
 
 # Configuracion del servicio PostgreSql
 
