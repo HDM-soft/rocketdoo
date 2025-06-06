@@ -1,2 +1,4 @@
 ./external_addons
 ./.ssh
+../build/
+../dist/
