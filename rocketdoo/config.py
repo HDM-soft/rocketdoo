@@ -22,12 +22,15 @@ def is_port_used_by_rocketdoo(port):
         print(f"[ERROR] Could not inspect Docker containers: {e}")
     return False
 
-def validate_port(env_var_name, default_port, label):
-    try:
-        port = int(os.getenv(env_var_name, str(default_port)))
-    except ValueError:
-        print(f"[ERROR] Invalid {label} port. Please ensure it is a valid number.")
-        sys.exit(1)
+def validate_port_from_int(port, label):
+    print(f"[DEBUG] Validating {label} port: {port}")
+    
+    if not isinstance(port, int):
+        try:
+            port = int(str(port).strip())
+        except ValueError:
+            print(f"[ERROR] Invalid {label} port. Please ensure it is a valid number.")
+            sys.exit(1)
 
     if is_port_in_use(port):
         if is_port_used_by_rocketdoo(port):
@@ -36,10 +39,13 @@ def validate_port(env_var_name, default_port, label):
             print(f"[ERROR] Port {port} is already in use by another application ({label}).")
         sys.exit(1)
     print(f"[INFO] {label} port {port} is available.")
+    
+# Validate ports for Odoo, VSCode, and Rocketdoo
+odoo_port = os.getenv("COPIER_odoo_port", 8069)
+vsc_port = os.getenv("COPIER_vsc_port", 8888)
 
-# Validate Odoo and VSCode ports using expected Copier environment variable names
-validate_port("COPIER_odoo_port", 8069, "Odoo")
-validate_port("COPIER_vsc_port", 8888, "VSCode")
+validate_port_from_int(odoo_port, "Odoo")
+validate_port_from_int(vsc_port, "VSCode")
 
 docker_compose_path = "docker-compose.yml"
 dockerfile_path = "Dockerfile"

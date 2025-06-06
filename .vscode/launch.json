@@ -27,11 +27,11 @@
         "args": [
           "-c",
           "/etc/odoo/odoo.conf",
-          "-u",
-          "cheque_report"
+          // "-u",
+          // "tu_modulo"
         ],
         "console": "integratedTerminal",
-        "justMyCode": false
+        "justMyCode": false,
         "env": {
           "GEVENT_SUPPORT": "True"
         }
