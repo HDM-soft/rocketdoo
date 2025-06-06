@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: rocketdoo
-Version: 1.2.1
+Version: 1.2.2
 Summary: This library allows you to build an automated local development environment for Odoo EE and CE.
 Home-page: https://github.com/HDM-soft/rocketdoo.git
 Author: Horacio Montaño and Elias Braceras
@@ -17,12 +17,15 @@ Dynamic: license-file
 Dynamic: requires-dist
 Dynamic: summary
 
-# HDMsoft
-[visit our page](https://odoo.hdmsoft.com.ar)
+# HDMSOFT
+
+[Visit our page](https://odoo.hdmsoft.com.ar)
+
+[Official Documentation](https://rocketdoo-docs.readthedocs.io/en/latest/)
 
 ## ROCKETDOO
 
-Base repository for Odoo development.
+Odoo Development Framework
 
 ## Developed by:
 
@@ -30,7 +33,7 @@ Base repository for Odoo development.
    - "Horacio Montaño"
 
 ## Version: 
-   - "1.2.1"
+   - "1.2.2"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -144,6 +147,10 @@ If you modify your **gitman.yml** file before building with the "build" command,
 
 - If you have any questions or issues with our development environment, you can contact us and submit your inquiry or support ticket by clicking on the link below.
 
- - [Support Link](https://odoo.hdmsoft.com.ar/contactus)
+ - [Support Link](https://odoo.hdmsoft.com.ar/mesa-de-ayuda)
 
+- If you like this project, and you want to collaborate with a donation, you can do it here !!!
+
+ - [Cafecito](https://cafecito.app/horacio1986)
+ - [Patreon](https://cafecito.app/horacio1986)
 
