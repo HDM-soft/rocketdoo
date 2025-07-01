@@ -1,4 +1,3 @@
 ./external_addons
 ./.ssh
-../build/
-../dist/
+*.egg-info/
