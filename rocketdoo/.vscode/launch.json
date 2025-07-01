@@ -4,21 +4,29 @@
   // Para más información, visite: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
-    // {
-    //   "name": "Odoo: Attach Debug",
-    //   "type": "python",
-    //   "request": "attach",
-    //   "port": 8888,
-    //   "debugServer": 8888,
-    //   "host": "localhost",
-    //   "pathMappings": [
-    //       {
-    //           "localRoot": "${workspaceFolder}",
-    //           "remoteRoot": "/usr/lib/python3/dist-packages/odoo",
-    //       }
-    //   ],
-    //   "logToFile": true
-    // },
+
+
+        {
+      "name": "Odoo: Debug-Breakpoints",
+      "type": "python",
+      "request": "launch",
+      "program": "/usr/bin/odoo",
+      "gevent": false,
+      "args": [
+        "-c",
+        "/etc/odoo/odoo.conf",
+        // "-u",
+        // "your-module-name",
+        // "--dev=all",
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        // "PYTHONUNBUFFERED": "1",
+        // "GEVENT_SUPPORT": "True"
+      }
+    },
+    
     {
       "name": "Odoo: Debug",
       "type": "debugpy",
@@ -26,10 +34,17 @@
       "program": "/usr/bin/odoo",
       "args": [
         "-c",
-        "/etc/odoo/odoo.conf"
+        "/etc/odoo/odoo.conf",
+        // "-u",
+        // "your-module-name",
+        // "--dev=all",
       ],
       "console": "integratedTerminal",
-      "justMyCode": false
+      "justMyCode": false,
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "GEVENT_SUPPORT": "True"
+      }
     }
   ]
 }
