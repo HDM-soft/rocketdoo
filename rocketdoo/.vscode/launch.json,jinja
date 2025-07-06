@@ -30,7 +30,7 @@
       "name": "Debug POS JavaScript en Chrome",
       "type": "chrome",
       "request": "launch",
-      "url": "http://localhost:8069",  // Use your own port if different
+      "url": "http://localhost:{{odoo_port}}",
       "webRoot": "${workspaceFolder}",
       "sourceMaps": true,
       "trace": true,
