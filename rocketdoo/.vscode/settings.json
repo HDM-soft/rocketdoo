@@ -1,3 +1,7 @@
 {
-  "python.languageServer": "None"
+  "python.languageServer": "None",
+  "docker.composeFile": [
+    "docker-compose.yml"
+  ],
+  "docker.service": "odoo"
 }
