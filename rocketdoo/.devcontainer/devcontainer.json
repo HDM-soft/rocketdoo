@@ -42,7 +42,12 @@
         "trinhanhngoc.vscode-odoo",
         "jigar-patel.OdooSnippets",
         "ms-python.vscode-pylance",
-        "ms-python.python"
+        "ms-python.python",
+		"mechatroner.rainbow-csv",
+		"wolfieshorizon.python-auto-venv",
+		"ms-vsliveshare.vsliveshare",
+		"ms-python.debugpy",
+		"ms-vscode.js-debug-nightly"
       ]
     }
   },
