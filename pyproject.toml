@@ -17,9 +17,9 @@ dependencies = [
 
 [project.scripts]
 rocketdoo = "rocketdoo.cli:main"
+rkd = "rocketdoo.cli:main"
 
-[tool.setuptools.packages.find]
-where = ["rocketdoo"]
+# setuptools encontrará automáticamente el paquete rocketdoo en la raíz
 
 [build-system]
 requires = ["setuptools", "wheel"]
