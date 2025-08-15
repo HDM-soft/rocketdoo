@@ -3,17 +3,17 @@ import sys
 from .scaffold import scaffold_project
 from .init_project import init_project
 
-# Detectar el nombre con que fue llamado el comando
+# Detect the command name used to invoke the CLI
 PROG_NAME = "rkd" if "rkd" in sys.argv[0] else "rocketdoo"
 
 @click.group()
 @click.version_option(version="2.0.0b1", prog_name="Rocketdoo")
-@click.option('-v', '--verbose', is_flag=True, help='Modo verbose para más detalles')
-@click.option('--config', '-c', type=click.Path(), help='Archivo de configuración personalizado')
+@click.option('-v', '--verbose', is_flag=True, help='Enable verbose mode for detailed output')
+@click.option('--config', '-c', type=click.Path(), help='Path to custom configuration file')
 @click.pass_context
 def main(ctx, verbose, config):
-    """🚀 Rocketdoo - Framework para entornos Odoo"""
-    # Guardar contexto para usar en otros comandos
+    """🚀 Rocketdoo - Odoo Development Framework"""
+    # Store context for use in other commands
     ctx.ensure_object(dict)
     ctx.obj['verbose'] = verbose
     ctx.obj['config'] = config
@@ -22,28 +22,28 @@ def main(ctx, verbose, config):
 @main.command()
 @click.option('--template', '-t', default='basic', 
               type=click.Choice(['basic', 'advanced', 'minimal']),
-              help='Plantilla a usar para el scaffold')
-@click.option('--force', '-f', is_flag=True, help='Sobrescribir archivos existentes')
+              help='Template to use for scaffolding the project structure')
+@click.option('--force', '-f', is_flag=True, help='Overwrite existing files without confirmation')
 @click.pass_context
 def scaffold(ctx, template, force):
-    """Genera la estructura base del proyecto."""
+    """Generate base project structure and configuration files."""
     verbose = ctx.obj.get('verbose', False)
     
     if verbose:
-        click.echo(f"🔍 Modo verbose activado")
-        click.echo(f"📋 Usando plantilla: {template}")
-        click.echo(f"💪 Forzar sobrescritura: {force}")
+        click.echo(f"🔍 Verbose mode enabled")
+        click.echo(f"📋 Using template: {template}")
+        click.echo(f"💪 Force overwrite: {force}")
     
     scaffold_project(template=template, force=force, verbose=verbose)
 
 @main.command()
-@click.option('--docker-compose', '-d', is_flag=True, help='Generar docker-compose.yml')
+@click.option('--docker-compose', '-d', is_flag=True, help='Generate docker-compose.yml configuration')
 @click.option('--odoo-version', '-o', default='16.0', 
               type=click.Choice(['14.0', '15.0', '16.0', '17.0']),
-              help='Versión de Odoo a configurar')
+              help='Odoo version to configure for the project')
 @click.pass_context
 def init(ctx, docker_compose, odoo_version):
-    """Inicia la configuración interactiva del entorno."""
+    """Initialize interactive environment configuration setup."""
     verbose = ctx.obj.get('verbose', False)
     config_file = ctx.obj.get('config')
     
@@ -57,29 +57,28 @@ def init(ctx, docker_compose, odoo_version):
 @main.command()
 @click.argument('command_name', required=False)
 def help(command_name):
-    """Muestra ayuda detallada para comandos específicos."""
+    """Display detailed help information for specific commands."""
     if command_name:
-        # Mostrar ayuda de un comando específico
+        # Show help for a specific command
         cmd = main.get_command(click.Context(main), command_name)
         if cmd:
             click.echo(cmd.get_help(click.Context(cmd)))
         else:
-            click.echo(f"❌ Comando '{command_name}' no encontrado")
-            click.echo("Comandos disponibles:")
+            click.echo(f"❌ Command '{command_name}' not found")
+            click.echo("Available commands:")
             for name in main.list_commands(click.Context(main)):
                 click.echo(f"  {name}")
     else:
-        # Mostrar ayuda general
+        # Show general help
         click.echo(main.get_help(click.Context(main)))
 
-# Comando adicional para mostrar información del proyecto
 @main.command()
 def info():
-    """Muestra información detallada sobre el proyecto actual."""
-    click.echo("📊 Información del proyecto:")
+    """Display detailed information about the current project and framework."""
+    click.echo("📊 Project Information:")
     click.echo("🚀 Rocketdoo v2.0.0b1")
-    click.echo("📧 Soporte: horaciomontano@hdmsoft.com.ar")
-    click.echo("🌐 Documentación: https://rocketdoo.dev")
+    click.echo("📧 Support: rocketdoo@hdmsoft.com.ar")
+    click.echo("🌐 Documentation: https://rocketdoo-docs.readthedocs.io/")
     
 if __name__ == "__main__":
     main()
