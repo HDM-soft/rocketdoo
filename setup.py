@@ -22,6 +22,5 @@ setup(
             'rocketdoo=rocketdoo:main',
         ],
     },
-    license="GPL-3.0-or-later",
-    license_files=["LICENSE"]
+    license="GPL-3.0-or-later"
 )
