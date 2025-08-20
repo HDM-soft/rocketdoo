@@ -15,12 +15,13 @@ setup(
     url='https://github.com/HDM-soft/rocketdoo.git',
     packages=find_packages(),
     install_requires=[
-        'copier',  # Asegúrate de incluir copier en las dependencias
-        # Incluye aquí cualquier otra dependencia que tu proyecto necesite
+        'copier',  
     ],
     entry_points={
         'console_scripts': [
             'rocketdoo=rocketdoo:main',
         ],
     },
+    license="GPL-3.0-or-later",
+    license_files=["LICENSE"]
 )
