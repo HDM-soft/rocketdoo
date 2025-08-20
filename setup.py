@@ -13,7 +13,6 @@ setup(
     author='Horacio Montaño and Elias Braceras',
     author_email='horaciomontano@hdmsoft.com.ar',
     url='https://github.com/HDM-soft/rocketdoo.git',
-    license='GPL-3.0-or-later ',
     packages=find_packages(),
     install_requires=[
         'copier',  # Asegúrate de incluir copier en las dependencias
