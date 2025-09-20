@@ -19,8 +19,18 @@ dependencies = [
 rocketdoo = "rocketdoo.cli:main"
 rkd = "rocketdoo.cli:main"
 
-# setuptools encontrará automáticamente el paquete rocketdoo en la raíz
-
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+# 🚀 Detección automática de paquetes
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rocketdoo*"]
+
+# 🚀 Incluir los templates dentro del paquete
+[tool.setuptools.package-data]
+rocketdoo = ["templates/**"]
+
+[tool.setuptools]
+include-package-data = true
