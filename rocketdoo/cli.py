@@ -47,12 +47,8 @@ def init(ctx, docker_compose, odoo_version):
     verbose = ctx.obj.get('verbose', False)
     config_file = ctx.obj.get('config')
     
-    init_project(
-        docker_compose=docker_compose, 
-        odoo_version=odoo_version,
-        verbose=verbose,
-        config_file=config_file
-    )
+    init_project()
+
 
 @main.command()
 @click.argument('command_name', required=False)

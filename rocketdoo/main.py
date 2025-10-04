@@ -1,5 +1,6 @@
 import click
-from . import scaffold, init_config
+from . import scaffold
+from rocketdoo.cli.init import init as init_wizard  # 👈 importamos el nuevo wizard
 
 @click.group()
 def cli():
@@ -7,14 +8,14 @@ def cli():
     pass
 
 @cli.command()
-def scaffold():
+def scaffold_cmd():
     """Crea un nuevo proyecto base con Rocketdoo"""
     scaffold.run()
 
 @cli.command()
 def init():
     """Inicia el asistente de configuración"""
-    init_config.run()
+    init_wizard()   # 👈 aquí llamamos al nuevo wizard
 
 if __name__ == "__main__":
     cli()
