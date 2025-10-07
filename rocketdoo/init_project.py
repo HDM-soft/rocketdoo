@@ -1,6 +1,7 @@
 import click
 import os
 from jinja2 import Environment, FileSystemLoader
+import questionary
 from rocketdoo.welcome import show_welcome
 from rocketdoo.core.port_validation import validate_port, find_available_port
 
@@ -87,21 +88,23 @@ def init_project():
     current_dir = os.path.basename(os.getcwd())
     project_name = click.prompt("Nombre del proyecto", default=current_dir)
 
-    # Seleccionar versión de Odoo
+    # Seleccionar versión de Odoo con questionary
     odoo_versions = ["15.0", "16.0", "17.0", "18.0", "19.0"]
-    click.echo("\nSelecciona la versión de Odoo:")
-    for i, v in enumerate(odoo_versions, start=1):
-        click.echo(f"{i}. Odoo {v}")
-    choice = click.prompt("Número de versión", type=click.IntRange(1, len(odoo_versions)))
-    odoo_version = odoo_versions[choice - 1]
+    click.echo("\n📦 Selecciona la versión de Odoo (usa flechas ↑↓ y ENTER):")
+    odoo_version = questionary.select(
+        "Versión de Odoo:",
+        choices=odoo_versions,
+        default="18.0"
+    ).ask()
 
-    # Seleccionar versión de PostgreSQL
+    # Seleccionar versión de PostgreSQL con questionary
     db_versions = ["13", "14", "15"]
-    click.echo("\nSelecciona la versión de PostgreSQL:")
-    for i, v in enumerate(db_versions, start=1):
-        click.echo(f"{i}. PostgreSQL {v}")
-    db_choice = click.prompt("Número de versión", type=click.IntRange(1, len(db_versions)))
-    db_version = db_versions[db_choice - 1]
+    click.echo("\n📦 Selecciona la versión de PostgreSQL (usa flechas ↑↓ y ENTER):")
+    db_version = questionary.select(
+        "Versión de PostgreSQL:",
+        choices=db_versions,
+        default="14"
+    ).ask()
 
     # Validación de puertos (loop hasta que sean válidos)
     odoo_port, vsc_port = prompt_ports_until_valid()
@@ -123,6 +126,7 @@ def init_project():
     render_template("docker-compose.yaml.jinja", "docker-compose.yaml", **context)
 
     click.echo(f"\n🚀 Proyecto '{project_name}' configurado correctamente con Odoo {odoo_version} y PostgreSQL {db_version}.")
+    
 
 
 if __name__ == "__main__":
