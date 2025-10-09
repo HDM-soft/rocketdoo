@@ -13,7 +13,9 @@ from rocketdoo.core.ssh_manager import (
 )
 from rocketdoo.core.gitman_config import (
     generate_gitman_yaml,
-    update_odoo_conf_with_gitman
+    update_odoo_conf_with_gitman,
+    extract_repo_name_from_url,
+    detect_repo_type
 )
 
 # Directorios base
@@ -164,52 +166,43 @@ def init_project():
         if add_repos_now:
             while True:
                 click.echo("\n" + "="*50)
-                repo_url = click.prompt("URL del repositorio (Enter para terminar)", default="")
+                repo_url = click.prompt(
+                    "URL del repositorio (presiona Enter sin texto para terminar)", 
+                    default="",
+                    show_default=False
+                )
+                
+                # Si el usuario presiona Enter sin texto, salir del loop
                 if not repo_url.strip():
+                    if gitman_sources:
+                        click.echo("✅ Repositorios configurados exitosamente")
+                    else:
+                        click.echo("ℹ️  No se agregaron repositorios")
                     break
                 
-                # Extraer el nombre automáticamente de la URL
-                # Ejemplo: https://github.com/ingadhoc/odoo-argentina.git -> odoo-argentina
+                # Extraer el nombre automáticamente usando la función de gitman_config
                 try:
-                    # Obtener la última parte de la URL
-                    url_parts = repo_url.rstrip('/').split('/')
-                    repo_name_with_ext = url_parts[-1]
-                    
-                    # Remover la extensión .git si existe
-                    if repo_name_with_ext.endswith('.git'):
-                        repo_name = repo_name_with_ext[:-4]
-                    else:
-                        repo_name = repo_name_with_ext
-                    
-                    # Reemplazar guiones por guiones bajos para el nombre
-                    default_name = repo_name.replace('-', '_')
-                    
+                    repo_name = extract_repo_name_from_url(repo_url)
                 except Exception:
-                    default_name = "custom_repo"
+                    repo_name = "custom-repo"
                 
-                # Permitir al usuario confirmar o cambiar el nombre
-                repo_name = click.prompt(
-                    "Nombre del repositorio", 
-                    default=default_name
-                )
+                # La rev es automáticamente la versión de Odoo seleccionada
+                repo_rev = odoo_version
                 
-                # La rev por defecto es la versión de Odoo seleccionada
-                repo_rev = click.prompt(
-                    "Branch/Rev", 
-                    default=odoo_version
-                )
+                # Determinar el tipo usando la función de gitman_config
+                repo_type = detect_repo_type(repo_url)
                 
-                # Determinar el tipo basado en la URL
-                repo_type = "git" if ".git" in repo_url or "github.com" in repo_url or "gitlab.com" in repo_url else "git"
-                
+                # ORDEN CORRECTO para gitman.yaml: repo, name, rev, type
                 gitman_sources.append({
-                    "name": repo_name,
-                    "type": repo_type,
                     "repo": repo_url,
+                    "name": repo_name,
                     "rev": repo_rev,
+                    "type": repo_type,
                 })
                 
                 click.echo(f"✅ Repositorio '{repo_name}' agregado")
+                click.echo(f"   URL: {repo_url}")
+                click.echo(f"   Branch: {repo_rev}")
                 
                 if not questionary.confirm("¿Agregar otro repositorio?", default=False).ask():
                     break
@@ -311,41 +304,55 @@ def init_project():
             gitman_path = project_root / "gitman.yaml"
             odoo_conf_path = project_root / "config" / "odoo.conf"
             
-
-            
             click.echo(f"📝 Generando {gitman_path.name}...")
-            generate_gitman_yaml()
+            # Pasar los parámetros necesarios a la función
+            generate_gitman_yaml(sources=gitman_sources, output_path=gitman_path)
+            click.echo(f"✅ Archivo {gitman_path.name} creado")
             
             # Actualizar odoo.conf si hay repositorios configurados
             if gitman_sources and odoo_conf_path.exists():
                 click.echo("📝 Actualizando odoo.conf con rutas de external_addons...")
                 update_odoo_conf_with_gitman(odoo_conf_path, gitman_sources)
                 click.echo("✅ Configuración de addons_path actualizada")
+            elif gitman_sources:
+                click.echo("⚠️  No se encontró odoo.conf, se omitió la actualización de addons_path")
             
-            click.echo("\n💡 Para instalar los repositorios ejecuta:")
-            click.echo("   gitman install")
+            click.echo("\n💡 Próximos pasos:")
+            click.echo("   1. Asegúrate de tener gitman instalado: pip install gitman")
+            click.echo("   2. Para instalar los repositorios ejecuta: gitman install")
+            if use_private_repos and selected_ssh_key:
+                click.echo("   3. Verifica que tu clave SSH esté agregada a GitHub/GitLab")
             
         except Exception as e:
             click.echo(f"\n⚠️  Advertencia: No se pudo configurar Gitman completamente: {e}")
             click.echo("Puedes configurarlo manualmente después.")
 
-    click.echo(
-        f"\n🚀 Proyecto '{project_name}' configurado correctamente con Odoo {odoo_version} ({odoo_edition}), PostgreSQL {db_version}."
-    )
-    
     # Resumen final
-    click.echo("\n📋 Resumen de configuración:")
+    click.echo("\n" + "="*60)
+    click.echo(f"🚀 Proyecto '{project_name}' configurado correctamente")
+    click.echo("="*60)
+    click.echo(f"\n📦 Odoo {odoo_version} ({odoo_edition}) + PostgreSQL {db_version}")
+    click.echo(f"🌐 Puerto Odoo: {odoo_port}")
+    click.echo(f"🐛 Puerto Debug: {vsc_port}")
+    
     if use_private_repos and selected_ssh_key:
-        click.echo(f"  🔐 SSH configurado con clave: {selected_ssh_key}")
+        click.echo(f"\n🔐 SSH configurado con clave: {selected_ssh_key}")
+        click.echo("   ⚠️  Recuerda agregar tu clave pública a tu proveedor Git")
     
     if odoo_edition == "Enterprise":
-        click.echo("  🏢 Edición Enterprise habilitada")
+        click.echo("\n🏢 Edición Enterprise habilitada")
     
     if use_third_party_repos:
         if gitman_sources:
-            click.echo(f"  📚 Gitman configurado con {len(gitman_sources)} repositorio(s)")
+            click.echo(f"\n📚 Gitman configurado con {len(gitman_sources)} repositorio(s):")
+            for source in gitman_sources:
+                click.echo(f"   • {source['name']} ({source['rev']})")
         else:
-            click.echo("  📚 Gitman configurado (sin repositorios iniciales)")
+            click.echo("\n📚 Gitman configurado (sin repositorios iniciales)")
+            click.echo("   💡 Edita gitman.yaml para agregar repositorios")
+    
+    click.echo("\n✨ ¡Listo para comenzar!")
+    click.echo("   Ejecuta: docker-compose up -d")
 
 
 if __name__ == "__main__":
