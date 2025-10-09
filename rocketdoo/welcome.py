@@ -8,7 +8,7 @@ console = Console()
 def show_welcome():
     # Generamos el logo con pyfiglet
     fig = Figlet(font="slant")
-    logo = fig.renderText("ROCKETDOO")
+    logo = fig.renderText("Rkd as ROCKETDOO")
 
     subtitle = Figlet(font="big").renderText("by HDMSOFT")
 
