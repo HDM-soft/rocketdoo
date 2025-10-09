@@ -1,4 +1,3 @@
-# rocketdoo/core/gitman_config.py
 import yaml
 from pathlib import Path
 

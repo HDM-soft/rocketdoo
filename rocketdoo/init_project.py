@@ -11,6 +11,10 @@ from rocketdoo.core.ssh_manager import (
     copy_key_to_build_context,
     inject_ssh_into_dockerfile
 )
+from rocketdoo.core.gitman_config import (
+    generate_gitman_yaml,
+    update_odoo_conf_with_gitman
+)
 
 # Directorios base
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -109,7 +113,7 @@ def init_project():
         "Versión de Odoo:", choices=odoo_versions, default="18.0"
     ).ask()
 
-    # ========== NUEVA PREGUNTA: EDICIÓN DE ODOO ==========
+    # ========== PREGUNTA: EDICIÓN DE ODOO ==========
     click.echo("\n🏢 Selecciona la edición de Odoo (usa ↑↓ y ENTER):")
     odoo_edition = questionary.select(
         "Edición de Odoo:",
@@ -117,7 +121,7 @@ def init_project():
         default="Community"
     ).ask()
 
-    # ========== NUEVA PREGUNTA: REPOSITORIOS PRIVADOS ==========
+    # ========== PREGUNTA: REPOSITORIOS PRIVADOS ==========
     click.echo("\n🔐 ¿Quieres usar repositorios privados?")
     use_private_repos = questionary.confirm(
         "¿Usar repositorios privados?",
@@ -138,6 +142,77 @@ def init_project():
                 "Selecciona la clave SSH a usar:",
                 choices=available_keys
             ).ask()
+
+    # ========== PREGUNTA: REPOSITORIOS DE TERCEROS ==========
+    click.echo("\n📚 ¿Deseas usar repositorios de terceros (con Gitman)?")
+    use_third_party_repos = questionary.confirm(
+        "¿Usar repositorios de terceros?",
+        default=False
+    ).ask()
+    
+    gitman_sources = []
+    if use_third_party_repos:
+        click.echo("\n📝 Configuraremos repositorios de terceros con Gitman")
+        click.echo("💡 Podrás agregar más repositorios después editando gitman.yaml")
+        
+        # Preguntar si quiere agregar repositorios ahora
+        add_repos_now = questionary.confirm(
+            "¿Deseas agregar repositorios ahora?",
+            default=False
+        ).ask()
+        
+        if add_repos_now:
+            while True:
+                click.echo("\n" + "="*50)
+                repo_url = click.prompt("URL del repositorio (Enter para terminar)", default="")
+                if not repo_url.strip():
+                    break
+                
+                # Extraer el nombre automáticamente de la URL
+                # Ejemplo: https://github.com/ingadhoc/odoo-argentina.git -> odoo-argentina
+                try:
+                    # Obtener la última parte de la URL
+                    url_parts = repo_url.rstrip('/').split('/')
+                    repo_name_with_ext = url_parts[-1]
+                    
+                    # Remover la extensión .git si existe
+                    if repo_name_with_ext.endswith('.git'):
+                        repo_name = repo_name_with_ext[:-4]
+                    else:
+                        repo_name = repo_name_with_ext
+                    
+                    # Reemplazar guiones por guiones bajos para el nombre
+                    default_name = repo_name.replace('-', '_')
+                    
+                except Exception:
+                    default_name = "custom_repo"
+                
+                # Permitir al usuario confirmar o cambiar el nombre
+                repo_name = click.prompt(
+                    "Nombre del repositorio", 
+                    default=default_name
+                )
+                
+                # La rev por defecto es la versión de Odoo seleccionada
+                repo_rev = click.prompt(
+                    "Branch/Rev", 
+                    default=odoo_version
+                )
+                
+                # Determinar el tipo basado en la URL
+                repo_type = "git" if ".git" in repo_url or "github.com" in repo_url or "gitlab.com" in repo_url else "git"
+                
+                gitman_sources.append({
+                    "name": repo_name,
+                    "type": repo_type,
+                    "repo": repo_url,
+                    "rev": repo_rev,
+                })
+                
+                click.echo(f"✅ Repositorio '{repo_name}' agregado")
+                
+                if not questionary.confirm("¿Agregar otro repositorio?", default=False).ask():
+                    break
 
     db_versions = ["13", "14", "15"]
     click.echo("\n📦 Selecciona la versión de PostgreSQL (usa ↑↓ y ENTER):")
@@ -178,6 +253,7 @@ def init_project():
         "admin_passwd": admin_passwd,
         "use_private_repos": use_private_repos,
         "ssh_key_name": selected_ssh_key,
+        "use_third_party_repos": use_third_party_repos,
     }
 
     # === Generar archivos ===
@@ -227,9 +303,49 @@ def init_project():
             click.echo(f"\n⚠️  Advertencia: No se pudo configurar SSH completamente: {e}")
             click.echo("Puedes configurarlo manualmente después.")
 
+    # ========== CONFIGURAR GITMAN SI SE ELIGIÓ USAR REPOS DE TERCEROS ==========
+    if use_third_party_repos:
+        click.echo("\n📚 Configurando Gitman para repositorios de terceros...")
+        try:
+            project_root = Path(os.getcwd())
+            gitman_path = project_root / "gitman.yaml"
+            odoo_conf_path = project_root / "config" / "odoo.conf"
+            
+
+            
+            click.echo(f"📝 Generando {gitman_path.name}...")
+            generate_gitman_yaml()
+            
+            # Actualizar odoo.conf si hay repositorios configurados
+            if gitman_sources and odoo_conf_path.exists():
+                click.echo("📝 Actualizando odoo.conf con rutas de external_addons...")
+                update_odoo_conf_with_gitman(odoo_conf_path, gitman_sources)
+                click.echo("✅ Configuración de addons_path actualizada")
+            
+            click.echo("\n💡 Para instalar los repositorios ejecuta:")
+            click.echo("   gitman install")
+            
+        except Exception as e:
+            click.echo(f"\n⚠️  Advertencia: No se pudo configurar Gitman completamente: {e}")
+            click.echo("Puedes configurarlo manualmente después.")
+
     click.echo(
         f"\n🚀 Proyecto '{project_name}' configurado correctamente con Odoo {odoo_version} ({odoo_edition}), PostgreSQL {db_version}."
     )
+    
+    # Resumen final
+    click.echo("\n📋 Resumen de configuración:")
+    if use_private_repos and selected_ssh_key:
+        click.echo(f"  🔐 SSH configurado con clave: {selected_ssh_key}")
+    
+    if odoo_edition == "Enterprise":
+        click.echo("  🏢 Edición Enterprise habilitada")
+    
+    if use_third_party_repos:
+        if gitman_sources:
+            click.echo(f"  📚 Gitman configurado con {len(gitman_sources)} repositorio(s)")
+        else:
+            click.echo("  📚 Gitman configurado (sin repositorios iniciales)")
 
 
 if __name__ == "__main__":
