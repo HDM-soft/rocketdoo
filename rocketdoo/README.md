@@ -4,39 +4,100 @@
 
 [Official Documentation](https://rocketdoo-docs.readthedocs.io/en/latest/)
 
-## ROCKETDOO
+## RKD as ROCKETDOO
 
 Odoo Development Framework
 
 ## Developed by:
 
-   - "Elias Braceras"
    - "Horacio Montaño"
 
 ## Version: 
-   - "1.3.0"
+   - "2.0.0b1"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Simple Description:
 
-  RocketDoo is an automated development Framework, designed for ERP-ODOO; in all its versions and editions.
-   This repository is a template, which allows you to create your own repository to be able to develop with comfort.
-   In order to use it, it is important to install the framework, after creating and cloning its repository created from the template. 
+  RKD, also known as ROCKETDOO, is version 2 of the framework designed for assisted and automated deployment of development environments.
+   In this version, unlike its predecessor, it no longer depends on a repository. In other words, it is no longer necessary to create a repository from a template — the framework is now fully independent.
 
-   ``` pip install rocketdoo``` 
+   Developers simply need to install the framework on their local machines using either the pip or pipx package managers. The latter is the recommended option, as it allows installing the framework globally on the developer’s system without dealing with Ubuntu and Debian security restrictions that prevent the direct use of pip install.
+   To achieve this, we provide the following two installation options:
+
+   > Asegurese de tener instalado pip o en su defecto pipx
+
+      ``` 
+       pip install rocketdoo --break-system-packages
+   or
+
+      ``` 
+       pipx install rocketdoo
 
   - This development environment is intended for those developing on Linux operating systems, such as Ubuntu, Debian, etc. However, for those who prefer to develop on Windows, we suggest installing **WSL2**, the Windows Subsystem for Linux.
   
-  - This version includes a CLI project launcher designed to make setting up your development project easier.
-  
-  - Docker is used to create Odoo instances, and Docker Compose is used to spin them up along with a database.
+  - To use this framework, it is essential to have Docker, Docker Compose, and Git installed.
 
-  - A set of configurations is provided for use in VSCode, including debugging and container launch configurations.
+  - ROCKETDOO version 2 now includes its own execution commands, meaning it is no longer necessary to remember or manually use Docker or Docker Compose commands, as the         framework effectively replaces the most essential ones.
+
+  - Starting from this version, there is no need to use the previous repository as a template to build your environment. Simply by installing the framework, you can create your own directories where the Odoo development environment will be applied.
+
+  - In version 2, you can use either the command rocketdoo or its alias rkd for greater convenience and agility.
 
   - Gitman is used for downloading and installing external repositories.
   
   - Make sure you have **Docker** and **Docker Compose** installed on your computer. If not, you can follow the official Docker installation guide, [Docker Installation Guide](https://docs.docker.com/engine/install/ubuntu/).
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  ### Comandos
+
+A continuacion listaremos los comandos que componen la nueva version de **rocketdoo**
+
+```
+ rocketdoo --version
+
+```
+ rocketdoo --help
+
+```
+ rocketdoo scaffold
+
+```
+ rocketdoo init
+
+```
+ rocketdoo info
+
+```
+ rocketdoo up
+
+```
+ rocketdoo up -d
+
+```
+ rocketdoo status
+
+```
+ rocketdoo logs
+
+```
+ rocketdoo stop
+
+```
+ rocketdoo pause
+
+```
+ rocketdoo down
+
+```
+ rocketdoo down -v
+
+```
+ rocketdoo build
+
+  
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
