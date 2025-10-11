@@ -6,27 +6,27 @@ from pyfiglet import Figlet
 console = Console()
 
 def show_welcome():
-    # Generamos el logo con pyfiglet
+    # We generated the logo with pyfiglet.
     fig = Figlet(font="slant")
-    logo = fig.renderText("Rkd as ROCKETDOO")
+    logo = fig.renderText("RKD as ROCKETDOO")
 
     subtitle = Figlet(font="big").renderText("by HDMSOFT")
 
-    # Mostramos en consola con Rich
+    # We display in console with Rich
     console.print(f"[bold yellow]{logo}[/bold yellow]")
     console.print(f"[bold cyan]{subtitle}[/bold cyan]")
 
     console.print("=" * 60, style="yellow")
     console.print(
         Panel.fit(
-            """Welcome to the Odoo Development environment generator!
+            """Welcome to the Odoo Development Framework!
 
 This wizard will guide you through the creation of a dockerized Odoo development environment.
 Please answer the following questions to customize your project.
 If you don't need to modify the values, just press ENTER.
 
 After finishing the guide, you will be able to run your project
-with the command: [bold cyan]docker compose up[/bold cyan].
+with the command: [bold cyan]rocketdoo up[/bold cyan].
 
 If you have any questions, please check the documentation
 or contact the administrator.

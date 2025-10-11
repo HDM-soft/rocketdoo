@@ -1,7 +1,7 @@
 [project]
 name = "rocketdoo"
 version = "2.0.0b1"
-description = "Framework para crear entornos de desarrollo de Odoo con Docker y plantillas personalizadas."
+description = "Framework for creating Odoo development environments with Docker and custom templates."
 authors = [
     { name = "Horacio Montaño", email = "horaciomontano@hdmsoft.com.ar" }
 ]
@@ -26,12 +26,12 @@ rkd = "rocketdoo.cli:main"
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# 🚀 Detección automática de paquetes
+# 🚀 Automatic package detection
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["rocketdoo*"]
 
-# 🚀 Incluir los templates dentro del paquete
+# 🚀 Include templates in the package
 [tool.setuptools.package-data]
 rocketdoo = ["templates/**"]
 

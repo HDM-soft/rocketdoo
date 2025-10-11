@@ -5,29 +5,29 @@ from pathlib import Path
 
 def scaffold_project(template="basic", force=False, verbose=False):
     """
-    Crea la estructura del proyecto copiando los templates incluidos en Rocketdoo
-    hacia el directorio actual del usuario.
+    Create the project structure by copying the templates included in Rocketdoo
+to the user's current directory.
     """
 
-    # Ruta absoluta a la carpeta /templates dentro de rocketdoo
+    # Absolute path to the /templates folder within rocketdoo
     templates_dir = Path(__file__).resolve().parent / "templates"
 
     if not templates_dir.exists():
-        click.echo("❌ No se encontró la carpeta de templates dentro del paquete.")
+        click.echo("❌ The templates folder was not found inside the package.")
         return
 
-    # Directorio de destino = donde el usuario esté parado
+    # Target directory = where the user is currently located
     target_dir = Path.cwd()
 
     if verbose:
-        click.echo(f"📂 Copiando templates desde: {templates_dir}")
-        click.echo(f"➡️  Hacia: {target_dir}")
+        click.echo(f"📂 Copying templates from: {templates_dir}")
+        click.echo(f"➡️  To: {target_dir}")
 
     for root, dirs, files in os.walk(templates_dir):
         rel_path = Path(root).relative_to(templates_dir)
         dest_dir = target_dir / rel_path
 
-        # Crear directorio si no existe
+        # Create directory if it does not exist
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         for file in files:
@@ -35,11 +35,11 @@ def scaffold_project(template="basic", force=False, verbose=False):
             dest_file = dest_dir / file
 
             if dest_file.exists() and not force:
-                click.echo(f"⚠️  Saltando {dest_file} (ya existe, usar --force para sobrescribir)")
+                click.echo(f"⚠️  Skipping {dest_file} (already exists, use --force to overwrite)")
                 continue
 
             shutil.copy2(src_file, dest_file)
             if verbose:
-                click.echo(f"✅ Copiado: {dest_file}")
+                click.echo(f"✅ Copied: {dest_file}")
 
-    click.echo("🎉 Scaffold del proyecto creado exitosamente.")
+    click.echo("🎉 Project scaffold created successfully.")
