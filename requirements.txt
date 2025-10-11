@@ -1,2 +1,0 @@
-copier
-jinja2

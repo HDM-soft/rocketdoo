@@ -1,0 +1,43 @@
+# rocketdoo/cli/welcome.py
+from rich.console import Console
+from rich.panel import Panel
+from pyfiglet import Figlet
+
+console = Console()
+
+def show_welcome():
+    # We generated the logo with pyfiglet.
+    fig = Figlet(font="slant")
+    logo = fig.renderText("RKD as ROCKETDOO")
+
+    subtitle = Figlet(font="big").renderText("by HDMSOFT")
+
+    # We display in console with Rich
+    console.print(f"[bold yellow]{logo}[/bold yellow]")
+    console.print(f"[bold cyan]{subtitle}[/bold cyan]")
+
+    console.print("=" * 60, style="yellow")
+    console.print(
+        Panel.fit(
+            """Welcome to the Odoo Development Framework!
+
+This wizard will guide you through the creation of a dockerized Odoo development environment.
+Please answer the following questions to customize your project.
+If you don't need to modify the values, just press ENTER.
+
+After finishing the guide, you will be able to run your project
+with the command: [bold cyan]rocketdoo up[/bold cyan].
+
+If you have any questions, please check the documentation
+or contact the administrator.
+
+Version: [bold green]2.0.0[/bold green]
+https://odoo.hdmsoft.com.ar
+            """,
+            title="[bold yellow]Rocketdoo Init Wizard[/bold yellow]",
+            border_style="bright_magenta",
+        )
+    )
+
+    console.print("\n[bold cyan]Press ENTER to start ...[/bold cyan]")
+    input()
