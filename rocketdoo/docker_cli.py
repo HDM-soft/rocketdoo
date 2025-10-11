@@ -98,3 +98,24 @@ def logs(container, follow):
         click.echo("⚠️ You must specify the container name or ID.")
         return
     subprocess.run(cmd)
+
+    
+# ==============================
+# 🪵 BUILD
+# ==============================
+
+@click.command()
+@click.option('-t', '--tag', required=False, help="Name of the image to be created (optional)")
+def build(tag):
+    """
+    Builds the Docker image for Rocketdoo (equivalent to: docker build -t image_name .)
+    """
+    command = ["docker", "build"]
+
+    if tag:
+        command.extend(["-t", tag])
+
+    command.append(".")
+
+    click.echo(f"🚀 Executing: {' '.join(command)}")
+    subprocess.run(command, check=True)
