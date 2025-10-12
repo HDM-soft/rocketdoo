@@ -56,23 +56,33 @@ Odoo Development Framework
 A continuacion listaremos los comandos que componen la nueva version de **rocketdoo**
 
 ```
- rocketdoo --version ```
+ rocketdoo --version
+
+```
 
 
 ```
- rocketdoo --help ```
+ rocketdoo --help
+
+```
 
 
 ```
- rocketdoo scaffold ```
+ rocketdoo scaffold
+
+```
 
 
 ```
- rocketdoo init ```
+ rocketdoo init
+
+```
 
 
 ```
- rocketdoo info ```
+ rocketdoo info
+
+```
 
 
 ```
