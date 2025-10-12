@@ -58,41 +58,54 @@ A continuacion listaremos los comandos que componen la nueva version de **rocket
 ```
  rocketdoo --version
 
+
 ```
  rocketdoo --help
+
 
 ```
  rocketdoo scaffold
 
+
 ```
  rocketdoo init
+
 
 ```
  rocketdoo info
 
+
 ```
  rocketdoo up
+
 
 ```
  rocketdoo up -d
 
+
 ```
  rocketdoo status
+
 
 ```
  rocketdoo logs
 
+
 ```
  rocketdoo stop
+
 
 ```
  rocketdoo pause
 
+
 ```
  rocketdoo down
 
+
 ```
  rocketdoo down -v
+
 
 ```
  rocketdoo build
