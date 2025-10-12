@@ -7,6 +7,7 @@
 ## RKD as ROCKETDOO
 
 Odoo Development Framework
+
 **Made with passion, not just programming skills.**
 
 ## Developed by:
