@@ -8,6 +8,8 @@
 
 Odoo Development Framework
 
+**Made with passion, not just programming skills.**
+
 ## Developed by:
 
    - "Horacio Montaño"
