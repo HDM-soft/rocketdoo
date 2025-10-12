@@ -30,6 +30,7 @@ Odoo Development Framework
    ``` 
     pip install rocketdoo --break-system-packages
 
+
    or
 
    ``` 
