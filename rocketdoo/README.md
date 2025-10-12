@@ -1,8 +1,3 @@
-   # RKD as ROCKETDOO
-   
-**Made with passion, not just programming skills.**
-
-
 # HDMSOFT
 
 [Visit our page](https://odoo.hdmsoft.com.ar)
@@ -12,6 +7,7 @@
 ## RKD as ROCKETDOO
 
 Odoo Development Framework
+**Made with passion, not just programming skills.**
 
 ## Developed by:
 
