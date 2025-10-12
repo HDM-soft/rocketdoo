@@ -27,12 +27,12 @@ Odoo Development Framework
 
    > Asegurese de tener instalado pip o en su defecto pipx
 
-      ``` 
-       pip install rocketdoo --break-system-packages
+   ``` 
+    pip install rocketdoo --break-system-packages
    or
 
-      ``` 
-       pipx install rocketdoo
+   ``` 
+    pipx install rocketdoo
 
   - This development environment is intended for those developing on Linux operating systems, such as Ubuntu, Debian, etc. However, for those who prefer to develop on Windows, we suggest installing **WSL2**, the Windows Subsystem for Linux.
   
