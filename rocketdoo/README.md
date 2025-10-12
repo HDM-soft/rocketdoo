@@ -25,13 +25,11 @@ Odoo Development Framework
    Developers simply need to install the framework on their local machines using either the pip or pipx package managers. The latter is the recommended option, as it allows installing the framework globally on the developer’s system without dealing with Ubuntu and Debian security restrictions that prevent the direct use of pip install.
    To achieve this, we provide the following two installation options:
 
-   > Asegurese de tener instalado pip o en su defecto pipx
+   > Ensure you have pip installed, or pipx if necessary.
 
    ``` 
     pip install rocketdoo --break-system-packages
 
-
-   or
 
    ``` 
     pipx install rocketdoo
