@@ -115,7 +115,7 @@ def init_project():
         "Odoo Version:", choices=odoo_versions, default="18.0"
     ).ask()
 
-    # ========== PREGUNTA: EDICIÓN DE ODOO ==========
+    # ========== QUESTION: ODOO EDITION ==========
     click.echo("\n🏢 Select Odoo edition (use ↑↓ and ENTER):")
     odoo_edition = questionary.select(
         "Odoo Edition:",
