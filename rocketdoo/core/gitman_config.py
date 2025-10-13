@@ -4,7 +4,8 @@ from pathlib import Path
 
 def generate_gitman_yaml(sources=None, output_path=None):
     """
-    Genera un archivo gitman.yaml con la estructura e indentación correctas.
+    Generates a gitman.yaml file with correct structure and indentation.
+    Each repository has its own dependency installation script.
     """
     if output_path is None:
         output_path = Path.cwd() / "gitman.yaml"
@@ -12,22 +13,31 @@ def generate_gitman_yaml(sources=None, output_path=None):
     if sources is None:
         sources = []
     
+    # Add the script to each individual repository
+    sources_with_scripts = []
+    for source in sources:
+        repo_config = {
+            "repo": source["repo"],
+            "name": source["name"],
+            "rev": source["rev"],
+            "type": source["type"],
+            "scripts": ["sh /usr/lib/python3/dist-packages/odoo/install_dependencies.sh"]
+        }
+        sources_with_scripts.append(repo_config)
+    
     config = {
         "location": "external_addons",
-        "sources": sources,
+        "sources": sources_with_scripts,
         "default_group": "",
-        "groups": [],
-        "scripts": [
-            "sh /usr/lib/python3/dist-packages/odoo/install_dependencies.sh"
-        ]
+        "groups": []
     }
 
     yaml_text = yaml.safe_dump(config, sort_keys=False, default_flow_style=False, indent=2)
 
-    # 🔧 Arreglo manual: asegurar indentación correcta para `scripts`
+    # 🔧 Manual fix: ensure correct indentation for `scripts`
     yaml_text = yaml_text.replace(
-        "scripts:\n- ",
-        "scripts:\n  - "
+        "scripts:\n  - ",
+        "scripts:\n    - "
     )
 
     with open(output_path, "w") as f:
@@ -38,80 +48,80 @@ def generate_gitman_yaml(sources=None, output_path=None):
 
 def update_odoo_conf_with_gitman(odoo_conf_path, gitman_sources):
     """
-    Actualiza el addons_path en odoo.conf con las rutas de los repos de Gitman.
+    Updates the addons_path in odoo.conf with the paths from Gitman repos.
     
     Args:
-        odoo_conf_path: Path al archivo odoo.conf
-        gitman_sources: Lista de diccionarios con la configuración de repos
+        odoo_conf_path: Path to the odoo.conf file
+        gitman_sources: List of dictionaries with repo configuration
     """
     if not odoo_conf_path.exists():
-        raise FileNotFoundError(f"No se encontró el archivo: {odoo_conf_path}")
+        raise FileNotFoundError(f"File not found: {odoo_conf_path}")
     
     lines = odoo_conf_path.read_text().splitlines()
     
-    # Generar las rutas de external_addons
+    # Generate external_addons paths
     new_paths = [
         f"/usr/lib/python3/dist-packages/odoo/external_addons/{source['name']}"
         for source in gitman_sources
     ]
     
-    # Buscar y actualizar la línea addons_path
+    # Find and update the addons_path line
     updated = False
     for i, line in enumerate(lines):
         if line.strip().startswith("addons_path"):
-            # Extraer el valor actual
+            # Extract current value
             current_value = line.split("=", 1)[1].strip()
             current_paths = [p.strip() for p in current_value.split(",")]
             
-            # Agregar solo las rutas que no existan
+            # Add only paths that don't already exist
             for new_path in new_paths:
                 if new_path not in current_paths:
                     current_paths.append(new_path)
             
-            # Reconstruir la línea
+            # Rebuild the line
             lines[i] = f"addons_path = {','.join(current_paths)}"
             updated = True
             break
     
-    # Si no existía addons_path, agregarla
+    # If addons_path didn't exist, add it
     if not updated:
         lines.append(f"addons_path = {','.join(new_paths)}")
     
-    # Guardar el archivo
+    # Save the file
     odoo_conf_path.write_text("\n".join(lines) + "\n")
 
 
 def extract_repo_name_from_url(url):
     """
-    Extrae el nombre del repositorio de una URL de Git.
+    Extracts the repository name from a Git URL.
     
-    Ejemplos:
-        https://github.com/ingadhoc/odoo-argentina.git -> odoo_argentina
-        https://gitlab.com/user/my-repo -> my_repo
+    Examples:
+        https://github.com/ingadhoc/odoo-argentina.git -> odoo-argentina
+        https://gitlab.com/user/my-repo -> my-repo
     """
-    # Obtener la última parte de la URL
+    # Get the last part of the URL
     url = url.rstrip('/')
     repo_name_with_ext = url.split('/')[-1]
     
-    # Remover la extensión .git si existe
+    # Remove .git extension if it exists
     if repo_name_with_ext.endswith('.git'):
         repo_name = repo_name_with_ext[:-4]
     else:
         repo_name = repo_name_with_ext
     
-    # Reemplazar guiones por guiones bajos
-    return repo_name.replace('-', '_')
+    # Return the name as-is (keep hyphens)
+    return repo_name
 
 
 def detect_repo_type(url):
     """
-    Detecta el tipo de repositorio basándose en la URL.
-    Por defecto retorna 'git'.
+    Detects the repository type based on the URL.
+    Returns 'git' by default.
     """
     url_lower = url.lower()
     
     if '.git' in url_lower or 'github.com' in url_lower or 'gitlab.com' in url_lower or 'bitbucket.org' in url_lower:
         return 'git'
     
-    # Puedes agregar más tipos si es necesario (svn, hg, etc.)
+    # You can add more types if needed (svn, hg, etc.)
     return 'git'
