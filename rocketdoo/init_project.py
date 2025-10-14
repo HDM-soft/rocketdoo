@@ -171,8 +171,8 @@ def init_project():
                     docker_lines = f.readlines()
                 new_lines = []
                 for line in docker_lines:
-                    if line.strip().startswith("COPY ./gitman.yaml"):
-                        new_lines.append(line.replace("COPY", "#COPY", 1))
+                    if line.strip().startswith("#COPY ./gitman.yaml"):
+                        new_lines.append(line.replace("#COPY", "COPY", 1))
                     else:
                         new_lines.append(line)
                 with open(dockerfile_path, "w") as f:

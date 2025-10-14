@@ -1,7 +1,7 @@
 FROM odoo:{{odoo_version}}
 
 COPY ./config/odoo.conf /etc/odoo/
-COPY ./gitman.yaml /usr/lib/python3/dist-packages/odoo/
+#COPY ./gitman.yaml /usr/lib/python3/dist-packages/odoo/
 COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
 
 USER root

@@ -10,7 +10,7 @@ def show_welcome():
     fig = Figlet(font="slant")
     logo = fig.renderText("RKD as ROCKETDOO")
 
-    subtitle = Figlet(font="big").renderText("by HORACIO")
+    subtitle = Figlet(font="big").renderText("by HDMSOFT")
 
     # We display in console with Rich
     console.print(f"[bold yellow]{logo}[/bold yellow]")
