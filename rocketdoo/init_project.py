@@ -163,6 +163,25 @@ def init_project():
             default=False
         ).ask()
         
+        if use_third_party_repos:
+            click.echo("\n🧩 Enabling Gitman COPY line in Dockerfile...")
+            dockerfile_path = Path(os.getcwd()) / "Dockerfile"
+            if dockerfile_path.exists():
+                with open(dockerfile_path, "r") as f:
+                    docker_lines = f.readlines()
+                new_lines = []
+                for line in docker_lines:
+                    if line.strip().startswith("COPY ./gitman.yaml"):
+                        new_lines.append(line.replace("COPY", "#COPY", 1))
+                    else:
+                        new_lines.append(line)
+                with open(dockerfile_path, "w") as f:
+                    f.writelines(new_lines)
+                click.echo("✅ Gitman COPY line enabled in Dockerfile")
+            else:
+                click.echo("⚠️  Dockerfile not found to enable Gitman COPY line.")
+
+        
         if add_repos_now:
             while True:
                 click.echo("\n" + "="*50)
