@@ -162,7 +162,7 @@ def init_project():
             "Would you like to add repositories now?",
             default=False
         ).ask()
-        
+
         if add_repos_now:
             while True:
                 click.echo("\n" + "="*50)

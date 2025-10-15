@@ -1,4 +1,3 @@
-# rocketdoo/cli/welcome.py
 from rich.console import Console
 from rich.panel import Panel
 from pyfiglet import Figlet
@@ -31,7 +30,7 @@ with the command: [bold cyan]rocketdoo up[/bold cyan].
 If you have any questions, please check the documentation
 or contact the administrator.
 
-Version: [bold green]2.0.0[/bold green]
+Version: [bold green]2.0.0b1[/bold green]
 https://odoo.hdmsoft.com.ar
             """,
             title="[bold yellow]Rocketdoo Init Wizard[/bold yellow]",
@@ -39,5 +38,9 @@ https://odoo.hdmsoft.com.ar
         )
     )
 
-    console.print("\n[bold cyan]Press ENTER to start ...[/bold cyan]")
-    input()
+    console.print("\n[bold cyan]Press ENTER to start or CTRL+C to cancel...[/bold cyan]")
+    try:
+        input()  # Simplemente ignoramos lo que escriba
+    except KeyboardInterrupt:
+        console.print("\n\n[bold red]Operation cancelled by user.[/bold red]")
+        exit(0)

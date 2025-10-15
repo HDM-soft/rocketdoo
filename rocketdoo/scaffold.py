@@ -6,7 +6,7 @@ from pathlib import Path
 def scaffold_project(template="basic", force=False, verbose=False):
     """
     Create the project structure by copying the templates included in Rocketdoo
-to the user's current directory.
+    to the user's current directory.
     """
 
     # Absolute path to the /templates folder within rocketdoo
