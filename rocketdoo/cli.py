@@ -220,7 +220,7 @@ def info():
     footer_text.append("rocketdoo@hdmsoft.com.ar", style="dim")
     footer_text.append(" | ", style="dim")
     footer_text.append("🌐 ", style="bold")
-    footer_text.append("https://rocketdoo-docs.readthedocs.io", style="dim blue underline")
+    footer_text.append("https://rkd-docs.readthedocs.io", style="dim blue underline")
     
     console.print(Panel(
         footer_text,
