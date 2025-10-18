@@ -2,7 +2,7 @@
 
 [Visit our page](https://odoo.hdmsoft.com.ar)
 
-[Official Documentation](https://rocketdoo-docs.readthedocs.io/en/latest/)
+[Official Documentation](https://rkd-docs.readthedocs.io/en/latest/)
 
 ## RKD as ROCKETDOO
 
