@@ -3,7 +3,7 @@ services:
   web:
     build: .
     restart: {{restart}}
-    image: {{odoo_image}}
+    image: {{project_name}}
     container_name: {{odoo_container}}
     depends_on:
       - db

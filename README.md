@@ -4,84 +4,244 @@
 
 [Official Documentation](https://rocketdoo-docs.readthedocs.io/en/latest/)
 
-## ROCKETDOO
+## RKD as ROCKETDOO
 
 Odoo Development Framework
 
+**Made with passion, not just programming skills.**
+
 ## Developed by:
 
-   - "Elias Braceras"
    - "Horacio Montaño"
 
 ## Version: 
-   - "1.3.1"
+   - "2.0.0b1"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Simple Description:
 
-  RocketDoo is an automated development Framework, designed for ERP-ODOO; in all its versions and editions.
-   This repository is a template, which allows you to create your own repository to be able to develop with comfort.
-   In order to use it, it is important to install the framework, after creating and cloning its repository created from the template. 
+  RKD, also known as ROCKETDOO, is version 2 of the framework designed for assisted and automated deployment of development environments.
+   In this version, unlike its predecessor, it no longer depends on a repository. In other words, it is no longer necessary to create a repository from a template — the framework is now fully independent.
 
-   ``` pip install rocketdoo``` 
+   Developers simply need to install the framework on their local machines using either the pip or pipx package managers. The latter is the recommended option, as it allows installing the framework globally on the developer’s system without dealing with Ubuntu and Debian security restrictions that prevent the direct use of pip install.
+   To achieve this, we provide the following two installation options:
+
+   > Ensure you have pip installed, or pipx if necessary.
+
+   ``` 
+    pip install rocketdoo --break-system-packages
+
+   ```
+   or 
+
+   ``` 
+    pipx install rocketdoo
+
+   ```
 
   - This development environment is intended for those developing on Linux operating systems, such as Ubuntu, Debian, etc. However, for those who prefer to develop on Windows, we suggest installing **WSL2**, the Windows Subsystem for Linux.
   
-  - This version includes a CLI project launcher designed to make setting up your development project easier.
-  
-  - Docker is used to create Odoo instances, and Docker Compose is used to spin them up along with a database.
+  - To use this framework, it is essential to have Docker, Docker Compose, and Git installed.
 
-  - A set of configurations is provided for use in VSCode, including debugging and container launch configurations.
+  - ROCKETDOO version 2 now includes its own execution commands, meaning it is no longer necessary to remember or manually use Docker or Docker Compose commands, as the         framework effectively replaces the most essential ones.
+
+  - Starting from this version, there is no need to use the previous repository as a template to build your environment. Simply by installing the framework, you can create your own directories where the Odoo development environment will be applied.
+
+  - In version 2, you can use either the command rocketdoo or its alias rkd for greater convenience and agility.
 
   - Gitman is used for downloading and installing external repositories.
   
   - Make sure you have **Docker** and **Docker Compose** installed on your computer. If not, you can follow the official Docker installation guide, [Docker Installation Guide](https://docs.docker.com/engine/install/ubuntu/).
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+  ### Comandos
+
+A continuacion listaremos los comandos que componen la nueva version de **rocketdoo**
+
+```
+ rocketdoo --version
+
+```
+
+
+```
+ rocketdoo --help
+
+```
+
+
+```
+ rocketdoo scaffold
+
+```
+
+
+```
+ rocketdoo init
+
+```
+
+
+```
+ rocketdoo info
+
+```
+
+
+```
+ rocketdoo up
+
+```
+
+
+```
+ rocketdoo up -d
+
+```
+
+
+```
+ rocketdoo status
+
+```
+
+
+```
+ rocketdoo logs
+
+```
+
+
+```
+ rocketdoo stop
+
+```
+
+
+```
+ rocketdoo pause
+
+```
+
+
+```
+ rocketdoo down
+
+```
+
+
+```
+ rocketdoo down -v
+
+```
+
+
+```
+ rocketdoo build
+
+```
+
+  
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### INSTRUCTIONS:
 
- 1. The first step is to use the HDMSOFT repository, our **rocketdoo** template, by creating a repository from it using the green **use this template** button at the top right corner.
- 
- 2. Decide on a name for your development repository.
- 
- 3. Once your repository is created, clone it:
+ 1. From your Linux or WSL2 terminal, install the framework using one of the following commands:
 
-    ```git clone "your_repo_url"``` 
+ ``` 
+    pip install rocketdoo --break-system-packages
+
+   ```
+   or 
+
+   ``` 
+    pipx install rocketdoo
+
+   ```
+   > Make sure you already have pip or pipx installed.
+ 
+ 2. Once the framework is installed, navigate to your preferred working directory and create a new directory for your development environment.
+ 
+ 3. Inside your development directory, you can start by running the scaffold command.
+This command will automatically create all the necessary files and directories required to deploy your Odoo development environment. 
     
 
- 4. Before running the launcher, navigate to your repository directory and install the dependencies using the command:
+ 4. Next, you can launch the setup wizard using the init command.
+This command will prompt you for all the necessary information to configure your environment.
+The questions include:
+
+- Project name
+
+- Odoo version (a list from version 15 to 19 is available for selection)
+
+- Odoo edition (options include Community and Enterprise)
+
+- Whether to use private repositories (for your own developments; it will list your SSH keys connected to your repositories)
+
+- Whether to use third-party repositories (if you answer YES, it will prompt you for the URLs of each repository or repository package)
+
+- PostgreSQL version (selectable option)
+
+- Odoo Master Password (for database creation)
+
+- Container restart policies (selectable option)
+
+- Odoo port (with port validation)
+
+- Visual Studio Code debug port (with port validation)
+
+Port validation checks whether the selected ports are already in use by another instance or service.
+If so, it suggests alternative ports or allows you to set them manually
  
-    ```sudo pip3 install -r requirements.txt```
+ 5. Once the setup wizard is completed, you can start the deployment with:
+
+ ```
+ rocketdoo up
+
+```
+o
+
+```
+ rocketdoo up -d
+
+```
+The -d flag runs the deployment in detached mode.
+
+ 6. After the environment has been successfully deployed, you can access Odoo from your preferred web browser using:
  
- 5. To start, you must enter the subdirectory “rocketdoo” located in the root of rocketdoo; and then execute the following command: 
+ - http://localhost:8069 
  
-    ```rocketdoo```
+ or the port you selected during setup.
 
- 6. Follow the steps provided by the launch software.
+ 7. You can check all environment details using:
 
- 7. The second stage of the LAUNCHER offers you the option to use **GITMAN** for third-party repositories. If you say yes, you’ll need to answer some questions.
+ ```
+ rocketdoo info
 
- 8. Our launcher will modify the odoo.conf file in the "addons_path" line with the new repositories.
+```
+This command displays detailed information about the current environment in your working directory.
 
- 9. Once your project is ready, you can bring up your local instance with: 
-    
-    ```docker compose up```
+ 8. From this point on, you can begin developing with Visual Studio Code by opening the environment’s directory in your editor.
 
- 11. RocketDoo will start building the environment image and then launch the system. Once successfully completed, you can check by entering the following URL in your web browser: **localhost:port**
+ 9. A partir de este momento ya puedes comenzar a desarrollar con Visual Studio Code, abriendo en el editor de codigo, el directorio de este ambiente! 
+
+> Remember that the addons folder is intended for your own developments, but you can also place standalone modules there if needed.
+
+ 11. You can also use the available ROCKETDOO commands to stop, pause, remove, or clean up the environment’s containers and volumes, or to view logs.
  
- 12. If your project has launched successfully, you can run the command:
-    
-    ```code .```
-    
-    NOW YOU CAN START DEVELOPING WITH "VISUAL STUDIO CODE"! 
+> In this version of ROCKETDOO, you can use either the command rocketdoo or its alias rkd.
 
  ------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Suggestions and Considerations:
 
  - We recommend using Visual Studio Code Extensions, such as **Docker**, **Dev Container**, and any others you find useful for working in VSCode.
+
+ - If you are developing on **Windows** with **WSL2**, it is recommended to use the **WSL:Ubuntu** extension in **Visual Studio Code** for optimal integration and performance.
 
  - If you wish to develop in the Enterprise edition, Rocketdoo will ask you, and will make the necessary configurations. However, you should ensure that you have the "enterprise" folder with all the modules and place it in the root of this project.
 
@@ -108,19 +268,7 @@ This private information is as ephemeral as your environment.
   - Gitman creates a folder containing all declared modules under **external_addons**, which can be found inside your Odoo web container at the path declared in **odoo.conf**.
 
   - All paths should be separated by a comma ","
-  - Once third-party modules are declared in "gitman," you’ll need to rebuild your image, keeping the same image name as initially created, using the command:
 
-      ```docker build . -t my-image-name```
-  
-  - Then restart the Odoo service or container with the command:
-    
-      ```docker compose restart```
-  
-  and once in your Odoo instance, refresh the application list in "developer" mode to see the new modules.
-
-If you modify your **gitman.yml** file before building with the "build" command, it will be sufficient to see the modules without needing to restart your containers.
-
-  - For simpler third-party modules, as well as the module you’re developing, we recommend placing them in the **addons** folder within your working directory.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 
