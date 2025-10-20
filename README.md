@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "2.0.0b1"
+   - "2.0.1b1"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -59,7 +59,7 @@ Odoo Development Framework
 
   ### Comandos
 
-A continuacion listaremos los comandos que componen la nueva version de **rocketdoo**
+Below we will list the commands that make up the new version of **rocketdoo**
 
 ```
  rocketdoo --version
