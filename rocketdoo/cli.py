@@ -92,7 +92,7 @@ def info():
             "[bold cyan]🚀 Rocketdoo v2.0.0b1[/bold cyan]\n\n"
             "[bold]Odoo Development Framework[/bold]\n\n"
             "📧 [dim]Support:[/dim] rocketdoo@hdmsoft.com.ar\n"
-            "🌐 [dim]Documentation:[/dim] https://rocketdoo-docs.readthedocs.io/",
+            "🌐 [dim]Documentation:[/dim] https://rkd-docs.readthedocs.io/",
             title="[bold magenta]Rocketdoo Framework[/bold magenta]",
             border_style="magenta",
             box=box.ROUNDED
