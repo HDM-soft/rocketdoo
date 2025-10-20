@@ -3,4 +3,4 @@
 🚀 Rocketdoo - Framework para entornos Odoo
 """
 
-__version__ = "2.0.1b3"
+__version__ = "2.0.1b4"
