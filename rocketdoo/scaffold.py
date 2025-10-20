@@ -23,23 +23,37 @@ def scaffold_project(template="basic", force=False, verbose=False):
         click.echo(f"📂 Copying templates from: {templates_dir}")
         click.echo(f"➡️  To: {target_dir}")
 
-    for root, dirs, files in os.walk(templates_dir):
-        rel_path = Path(root).relative_to(templates_dir)
-        dest_dir = target_dir / rel_path
+    # Usar shutil.copytree con dirs_exist_ok para copiar todo incluyendo ocultos
+    try:
+        for item in templates_dir.iterdir():
+            src = templates_dir / item.name
+            dest = target_dir / item.name
+            
+            if src.is_dir():
+                # Copiar directorio completo (incluyendo ocultos)
+                if dest.exists():
+                    if force:
+                        if verbose:
+                            click.echo(f"🔄 Overwriting directory: {dest}")
+                        shutil.rmtree(dest)
+                        shutil.copytree(src, dest)
+                    else:
+                        click.echo(f"⚠️  Skipping {dest} (already exists, use --force to overwrite)")
+                else:
+                    shutil.copytree(src, dest)
+                    if verbose:
+                        click.echo(f"✅ Copied directory: {dest}")
+            else:
+                # Copiar archivo individual
+                if dest.exists() and not force:
+                    click.echo(f"⚠️  Skipping {dest} (already exists, use --force to overwrite)")
+                    continue
+                
+                shutil.copy2(src, dest)
+                if verbose:
+                    click.echo(f"✅ Copied file: {dest}")
 
-        # Create directory if it does not exist
-        dest_dir.mkdir(parents=True, exist_ok=True)
-
-        for file in files:
-            src_file = Path(root) / file
-            dest_file = dest_dir / file
-
-            if dest_file.exists() and not force:
-                click.echo(f"⚠️  Skipping {dest_file} (already exists, use --force to overwrite)")
-                continue
-
-            shutil.copy2(src_file, dest_file)
-            if verbose:
-                click.echo(f"✅ Copied: {dest_file}")
-
-    click.echo("🎉 Project scaffold created successfully.")
+        click.echo("🎉 Project scaffold created successfully.")
+        
+    except Exception as e:
+        click.echo(f"❌ Error during scaffolding: {e}")
