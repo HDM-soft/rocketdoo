@@ -8,6 +8,7 @@ from rich import box
 from .scaffold import scaffold_project
 from .init_project import init_project
 from .project_info import get_project_info, project_exists
+from rocketdoo import __version__
 from rocketdoo.docker_cli import docker, up, down, status, stop, pause, logs, build
 
 # Detect the command name used to invoke the CLI
@@ -17,7 +18,7 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="2.0.0b1", prog_name="Rocketdoo")
+@click.version_option(version=f"{__version__}", prog_name="Rocketdoo") # version declared on rocketdoo/core/__init__.py and pyproject.toml
 @click.option('-v', '--verbose', is_flag=True, help='Enable verbose mode for detailed output')
 @click.option('--config', '-c', type=click.Path(), help='Path to custom configuration file')
 @click.pass_context
@@ -89,7 +90,7 @@ def info():
         
         # Show only basic framework information
         console.print(Panel(
-            "[bold cyan]🚀 Rocketdoo v2.0.0b1[/bold cyan]\n\n"
+            f"[bold cyan]🚀 Rocketdoo {__version__}[/bold cyan]\n\n"
             "[bold]Odoo Development Framework[/bold]\n\n"
             "📧 [dim]Support:[/dim] rocketdoo@hdmsoft.com.ar\n"
             "🌐 [dim]Documentation:[/dim] https://rkd-docs.readthedocs.io/",
@@ -214,7 +215,7 @@ def info():
     console.print()
     footer_text = Text()
     footer_text.append("🚀 ", style="bold")
-    footer_text.append("Rocketdoo v2.0.0b1", style="bold cyan")
+    footer_text.append(f"Rocketdoo {__version__}", style="bold cyan")
     footer_text.append(" | ", style="dim")
     footer_text.append("📧 ", style="bold")
     footer_text.append("rocketdoo@hdmsoft.com.ar", style="dim")
