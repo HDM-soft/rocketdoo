@@ -1,6 +1,11 @@
-# rocketdoo/__init__.py (el del paquete)
 """
-🚀 Rocketdoo - Framework para entornos Odoo
+🚀 Rocketdoo - Odoo Development Framework
 """
 
-__version__ = "2.0.1b4"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("rocketdoo")
+except PackageNotFoundError:
+    # Fallback solo para desarrollo local (pip install -e .)
+    __version__ = "dev"

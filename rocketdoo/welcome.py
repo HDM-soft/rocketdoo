@@ -30,7 +30,7 @@ with the command: [bold cyan]rocketdoo up[/bold cyan].
 If you have any questions, please check the documentation
 or contact the administrator.
 
-Version: [bold green]2.0.1b1[/bold green]
+Version: [bold green]{__version__}[/bold green]
 https://odoo.hdmsoft.com.ar
             """,
             title="[bold yellow]Rocketdoo Init Wizard[/bold yellow]",
