@@ -1,6 +1,6 @@
 [project]
 name = "rocketdoo"
-version = "2.0.1b2"
+version = "2.0.1b3"
 description = "Framework for creating Odoo development environments with Docker and custom templates."
 authors = [
     { name = "Horacio Montaño", email = "horaciomontano@hdmsoft.com.ar" }
@@ -33,7 +33,12 @@ include = ["rocketdoo*"]
 
 # 🚀 Include templates in the package
 [tool.setuptools.package-data]
-rocketdoo = ["templates/**"]
+rocketdoo = [
+    "templates/**/*",
+    "templates/**/**/*",
+    "templates/**/.*",
+    "templates/**/**/.*"
+]
 
 [tool.setuptools]
 include-package-data = true

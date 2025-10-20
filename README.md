@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "2.0.1b2"
+   - "2.0.1b3"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -30,13 +30,13 @@ Odoo Development Framework
    > Ensure you have pip installed, or pipx if necessary.
 
    ``` 
-    pip install rocketdoo --break-system-packages
+    pip install rocketdoo==2.0.1.b3 --break-system-packages
 
    ```
    or 
 
    ``` 
-    pipx install rocketdoo
+    pipx install rocketdoo==2.0.1.b3
 
    ```
 
