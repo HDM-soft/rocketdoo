@@ -36,8 +36,10 @@ include = ["rocketdoo*"]
 rocketdoo = [
     "templates/**/*",
     "templates/**/**/*",
+    "templates/**/.vscode/*",
+    "templates/**/*.jinja",
     "templates/**/.*",
-    "templates/**/**/.*"
+    "templates/**/**/.*",
 ]
 
 [tool.setuptools]
