@@ -1,6 +1,7 @@
 from rich.console import Console
 from rich.panel import Panel
 from pyfiglet import Figlet
+from rocketdoo import __version__
 
 console = Console()
 
@@ -18,7 +19,7 @@ def show_welcome():
     console.print("=" * 60, style="yellow")
     console.print(
         Panel.fit(
-            """Welcome to the Odoo Development Framework!
+            f"""Welcome to the Odoo Development Framework!
 
 This wizard will guide you through the creation of a dockerized Odoo development environment.
 Please answer the following questions to customize your project.
