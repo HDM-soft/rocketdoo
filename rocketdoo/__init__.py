@@ -7,5 +7,5 @@ from importlib.metadata import version, PackageNotFoundError
 try:
     __version__ = version("rocketdoo")
 except PackageNotFoundError:
-    # Fallback solo para desarrollo local (pip install -e .)
+    # Fallback for local development (pip install -e .)
     __version__ = "dev"
