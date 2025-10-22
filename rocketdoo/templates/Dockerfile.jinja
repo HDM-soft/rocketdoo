@@ -10,13 +10,17 @@ COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
 
 USER root
 
-ENV PATH="/root/.local/bin:$PATH"
+# Deshabilitar la restricción de externally-managed-environment
+RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED
+
+# O alternativamente, configurar pip
+RUN pip config set global.break-system-packages true
 
 RUN apt update && \
     apt install -y git pipx && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
-    python3 -m pip install debugpy gitman
+    python3 -m pip install debugpy gitman --break-system-packages
 
 #RUN mkdir -p /root/.ssh
 #COPY ./.ssh/rsa /root/.ssh/id_rsa
