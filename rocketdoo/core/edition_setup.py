@@ -4,64 +4,64 @@ import re
 
 
 def enable_enterprise_in_compose(compose_path: Path):
-    """Descomenta la línea de enterprise en docker-compose.yaml"""
+    """Uncomment the enterprise line in docker-compose.yaml"""
     if not compose_path.exists():
-        raise FileNotFoundError(f"No se encontró el archivo: {compose_path}")
+        raise FileNotFoundError(f"File not found: {compose_path}")
     
     text = compose_path.read_text()
-    
-    # Descomentar la línea de enterprise
+
+    # Uncomment the enterprise line
     new_text = text.replace(
         '#- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise',
         '- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise'
     )
     
     compose_path.write_text(new_text)
-    print(f"✅ Configuración Enterprise habilitada en {compose_path.name}")
+    print(f"✅ Enterprise configuration enabled in {compose_path.name}")
 
 
 def add_enterprise_to_odoo_conf(odoo_conf_path: Path):
-    """Agrega la ruta de enterprise al addons_path en odoo.conf"""
+    """Add the enterprise path to the addons_path in odoo.conf"""
     if not odoo_conf_path.exists():
-        raise FileNotFoundError(f"No se encontró el archivo: {odoo_conf_path}")
+        raise FileNotFoundError(f"File not found: {odoo_conf_path}")
     
     text = odoo_conf_path.read_text()
     enterprise_path = "/usr/lib/python3/dist-packages/odoo/enterprise"
-    
-    # Buscar la línea de addons_path y agregar enterprise
+
+    # Search for the addons_path line and add enterprise
     if 'addons_path' in text:
-        # Si ya existe addons_path, agregar enterprise
+        # If addons_path already exists, add enterprise
         pattern = r'(addons_path\s*=\s*)([^\n]+)'
         
         def replace_addons(match):
             prefix = match.group(1)
             current_paths = match.group(2).strip()
-            
-            # Evitar duplicados
+
+            # Avoid duplicates
             if enterprise_path in current_paths:
                 return match.group(0)
-            
-            # Agregar enterprise al inicio del addons_path
+
+            # Add enterprise to the beginning of the addons_path
             return f"{prefix}{enterprise_path},{current_paths}"
         
         text = re.sub(pattern, replace_addons, text)
     else:
-        # Si no existe addons_path, agregarlo
+        # If addons_path does not exist, add it
         text += f"\naddons_path = {enterprise_path}\n"
     
     odoo_conf_path.write_text(text)
-    print(f"✅ Ruta Enterprise agregada a {odoo_conf_path.name}")
+    print(f"✅ Enterprise path added to {odoo_conf_path.name}")
 
 
 def check_enterprise_folder(project_root: Path) -> bool:
     """
-    Verifica si existe la carpeta enterprise en la raíz del proyecto.
+    Check if the enterprise folder exists at the project root.
     
     Args:
-        project_root: Ruta raíz del proyecto
-        
+        project_root: Project root path
+
     Returns:
-        True si existe la carpeta, False si no existe
+        True if the folder exists, False if it does not
     """
     enterprise_path = project_root / "enterprise"
     return enterprise_path.exists() and enterprise_path.is_dir()
@@ -69,41 +69,41 @@ def check_enterprise_folder(project_root: Path) -> bool:
 
 def setup_enterprise_edition(project_root: Path):
     """
-    Configura el proyecto para usar Odoo Enterprise.
+    Configure the project to use Odoo Enterprise.
     
     Args:
-        project_root: Ruta raíz del proyecto donde están docker-compose.yaml y config/
+        project_root: Project root path where docker-compose.yaml and config/ are located
     """
     compose_path = project_root / "docker-compose.yaml"
     odoo_conf_path = project_root / "config" / "odoo.conf"
     
     try:
-        # Verificar si existe la carpeta enterprise
+        # Check if the enterprise folder exists
         has_enterprise_folder = check_enterprise_folder(project_root)
-        
-        # Habilitar en docker-compose
+
+        # Enable in docker-compose
         if compose_path.exists():
             enable_enterprise_in_compose(compose_path)
-        
-        # Agregar a odoo.conf
+
+        # Add to odoo.conf
         if odoo_conf_path.exists():
             add_enterprise_to_odoo_conf(odoo_conf_path)
-        
-        print("\n📦 Edición Enterprise configurada correctamente")
-        
-        # Advertencia si no existe la carpeta enterprise
+
+        print("\n📦 Enterprise edition configured successfully")
+
+        # Warning if the enterprise folder does not exist
         if not has_enterprise_folder:
-            print("\n⚠️  ¡IMPORTANTE! No se encontró la carpeta 'enterprise/'")
-            print("📁 No te olvides de agregar la carpeta 'enterprise' con los módulos de Odoo Enterprise")
-            print("💡 Puedes obtenerla de:")
-            print("   • Repositorio oficial de Odoo (requiere suscripción)")
+            print("\n⚠️  IMPORTANT! The ‘enterprise/’ folder was not found.")
+            print("📁 Don't forget to add the 'enterprise' folder with the Odoo Enterprise modules")
+            print("💡 You can obtain it from:")
+            print("   • Official Odoo repository (requires subscription)")
             print("   • git clone https://github.com/odoo/enterprise.git")
         else:
-            print("✅ Carpeta 'enterprise/' encontrada")
-        
+            print("✅ 'enterprise/' folder found")
+
     except FileNotFoundError as e:
         print(f"❌ Error: {e}")
         raise
     except Exception as e:
-        print(f"❌ Error al configurar Enterprise: {e}")
+        print(f"❌ Error configuring Enterprise: {e}")
         raise
