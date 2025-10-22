@@ -31,6 +31,22 @@ def up(detached, extra_args):
     if extra_args:
         cmd.extend(extra_args)
     subprocess.run(cmd)
+    
+# ==============================
+# 🔄 RESTART
+# ==============================
+@docker.command()
+@click.option('-t', '--timeout', type=int, help="Timeout in seconds to wait for stop before killing")
+@click.argument('services', nargs=-1)
+def restart(timeout, services):
+    """Equivalent to: docker compose restart"""
+    ensure_docker_installed()
+    cmd = ["docker", "compose", "restart"]
+    if timeout:
+        cmd.extend(["-t", str(timeout)])
+    if services:
+        cmd.extend(services)
+    subprocess.run(cmd)
 
 
 # ==============================
@@ -101,21 +117,46 @@ def logs(container, follow):
 
     
 # ==============================
-# 🪵 BUILD
+# 🔨 BUILD
 # ==============================
-
 @click.command()
 @click.option('-t', '--tag', required=False, help="Name of the image to be created (optional)")
-def build(tag):
+@click.option('--rebuild', is_flag=True, help="Rebuild and restart containers (docker compose up -d --build)")
+def build(tag, rebuild):
     """
-    Builds the Docker image for Rocketdoo (equivalent to: docker build -t image_name .)
+    Builds the Docker image for Rocketdoo.
+    
+    Examples:
+    
+    \b
+    # Standard build
+    rkd build
+    
+    \b
+    # Build with custom tag
+    rkd build -t my-image:latest
+    
+    \b
+    # Rebuild and restart all containers
+    rkd build --rebuild
     """
-    command = ["docker", "build"]
-
-    if tag:
-        command.extend(["-t", tag])
-
-    command.append(".")
-
-    click.echo(f"🚀 Executing: {' '.join(command)}")
-    subprocess.run(command, check=True)
+    ensure_docker_installed()
+    
+    if rebuild:
+        # Execute docker compose up -d --build
+        command = ["docker", "compose", "up", "-d", "--build"]
+        click.echo(f"🔄 Rebuilding and restarting containers...")
+        click.echo(f"🚀 Executing: {' '.join(command)}")
+        subprocess.run(command, check=True)
+    else:
+        # Standard docker build
+        command = ["docker", "build"]
+        
+        if tag:
+            command.extend(["-t", tag])
+        
+        command.append(".")
+        
+        click.echo(f"🔨 Building Docker image...")
+        click.echo(f"🚀 Executing: {' '.join(command)}")
+        subprocess.run(command, check=True)

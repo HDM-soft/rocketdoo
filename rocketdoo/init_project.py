@@ -1,5 +1,6 @@
 import click
 import os
+from rich.console import Console
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 import questionary
@@ -17,6 +18,8 @@ from rocketdoo.core.gitman_config import (
     extract_repo_name_from_url,
     detect_repo_type
 )
+
+console = Console()
 
 # Base Directories
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -103,11 +106,27 @@ def prompt_ports_until_valid(default_odoo=8069, default_vsc=8888):
 
 def init_project():
     """Initial configuration assistant for Rocketdoo"""
+    
     show_welcome()
-
+    
+    
     current_dir = os.path.basename(os.getcwd())
     project_name = click.prompt("Project Name", default=current_dir)
+    
+    # Convert to lowercase and warn if it was changed
+    original_name = project_name
+    project_name = project_name.lower()
+    
+    if original_name != project_name:
+        console.print(f"\n[yellow]⚠️  Project names must be in lowercase![/yellow]")
+        console.print(f"[dim]Converting: '{original_name}' → '{project_name}'[/dim]")
+        
+        if not click.confirm(f"\nUse '{project_name}' as project name?", default=True):
+            project_name = click.prompt("Enter a new project name (lowercase)", type=str).lower()
 
+        console.print(f"[dim]💡 Docker project names must be in lowercase[/dim]\n")
+        
+        
     # Version selection with interactive menu
     odoo_versions = ["15.0", "16.0", "17.0", "18.0", "19.0"]
     click.echo("\n📦 Select Odoo version (use ↑↓ and ENTER):")
