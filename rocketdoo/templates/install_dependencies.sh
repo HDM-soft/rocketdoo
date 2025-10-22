@@ -10,10 +10,20 @@ if [ -f "$file_to_check" ]; then
         exit_code=$?
         
         if [ $exit_code -ne 0 ]; then
-            echo "Error: Unable to install at least one dependency of $file_to_check."
+            echo "Warning: Unable to install at least one dependency of $file_to_check."
             echo "$output"
             echo "Please log into the container and install them manually or modify the dockerfile or docker compose."
-            exit 1
+            echo "(script returned an error)"
+            
+            # Preguntar si se debe continuar o usar --force
+            if [[ "$*" == *"--force"* ]]; then
+                echo "Continuing due to --force flag..."
+                exit 0
+            else
+                echo ""
+                echo "Run again with '--force' to ignore script errors"
+                exit 1
+            fi
         else
             echo "All dependencies installed successfully!"
         fi
