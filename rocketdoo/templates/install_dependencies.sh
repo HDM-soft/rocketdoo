@@ -3,15 +3,23 @@
 file_to_check="$PWD/requirements.txt"
 
 if [ -f "$file_to_check" ]; then
-    echo "The file $file_to_check exists. Installing python dependencies"
-    pip install -r "$file_to_check" 2>&1
-    exit_code = $?
-    if [ $exit_code -ne 0 ]; then
-      echo "Error: Unable to install at least one dependency of $file_to_check.\n"
-      echo "$output"
-      echo "Please log into the container and install them manually or modify the dockerfile or docker compose."
-      exit 0
+    # Verificar si el archivo tiene contenido (ignorando líneas vacías y comentarios)
+    if grep -q '^[^#[:space:]]' "$file_to_check"; then
+        echo "The file $file_to_check exists. Installing python dependencies"
+        output=$(pip install --break-system-packages -r "$file_to_check" 2>&1)
+        exit_code=$?
+        
+        if [ $exit_code -ne 0 ]; then
+            echo "Error: Unable to install at least one dependency of $file_to_check."
+            echo "$output"
+            echo "Please log into the container and install them manually or modify the dockerfile or docker compose."
+            exit 1
+        else
+            echo "All dependencies installed successfully!"
+        fi
+    else
+        echo "The file $file_to_check exists but is empty or contains only comments. Skipping installation."
     fi
 else
-    echo "The file $file_to_check does not exist."
+    echo "The file $file_to_check does not exist. Skipping installation."
 fi
