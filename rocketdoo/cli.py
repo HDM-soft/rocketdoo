@@ -10,7 +10,7 @@ from .scaffold import scaffold_project
 from .init_project import init_project
 from .project_info import get_project_info, project_exists
 from rocketdoo import __version__
-from rocketdoo.docker_cli import docker, up, down, status, stop, pause, logs, build
+from rocketdoo.docker_cli import docker, up, down, status, stop, pause, logs, build, restart
 
 # Detect the command name used to invoke the CLI
 PROG_NAME = "rkd" if "rkd" in sys.argv[0] else "rocketdoo"
@@ -381,6 +381,7 @@ main.add_command(docker, name="docker")
 
 # Direct alias
 main.add_command(up)
+main.add_command(restart)
 main.add_command(down)
 main.add_command(status)
 main.add_command(stop)
