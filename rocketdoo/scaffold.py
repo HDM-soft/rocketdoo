@@ -30,7 +30,7 @@ def scaffold_project(template="basic", force=False, verbose=False):
             dest = target_dir / item.name
             
             if src.is_dir():
-                # Copiar directorio completo (incluyendo ocultos)
+                # Copy entire directory (including hidden files)
                 if dest.exists():
                     if force:
                         if verbose:
@@ -44,7 +44,7 @@ def scaffold_project(template="basic", force=False, verbose=False):
                     if verbose:
                         click.echo(f"✅ Copied directory: {dest}")
             else:
-                # Copiar archivo individual
+                # Copy individual file
                 if dest.exists() and not force:
                     click.echo(f"⚠️  Skipping {dest} (already exists, use --force to overwrite)")
                     continue
