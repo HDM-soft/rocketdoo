@@ -320,6 +320,33 @@ def info():
         box=box.ROUNDED,
         padding=(1, 2)
     ))
+
+    # 🚀 ===== QUICK ACCESS PANEL ===== 🚀
+    if project_info.get('odoo_port'):
+        console.print()
+        
+        # Build panel content
+        access_content = Text()
+        access_content.append("🌐 ", style="bold green")
+        access_content.append("Your Odoo instance is available at:\n\n", style="bold green")
+        access_content.append(f"    http://localhost:{project_info['odoo_port']}\n\n", style="bold cyan underline")
+
+        # Add credentials if available
+        if project_info.get('admin_passwd'):
+            access_content.append("🔑 ", style="bold yellow")
+            access_content.append("Master Password: ", style="bold yellow")
+            access_content.append(f"{project_info['admin_passwd']}\n\n", style="yellow")
+        
+        access_content.append("💡 ", style="dim")
+        access_content.append("Click the link or copy it to your browser", style="dim")
+        
+        console.print(Panel(
+            access_content,
+            title="[bold yellow]🚀 Quick Access[/bold yellow]",
+            border_style="green",
+            box=box.DOUBLE,
+            padding=(1, 2)
+        ))
     
     # Third-party repositories (Gitman)
     if project_info['use_third_party_repos'] and project_info['third_party_repos']:
