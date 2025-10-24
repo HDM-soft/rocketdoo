@@ -301,8 +301,8 @@ def info():
     # Master password (partially hidden)
     if project_info['admin_passwd']:
         passwd = project_info['admin_passwd']
-        # Hide password except first 2 characters
-        masked_passwd = passwd[:2] + '*' * (len(passwd) - 2) if len(passwd) > 2 else '****'
+        # Hide password except first 3 characters
+        masked_passwd = passwd[:3] + '*' * (len(passwd) - 3) if len(passwd) > 3 else '****'
         table.add_row("🔑 Master Password", masked_passwd)
     
     # SSH / Private repositories
@@ -329,13 +329,13 @@ def info():
         access_content = Text()
         access_content.append("🌐 ", style="bold green")
         access_content.append("Your Odoo instance is available at:\n\n", style="bold green")
-        access_content.append(f"    http://localhost:{project_info['odoo_port']}\n\n", style="bold cyan underline")
+        access_content.append(f"http://localhost:{project_info['odoo_port']}\n\n", style="bold cyan underline")
 
         # Add credentials if available
-        if project_info.get('admin_passwd'):
-            access_content.append("🔑 ", style="bold yellow")
-            access_content.append("Master Password: ", style="bold yellow")
-            access_content.append(f"{project_info['admin_passwd']}\n\n", style="yellow")
+        # if project_info.get('admin_passwd'):
+        #     access_content.append("🔑 ", style="bold yellow")
+        #     access_content.append("Master Password: ", style="bold yellow")
+        #     access_content.append(f"{project_info['admin_passwd']}\n\n", style="yellow")
         
         access_content.append("💡 ", style="dim")
         access_content.append("Click the link or copy it to your browser", style="dim")
