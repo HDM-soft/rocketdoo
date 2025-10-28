@@ -226,10 +226,10 @@ def init_project():
                 if not questionary.confirm("Would you like to add another repository?", default=False).ask():
                     break
 
-    db_versions = ["13", "14", "15"]
+    db_versions = ["13", "14", "15", "16"]
     click.echo("\n📦 Select the PostgreSQL version (use ↑↓ and ENTER):")
     db_version = questionary.select(
-        "PostgreSQL version:", choices=db_versions, default="14"
+        "PostgreSQL version:", choices=db_versions, default="16"
     ).ask()
 
     # Ask for the master password
