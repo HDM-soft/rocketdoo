@@ -11,6 +11,14 @@ from .init_project import init_project
 from .project_info import get_project_info, project_exists
 from rocketdoo import __version__
 from rocketdoo.docker_cli import docker, up, down, status, stop, pause, logs, build, restart
+from rocketdoo.deploy_cli import (
+    deploy, 
+    deploy_init, 
+    list_modules, 
+    deploy_config, 
+    deploy_run, 
+    validate_modules
+)
 
 # Detect the command name used to invoke the CLI
 PROG_NAME = "rkd" if "rkd" in sys.argv[0] else "rocketdoo"
@@ -416,6 +424,19 @@ main.add_command(pause)
 main.add_command(logs)
 main.add_command(build)
 main.add_command(delete_command)
+
+# ============================================================
+# 🚀 Register Deploy commands as Rocketdoo subcommands
+# ============================================================
+# Complete subgroup
+main.add_command(deploy, name="deploy")
+
+# Direct aliases for common deploy commands
+main.add_command(deploy_init, name="deploy-init")
+main.add_command(list_modules, name="deploy-list")
+main.add_command(deploy_run, name="deploy-run")
+main.add_command(deploy_config, name="deploy-config")
+main.add_command(validate_modules, name="deploy-validate")
 
 if __name__ == "__main__":
     main()
