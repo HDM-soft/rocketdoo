@@ -22,14 +22,16 @@ class OdooSHDeployer(BaseDeployer):
     """
     Deployer for Odoo.sh platform
     
-    Odoo.sh expects a specific repository structure:
+    Odoo.sh expects modules in the root of the repository:
     repo/
-    ├── odoo/              # Submodule: Odoo core
-    ├── enterprise/        # Submodule: Enterprise (optional)
-    └── custom_addons/     # Your custom modules
+    ├── module1/
+    │   └── __manifest__.py
+    ├── module2/
+    │   └── __manifest__.py
+    └── odoo/              # Submodule: Odoo core (optional)
     
     This deployer:
-    1. Prepares modules in the expected structure
+    1. Prepares modules in the root structure
     2. Commits and pushes to Odoo.sh Git repository
     3. Optionally waits for build completion
     """
@@ -52,16 +54,6 @@ class OdooSHDeployer(BaseDeployer):
         self.api_token = self.odoo_sh_config.get('api_token')
         self.git_remote = self.odoo_sh_config.get('git_remote', 'origin')
         self.git_url = self.odoo_sh_config.get('git_url')
-        
-        # Structure config
-        self.structure = config.get('structure', {})
-        custom_addons_path = self.structure.get('custom_addons_path', '.')
-
-        if isinstance(custom_addons_path, list):
-            raise ValueError("Odoo.sh deploy does not support multiple addons paths")
-
-        self.custom_addons_path = Path(custom_addons_path)
-
         
         # Post-deploy config
         self.post_deploy_config = config.get('post_deploy', {})
@@ -189,7 +181,7 @@ class OdooSHDeployer(BaseDeployer):
         
         Process:
         1. Clone/prepare Odoo.sh repository
-        2. Copy modules to custom_addons/
+        2. Copy modules to repository root
         3. Commit and push changes
         
         Args:
@@ -212,11 +204,7 @@ class OdooSHDeployer(BaseDeployer):
                     message="Failed to prepare repository"
                 )
             
-            # Create custom_addons directory if it doesn't exist
-            custom_addons_dir = self.temp_repo / self.custom_addons_path
-            custom_addons_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Copy modules
+            # Copy modules to repository root
             self.log(f"Copying {len(modules)} modules to repository...", "info")
             
             with Progress(
@@ -229,50 +217,68 @@ class OdooSHDeployer(BaseDeployer):
                 for module in modules:
                     module_name = module['name']
                     source_path = Path(module['full_path'])
-                    # DEBUG LOG (temporal)
-                    self.log(
-                        f"[DEBUG] Source path exists={source_path.exists()} "
-                        f"contents={list(source_path.iterdir()) if source_path.exists() else 'N/A'}",
-                        "debug"
-                    )
-                    dest_path = custom_addons_dir / module_name
+                    # Modules go to repository root
+                    dest_path = self.temp_repo / module_name
                     
-                    # Remove existing module if present
-                    if dest_path.exists() and (dest_path / '.rkd_managed').exists():
-                        shutil.rmtree(dest_path)
-
+                    self.log(f"Copying module: {module_name}", "info")
+                    self.log(f"  From: {source_path}", "debug")
+                    self.log(f"  To: {dest_path}", "debug")
+                    
+                    if not source_path.exists():
+                        self.log(f"  ERROR: Source path does not exist!", "error")
+                        continue
+                    
+                    # Remove existing module if present and managed by us
+                    if dest_path.exists():
+                        if (dest_path / '.rkd_managed').exists():
+                            self.log(f"  Removing existing managed module", "debug")
+                            shutil.rmtree(dest_path)
+                        else:
+                            self.log(f"  WARNING: Module exists but not managed by RocketDoo, skipping", "warning")
+                            progress.update(task, advance=1)
+                            continue
                     
                     # Copy module
                     self._copy_module_filtered(source_path, dest_path)
                     
+                    # Mark as managed by RocketDoo
                     (dest_path / '.rkd_managed').touch()
+                    
+                    # Verify copy
+                    if dest_path.exists():
+                        copied_files = list(dest_path.rglob('*'))
+                        self.log(f"  ✓ Copied successfully ({len(copied_files)} files)", "success")
+                    else:
+                        self.log(f"  ✗ Copy failed!", "error")
                     
                     progress.update(task, advance=1)
             
             self.log("✓ Modules copied", "success")
             
-            # Stage changes
+            # Stage changes - Add all module directories
             self.log("Staging changes...", "info")
-            # Use -A to add all changes including new files
-            #add_path = self.custom_addons_path if self.custom_addons_path != '.' else '.'
-            result = self._run_git_command(['add', '-A', '.'])
-            if result.returncode != 0:
-                return DeploymentResult(
-                    success=False,
-                    message=f"Failed to stage changes: {result.stderr}"
-                )
+            module_names = [m['name'] for m in modules]
             
-            # Check if there are changes to commit (check staged files)
+            # Add each module directory
+            for module_name in module_names:
+                result = self._run_git_command(['add', '-A', module_name])
+                if result.returncode != 0:
+                    self.log(f"Warning: Failed to stage {module_name}: {result.stderr}", "warning")
+            
+            # Check if there are changes to commit
             result = self._run_git_command(['diff', '--cached', '--name-only'])
-            if not result.stdout.strip():
+            staged_files = result.stdout.strip()
+            
+            if not staged_files:
                 self.log("No changes to deploy", "warning")
                 return DeploymentResult(
                     success=True,
                     message="No changes detected, nothing to deploy"
                 )
             
+            self.log(f"Staged files:\n{staged_files}", "debug")
+            
             # Commit changes
-            module_names = [m['name'] for m in modules]
             commit_message = f"[RocketDoo] Deploy modules: {', '.join(module_names)}"
             
             self.log("Creating commit...", "info")
@@ -308,7 +314,9 @@ class OdooSHDeployer(BaseDeployer):
             )
             
         except Exception as e:
+            import traceback
             self.log(f"Deployment failed: {e}", "error")
+            self.log(f"Traceback: {traceback.format_exc()}", "debug")
             return DeploymentResult(
                 success=False,
                 message=f"Deployment error: {e}"
@@ -453,8 +461,18 @@ class OdooSHDeployer(BaseDeployer):
             source: Source module directory
             dest: Destination directory
         """
+        if not source.exists():
+            self.log(f"Source does not exist: {source}", "error")
+            return
+        
+        if not source.is_dir():
+            self.log(f"Source is not a directory: {source}", "error")
+            return
+        
+        # Create destination directory
         dest.mkdir(parents=True, exist_ok=True)
         
+        # Copy all files recursively
         for item in source.iterdir():
             # Skip excluded items
             if self.packager.should_exclude(item):
