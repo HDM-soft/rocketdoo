@@ -55,10 +55,13 @@ class OdooSHDeployer(BaseDeployer):
         
         # Structure config
         self.structure = config.get('structure', {})
-        self.custom_addons_path = self.structure.get(
-            'custom_addons_path',
-            ['.']  # root of the repo by default
-        )
+        custom_addons_path = self.structure.get('custom_addons_path', '.')
+
+        if isinstance(custom_addons_path, list):
+            raise ValueError("Odoo.sh deploy does not support multiple addons paths")
+
+        self.custom_addons_path = Path(custom_addons_path)
+
         
         # Post-deploy config
         self.post_deploy_config = config.get('post_deploy', {})
@@ -228,11 +231,14 @@ class OdooSHDeployer(BaseDeployer):
                     dest_path = custom_addons_dir / module_name
                     
                     # Remove existing module if present
-                    if dest_path.exists():
+                    if dest_path.exists() and (dest_path / '.rkd_managed').exists():
                         shutil.rmtree(dest_path)
+
                     
                     # Copy module
                     self._copy_module_filtered(source_path, dest_path)
+                    
+                    (dest_path / '.rkd_managed').touch()
                     
                     progress.update(task, advance=1)
             
@@ -241,8 +247,8 @@ class OdooSHDeployer(BaseDeployer):
             # Stage changes
             self.log("Staging changes...", "info")
             # Use -A to add all changes including new files
-            add_path = self.custom_addons_path if self.custom_addons_path != '.' else '.'
-            result = self._run_git_command(['add', '-A', add_path])
+            #add_path = self.custom_addons_path if self.custom_addons_path != '.' else '.'
+            result = self._run_git_command(['add', '-A', '.'])
             if result.returncode != 0:
                 return DeploymentResult(
                     success=False,
