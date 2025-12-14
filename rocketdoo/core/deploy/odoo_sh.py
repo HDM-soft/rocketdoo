@@ -278,8 +278,11 @@ class OdooSHDeployer(BaseDeployer):
             
             self.log(f"Staged files:\n{staged_files}", "debug")
             
-            # Commit changes
-            commit_message = f"[RocketDoo] Deploy modules: {', '.join(module_names)}"
+            # Commit changes with detailed message
+            from datetime import datetime
+            
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            commit_message = f"[RocketDoo] Deploy modules: {', '.join(module_names)}\n\nDeployed at: {timestamp}\nModules: {len(module_names)}\nFiles changed: {len(staged_files.splitlines())}"
             
             self.log("Creating commit...", "info")
             result = self._run_git_command(['commit', '-m', commit_message])
