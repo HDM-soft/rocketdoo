@@ -1,4 +1,3 @@
-
 """
 RocketDoo Deploy - Odoo.sh Deployer
 Deploys Odoo modules to Odoo.sh platform via Git
@@ -238,15 +237,17 @@ class OdooSHDeployer(BaseDeployer):
             
             # Stage changes
             self.log("Staging changes...", "info")
-            result = self._run_git_command(['add', self.custom_addons_path])
+            # Use -A to add all changes including new files
+            add_path = self.custom_addons_path if self.custom_addons_path != '.' else '.'
+            result = self._run_git_command(['add', '-A', add_path])
             if result.returncode != 0:
                 return DeploymentResult(
                     success=False,
                     message=f"Failed to stage changes: {result.stderr}"
                 )
             
-            # Check if there are changes to commit
-            result = self._run_git_command(['status', '--porcelain'])
+            # Check if there are changes to commit (check staged files)
+            result = self._run_git_command(['diff', '--cached', '--name-only'])
             if not result.stdout.strip():
                 self.log("No changes to deploy", "warning")
                 return DeploymentResult(
