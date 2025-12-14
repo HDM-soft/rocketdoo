@@ -433,7 +433,7 @@ class DeployConfigManager:
             console.print("[yellow]⚠️  API token should be set as environment variable: ODOO_SH_TOKEN[/yellow]")
             config['odoo_sh']['api_token'] = '${ODOO_SH_TOKEN}'
         else:
-            git_remote = Prompt.ask("Git remote name", default="odoo-sh")
+            git_remote = Prompt.ask("Git remote name", default="origin")
             git_url = Prompt.ask("Git repository URL")
             
             config['odoo_sh']['git_remote'] = git_remote
