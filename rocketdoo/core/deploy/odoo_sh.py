@@ -50,7 +50,7 @@ class OdooSHDeployer(BaseDeployer):
         self.project_id = self.odoo_sh_config.get('project_id')
         self.branch = self.odoo_sh_config.get('branch', 'main')
         self.api_token = self.odoo_sh_config.get('api_token')
-        self.git_remote = self.odoo_sh_config.get('git_remote', 'odoo-sh')
+        self.git_remote = self.odoo_sh_config.get('git_remote', 'origin')
         self.git_url = self.odoo_sh_config.get('git_url')
         
         # Structure config
