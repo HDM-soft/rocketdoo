@@ -360,12 +360,17 @@ class OdooSHDeployer(BaseDeployer):
                 # Try to clone existing repository
                 self.log(f"Cloning repository from {self.git_url}...", "info")
                 
+                # Clone with branch specification
                 result = subprocess.run(
                     ['git', 'clone', '--branch', self.branch, self.git_url, str(self.temp_repo)],
                     capture_output=True,
                     text=True,
                     timeout=300
                 )
+                
+                # Change to repo directory BEFORE checking result
+                if self.temp_repo.exists():
+                    os.chdir(self.temp_repo)
                 
                 if result.returncode != 0:
                     # Branch might not exist, clone default and create branch
