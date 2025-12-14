@@ -198,7 +198,6 @@ class OdooSHDeployer(BaseDeployer):
         Returns:
             DeploymentResult
         """
-        self.log(f"Source path contents: {list(source_path.iterdir())}", "debug")
 
         try:
             # Create temporary directory for repository
@@ -230,6 +229,12 @@ class OdooSHDeployer(BaseDeployer):
                 for module in modules:
                     module_name = module['name']
                     source_path = Path(module['full_path'])
+                    # DEBUG LOG (temporal)
+                    self.log(
+                        f"[DEBUG] Source path exists={source_path.exists()} "
+                        f"contents={list(source_path.iterdir()) if source_path.exists() else 'N/A'}",
+                        "debug"
+                    )
                     dest_path = custom_addons_dir / module_name
                     
                     # Remove existing module if present
