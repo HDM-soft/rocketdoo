@@ -57,7 +57,7 @@ Odoo Development Framework
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-  ### Comandos
+  ### Comand Line
 
 Below we will list the commands that make up the new version of **rocketdoo**
 

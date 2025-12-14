@@ -1,5 +1,7 @@
 include README.md
 include LICENSE
+include rocketdoo/templates/deploy/.deployignore
+include rocketdoo/templates/deploy/deploy.yaml.jinja
 recursive-include rocketdoo/templates *
 recursive-include rocketdoo/templates .*
 recursive-include rocketdoo/templates *.jinja

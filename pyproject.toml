@@ -38,6 +38,7 @@ rocketdoo = [
     "templates/**/**/*",
     "templates/**/.vscode/*",
     "templates/**/*.jinja",
+    "templates/deploy/*",
     "templates/**/.*",
     "templates/**/**/.*",
 ]
