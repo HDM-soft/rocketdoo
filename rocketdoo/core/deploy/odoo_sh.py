@@ -198,6 +198,8 @@ class OdooSHDeployer(BaseDeployer):
         Returns:
             DeploymentResult
         """
+        self.log(f"Source path contents: {list(source_path.iterdir())}", "debug")
+
         try:
             # Create temporary directory for repository
             self.temp_repo = Path(tempfile.mkdtemp(prefix='rkd_odoo_sh_'))
