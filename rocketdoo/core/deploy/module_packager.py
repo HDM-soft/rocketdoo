@@ -64,17 +64,25 @@ class ModulePackager:
         Returns:
             True if should be excluded
         """
-        path_str = str(path)
-        name = path.name
         
+        
+        # NEVER exclude core Odoo files
+        if path.name in ('__manifest__.py', '__init__.py'):
+            return False
+        
+        name = path.name
+            
         for pattern in self.exclude_patterns:
             # Check full path
-            if fnmatch(path_str, f"*{pattern}*"):
-                return True
-            # Check filename
+            if pattern.endswith('/'):
+                if path.is_dir() and name == pattern.rstrip('/'):
+                    return True
+                continue
+
+            # Filename match
             if fnmatch(name, pattern):
                 return True
-        
+
         return False
     
     def prepare_module(self, module: Dict, target_dir: Path) -> Path:
