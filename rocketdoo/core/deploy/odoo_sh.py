@@ -55,7 +55,10 @@ class OdooSHDeployer(BaseDeployer):
         
         # Structure config
         self.structure = config.get('structure', {})
-        self.custom_addons_path = self.structure.get('custom_addons_path', '.')
+        self.custom_addons_path = self.structure.get(
+            'custom_addons_path',
+            ['.']  # root of the repo by default
+        )
         
         # Post-deploy config
         self.post_deploy_config = config.get('post_deploy', {})
