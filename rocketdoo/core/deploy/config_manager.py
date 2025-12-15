@@ -409,7 +409,7 @@ class DeployConfigManager:
         console.print("\n[bold cyan]☁️  Odoo.sh Configuration[/bold cyan]")
         
         project_id = Prompt.ask("Odoo.sh project ID")
-        branch = Prompt.ask("Git branch", default="staging")
+        branch = Prompt.ask("Git branch", default="development or staging")
         
         use_api = Confirm.ask("Use Odoo.sh API?", default=False)
         
@@ -421,7 +421,7 @@ class DeployConfigManager:
                 'branch': branch
             },
             'structure': {
-                'custom_addons_path': '.'
+                'custom_addons_path': '..'
             },
             'post_deploy': {
                 'wait_for_build': True,
