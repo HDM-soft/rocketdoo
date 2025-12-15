@@ -421,7 +421,7 @@ class DeployConfigManager:
                 'branch': branch
             },
             'structure': {
-                'custom_addons_path': 'custom_addons'
+                'custom_addons_path': '.'
             },
             'post_deploy': {
                 'wait_for_build': True,
