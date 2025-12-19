@@ -5,6 +5,7 @@ Deploys Odoo modules to VPS servers (Docker or Native)
 
 import os
 import subprocess
+import shutil
 from getpass import getpass
 from pathlib import Path
 import stat
@@ -26,6 +27,13 @@ class VPSDeployer(BaseDeployer):
     Uses SSH/SCP for file transfer and remote command execution
     Supports both SSH key and password authentication
     """
+    
+    def _check_sshpass(self) -> bool:
+        """
+        Check if sshpass is available in system
+        """
+        return shutil.which("sshpass") is not None
+    
     
     def __init__(self, target_name: str, config: Dict, project_path: Path):
         """
@@ -139,7 +147,15 @@ class VPSDeployer(BaseDeployer):
                 errors.append(f"SSH key not found: {self.ssh_key}")
         elif self.auth_method == 'password':
             if not self.password:
-                errors.append("Password authentication selected but 'password' not configured or environment variable not set")
+                errors.append(
+                    "Password authentication selected but 'password' not configured or environment variable not set"
+                )
+            elif not self._check_sshpass():
+                errors.append(
+                    "Password authentication requires 'sshpass'. "
+                    "Install it with: sudo apt install sshpass"
+                )
+
         
         # Validate type-specific config
         if self.deployment_type == 'docker':
