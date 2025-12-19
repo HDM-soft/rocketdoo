@@ -5,7 +5,9 @@ Deploys Odoo modules to VPS servers (Docker or Native)
 
 import os
 import subprocess
+from getpass import getpass
 from pathlib import Path
+import stat
 from typing import List, Dict, Optional
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
@@ -86,6 +88,28 @@ class VPSDeployer(BaseDeployer):
         # Module packager
         exclude_patterns = config.get('modules', {}).get('exclude_patterns', [])
         self.packager = ModulePackager(project_path, exclude_patterns)
+        
+        # Ask for password interactively if required and not set
+        if self.auth_method == 'password' and not self.password:
+            console.print("[yellow]🔐 VPS password not found. Please enter it below.[/yellow]")
+            self.password = getpass("VPS Password: ")
+
+            if not self.password:
+                raise ValueError("Password authentication selected but no password provided")
+
+            # Persist password locally (secure storage)
+            secrets_dir = Path(".rkd/secrets")
+            secrets_dir.mkdir(parents=True, exist_ok=True)
+
+            secret_file = secrets_dir / f"vps_{self.target_name}.env"
+
+            secret_file.write_text(f"VPS_PASSWORD={self.password}\n")
+            secret_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600
+
+            console.print(
+                f"[green]✔ Password stored securely at {secret_file}[/green]"
+            )
+
     
     def validate_config(self) -> List[str]:
         """
