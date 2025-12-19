@@ -42,10 +42,21 @@ class VPSDeployer(BaseDeployer):
         self.port = self.connection.get('port', 22)
         self.user = self.connection.get('user')
         
-        # Authentication method and credentials
-        self.auth_method = self.connection.get('auth_method', 'ssh_key')
+        # Authentication credentials
         self.ssh_key = self.connection.get('ssh_key')
         self.password = self.connection.get('password')
+
+        # Determine authentication method by presence
+        if self.ssh_key and self.password:
+            raise ValueError("Invalid configuration: both ssh_key and password defined")
+
+        if self.ssh_key:
+            self.auth_method = 'ssh_key'
+        elif self.password:
+            self.auth_method = 'password'
+        else:
+            self.auth_method = None
+
         
         # Resolve environment variables in password
         if self.password and self.password.startswith('${') and self.password.endswith('}'):
@@ -93,9 +104,8 @@ class VPSDeployer(BaseDeployer):
         
         # Validate authentication method
         if not self.auth_method:
-            errors.append("Missing 'connection.auth_method'")
-        elif self.auth_method not in ['ssh_key', 'password']:
-            errors.append(f"Invalid 'connection.auth_method': {self.auth_method}")
+            errors.append("No authentication method defined (ssh_key or password required)")
+
         
         # Validate authentication credentials
         if self.auth_method == 'ssh_key':
