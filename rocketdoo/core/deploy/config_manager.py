@@ -163,6 +163,27 @@ class DeployConfigManager:
         self.config_path.write_text(
             yaml.dump(config, sort_keys=False, allow_unicode=True)
         )
+        
+    def interactive_setup(self):
+        """
+        Entry point for deploy init wizard
+        """
+        console.print(
+            Panel(
+                "🚀 Deploy Configuration Wizard\n\n"
+                "This wizard will help you configure deployment targets",
+                border_style="cyan"
+            )
+        )
+
+        config = self.get_default_config()
+
+        self.save(config)
+
+        console.print(
+            f"[green]✓[/green] Base configuration created at [cyan]{self.config_path}[/cyan]"
+        )
+
 
     # -----------------------------------------------------
     # Defaults
