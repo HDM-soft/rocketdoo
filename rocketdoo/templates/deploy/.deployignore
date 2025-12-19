@@ -1,0 +1,75 @@
+# RocketDoo Deploy Ignore
+# Files and directories to exclude from deployment
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Tests
+*/tests/
+*_test.py
+test_*.py
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Documentation (optional, uncomment if you don't want to deploy docs)
+# */static/description/
+# README.md
+# CHANGELOG.md
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*.backup
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node modules (if using JS)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Environment files
+.env
+.env.local
+*.local
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Coverage reports
+htmlcov/
+.coverage
+.pytest_cache/

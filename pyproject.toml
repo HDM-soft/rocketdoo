@@ -1,6 +1,6 @@
 [project]
 name = "rocketdoo"
-version = "2.1.0"
+version = "2.2.0"
 description = "Framework for creating Odoo development environments with Docker and custom templates."
 authors = [
     { name = "Horacio Montaño", email = "horaciomontano@hdmsoft.com.ar" }
@@ -38,6 +38,7 @@ rocketdoo = [
     "templates/**/**/*",
     "templates/**/.vscode/*",
     "templates/**/*.jinja",
+    "templates/deploy/*",
     "templates/**/.*",
     "templates/**/**/.*",
 ]
