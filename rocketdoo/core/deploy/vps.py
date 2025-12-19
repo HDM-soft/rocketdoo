@@ -22,6 +22,7 @@ class VPSDeployer(BaseDeployer):
     
     Supports both Docker and Native Odoo installations
     Uses SSH/SCP for file transfer and remote command execution
+    Supports both SSH key and password authentication
     """
     
     def __init__(self, target_name: str, config: Dict, project_path: Path):
@@ -40,8 +41,18 @@ class VPSDeployer(BaseDeployer):
         self.host = self.connection.get('host')
         self.port = self.connection.get('port', 22)
         self.user = self.connection.get('user')
+        
+        # Authentication method and credentials
+        self.auth_method = self.connection.get('auth_method', 'ssh_key')
         self.ssh_key = self.connection.get('ssh_key')
         self.password = self.connection.get('password')
+        
+        # Resolve environment variables in password
+        if self.password and self.password.startswith('${') and self.password.endswith('}'):
+            env_var = self.password[2:-1]
+            self.password = os.environ.get(env_var)
+            if not self.password:
+                console.print(f"[yellow]Warning: Environment variable {env_var} not set[/yellow]")
         
         # Deployment type (docker or native)
         self.deployment_type = config.get('deployment_type', 'docker')
@@ -80,9 +91,21 @@ class VPSDeployer(BaseDeployer):
         if not self.user:
             errors.append("Missing 'connection.user'")
         
-        # Validate authentication
-        if not self.ssh_key and not self.password:
-            errors.append("Either 'ssh_key' or 'password' must be configured")
+        # Validate authentication method
+        if not self.auth_method:
+            errors.append("Missing 'connection.auth_method'")
+        elif self.auth_method not in ['ssh_key', 'password']:
+            errors.append(f"Invalid 'connection.auth_method': {self.auth_method}")
+        
+        # Validate authentication credentials
+        if self.auth_method == 'ssh_key':
+            if not self.ssh_key:
+                errors.append("SSH key authentication selected but 'ssh_key' not configured")
+            elif not Path(os.path.expanduser(self.ssh_key)).exists():
+                errors.append(f"SSH key not found: {self.ssh_key}")
+        elif self.auth_method == 'password':
+            if not self.password:
+                errors.append("Password authentication selected but 'password' not configured or environment variable not set")
         
         # Validate type-specific config
         if self.deployment_type == 'docker':
@@ -343,10 +366,13 @@ class VPSDeployer(BaseDeployer):
             '-p', str(self.port)
         ])
         
-        # Add SSH key if configured
-        if self.ssh_key:
+        # Add authentication based on method
+        if self.auth_method == 'ssh_key' and self.ssh_key:
             key_path = os.path.expanduser(self.ssh_key)
             ssh_cmd.extend(['-i', key_path])
+        elif self.auth_method == 'password' and self.password:
+            # Use sshpass for password authentication
+            ssh_cmd = ['sshpass', '-p', self.password] + ssh_cmd
         
         # Add user@host
         ssh_cmd.append(f"{self.user}@{self.host}")
@@ -355,14 +381,19 @@ class VPSDeployer(BaseDeployer):
         ssh_cmd.append(command)
         
         # Execute
-        result = subprocess.run(
-            ssh_cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout
-        )
-        
-        return result
+        try:
+            result = subprocess.run(
+                ssh_cmd,
+                capture_output=True,
+                text=True,
+                timeout=timeout
+            )
+            return result
+        except FileNotFoundError as e:
+            if 'sshpass' in str(e):
+                self.log("Error: 'sshpass' not found. Install it with: sudo apt install sshpass", "error")
+                raise
+            raise
     
     def _upload_directory(self, local_path: Path, remote_path: str) -> bool:
         """
@@ -379,11 +410,15 @@ class VPSDeployer(BaseDeployer):
             # Build rsync command
             rsync_cmd = ['rsync', '-avz', '--delete']
             
-            # Add SSH options
+            # Add SSH options based on auth method
             ssh_opts = f"-p {self.port} -o StrictHostKeyChecking=no"
-            if self.ssh_key:
+            
+            if self.auth_method == 'ssh_key' and self.ssh_key:
                 key_path = os.path.expanduser(self.ssh_key)
                 ssh_opts += f" -i {key_path}"
+            elif self.auth_method == 'password' and self.password:
+                # Use sshpass for rsync with password
+                rsync_cmd = ['sshpass', '-p', self.password] + rsync_cmd
             
             rsync_cmd.extend(['-e', f'ssh {ssh_opts}'])
             
@@ -407,6 +442,12 @@ class VPSDeployer(BaseDeployer):
             
         except subprocess.TimeoutExpired:
             self.log("Upload timeout exceeded", "error")
+            return False
+        except FileNotFoundError as e:
+            if 'sshpass' in str(e):
+                self.log("Error: 'sshpass' not found. Install it with: sudo apt install sshpass", "error")
+            else:
+                self.log(f"Upload error: {e}", "error")
             return False
         except Exception as e:
             self.log(f"Upload error: {e}", "error")
@@ -432,9 +473,13 @@ class VPSDeployer(BaseDeployer):
                 '-P', str(self.port)
             ])
             
-            if self.ssh_key:
+            # Add authentication based on method
+            if self.auth_method == 'ssh_key' and self.ssh_key:
                 key_path = os.path.expanduser(self.ssh_key)
                 scp_cmd.extend(['-i', key_path])
+            elif self.auth_method == 'password' and self.password:
+                # Use sshpass for password authentication
+                scp_cmd = ['sshpass', '-p', self.password] + scp_cmd
             
             # Add source and destination
             scp_cmd.append(str(local_path))
