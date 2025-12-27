@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño" and "Elias Braceras"
 
 ## Version: 
-   - "2.2.0"
+   - "2.2.1"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -30,13 +30,13 @@ Odoo Development Framework
    > Ensure you have pip installed, or pipx if necessary.
 
    ``` 
-    pip install rocketdoo==2.0.2.b5 --break-system-packages
+    pip install rocketdoo  --break-system-packages
 
    ```
    or 
 
    ``` 
-    pipx install rocketdoo==2.0.2.b5
+    pipx install rocketdoo
 
    ```
 
@@ -144,6 +144,11 @@ Below we will list the commands that make up the new version of **rocketdoo**
 
 ```
 
+```
+ rocketdoo deploy
+
+```
+
   
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -203,12 +208,20 @@ If so, it suggests alternative ports or allows you to set them manually
  rocketdoo up
 
 ```
-o
+or
 
 ```
  rocketdoo up -d
 
 ```
+
+or
+
+```
+ rkd up -d
+
+```
+
 The -d flag runs the deployment in detached mode.
 
  6. After the environment has been successfully deployed, you can access Odoo from your preferred web browser using:
