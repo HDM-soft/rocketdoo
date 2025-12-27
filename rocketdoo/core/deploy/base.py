@@ -278,12 +278,16 @@ class BaseDeployer(ABC):
             )
         
         # 3. Create backup
-        self.log("Creating backup...", "info")
-        if not self.create_backup(modules):
-            return DeploymentResult(
-                success=False,
-                message="Backup failed"
-            )
+        backup_config = self.config.get('backup', {})
+        if backup_config.get('enabled', True): 
+            self.log("Creating backup...", "info")
+            if not self.create_backup(modules):
+                return DeploymentResult(
+                    success=False,
+                    message="Backup failed"
+                )
+        else:
+            self.log("Backup skipped (disabled)", "info") 
         
         # 4. Pre-deploy check
         self.log("Checking connectivity...", "info")
