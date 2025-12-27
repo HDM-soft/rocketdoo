@@ -190,7 +190,6 @@ class OdooSHDeployer(BaseDeployer):
         Returns:
             DeploymentResult
         """
-
         try:
             # Create temporary directory for repository
             self.temp_repo = Path(tempfile.mkdtemp(prefix='rkd_odoo_sh_'))
@@ -217,7 +216,6 @@ class OdooSHDeployer(BaseDeployer):
                 for module in modules:
                     module_name = module['name']
                     source_path = Path(module['full_path'])
-                    # Modules go to repository root
                     dest_path = self.temp_repo / module_name
                     
                     self.log(f"Copying module: {module_name}", "info")
@@ -228,15 +226,10 @@ class OdooSHDeployer(BaseDeployer):
                         self.log(f"  ERROR: Source path does not exist!", "error")
                         continue
                     
-                    # Remove existing module if present and managed by us
+                    # ✅ LÓGICA SIMPLIFICADA: Siempre actualiza
                     if dest_path.exists():
-                        if (dest_path / '.rkd_managed').exists():
-                            self.log(f"  Removing existing managed module", "debug")
-                            shutil.rmtree(dest_path)
-                        else:
-                            self.log(f"  WARNING: Module exists but not managed by RocketDoo, skipping", "warning")
-                            progress.update(task, advance=1)
-                            continue
+                        self.log(f"  Removing existing module for update", "debug")
+                        shutil.rmtree(dest_path)
                     
                     # Copy module
                     self._copy_module_filtered(source_path, dest_path)

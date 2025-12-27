@@ -247,7 +247,6 @@ class VPSDeployer(BaseDeployer):
             
             # Determine target path on remote server
             if self.deployment_type == 'docker':
-                # For Docker, we need to copy to the host path that's mounted
                 target_path = f"{self.compose_path}/addons"
             else:
                 target_path = self.remote_addons_path
@@ -267,18 +266,20 @@ class VPSDeployer(BaseDeployer):
                 for module in modules:
                     module_name = module['name']
                     local_path = temp_dir / module_name
+                    remote_module_path = f"{target_path}/{module_name}"
                     
+                    # ✅ SIMPLIFICADO: Siempre actualiza (rsync con --delete ya hace esto)
                     # Upload module
-                    success = self._upload_directory(
-                        local_path,
-                        f"{target_path}/{module_name}"
-                    )
+                    success = self._upload_directory(local_path, remote_module_path)
                     
                     if not success:
                         return DeploymentResult(
                             success=False,
                             message=f"Failed to upload module: {module_name}"
                         )
+                    
+                    # Mark as managed by RocketDoo
+                    self._run_ssh_command(f"touch {remote_module_path}/.rkd_managed")
                     
                     progress.update(task, advance=1)
             
