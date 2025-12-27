@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write  # Necesario para trusted publishing desde organizaciones
 
 jobs:
   # Job 1: Tests y validaciones
@@ -96,6 +97,7 @@ jobs:
     if: github.event.pull_request.merged == true
     
     permissions:
+      contents: read
       id-token: write  # IMPORTANTE: Necesario para trusted publishing
     
     environment:
@@ -111,5 +113,3 @@ jobs:
       
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
