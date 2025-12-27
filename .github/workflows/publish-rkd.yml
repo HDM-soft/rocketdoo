@@ -1,0 +1,113 @@
+# Workflow para publicar paquete Python a PyPI
+name: Build and Publish to PyPI
+
+on:
+  push:
+    branches:
+      - main  # Se ejecuta cuando hay push/merge a main
+  release:
+    types: [published]  # También cuando creas un release manual
+
+permissions:
+  contents: read
+
+jobs:
+  # Job 1: Tests y validaciones
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest flake8 black mypy
+          # Instalar dependencias de tu proyecto
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+      
+      - name: Lint with flake8
+        run: |
+          # Detener si hay errores de sintaxis o nombres indefinidos
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Advertencias de complejidad (opcional, puedes comentar)
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      - name: Check code formatting with black
+        run: |
+          black --check .
+        continue-on-error: true  # No falla el build si el formato no es perfecto
+      
+      - name: Run tests
+        run: |
+          # Si tienes tests con pytest
+          pytest
+        continue-on-error: true  # Cambia a false si quieres que falle si hay tests rotos
+
+  # Job 2: Build del paquete
+  build:
+    runs-on: ubuntu-latest
+    needs: test  # Solo se ejecuta si los tests pasan
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necesario para obtener todos los tags
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+      
+      - name: Build distributions
+        run: |
+          python -m build
+      
+      - name: Check distributions
+        run: |
+          twine check dist/*
+      
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dists
+          path: dist/
+
+  # Job 3: Publicar a PyPI
+  publish:
+    runs-on: ubuntu-latest
+    needs: build
+    
+    # Solo publicar si es push a main O un release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' || github.event_name == 'release'
+    
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rocketdoo/
+    
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: release-dists
+          path: dist/
+      
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/
