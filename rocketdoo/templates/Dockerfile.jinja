@@ -17,6 +17,8 @@ RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED
 RUN pip config set global.break-system-packages true
 
 RUN apt update && \
+    apt install -y libssl-dev swig python3-dev gcc && \
+    apt install -y python3-m2crypto && \
     apt install -y git pipx && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
