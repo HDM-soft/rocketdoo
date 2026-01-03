@@ -6,24 +6,42 @@ if [ -f "$file_to_check" ]; then
     # Verificar si el archivo tiene contenido (ignorando líneas vacías y comentarios)
     if grep -q '^[^#[:space:]]' "$file_to_check"; then
         echo "The file $file_to_check exists. Installing python dependencies"
-        output=$(pip install --break-system-packages -r "$file_to_check" 2>&1)
+        
+        # Detectar la versión de pip para decidir si usar --break-system-packages
+        pip_version=$(pip --version | awk '{print $2}')
+        pip_major=$(echo "$pip_version" | cut -d. -f1)
+        pip_minor=$(echo "$pip_version" | cut -d. -f2)
+        
+        # Usar --break-system-packages solo si pip >= 22.1
+        if [ "$pip_major" -gt 22 ] || ([ "$pip_major" -eq 22 ] && [ "$pip_minor" -ge 1 ]); then
+            output=$(pip install --break-system-packages -r "$file_to_check" 2>&1)
+        else
+            # Para versiones antiguas de pip, usar sin la opción
+            output=$(pip install -r "$file_to_check" 2>&1)
+        fi
+        
         exit_code=$?
         
         if [ $exit_code -ne 0 ]; then
-            echo "Warning: Unable to install at least one dependency of $file_to_check."
+            echo ""
+            echo "=========================================="
+            echo "WARNING: Unable to install dependencies"
+            echo "=========================================="
+            echo "File: $file_to_check"
+            echo ""
+            echo "Error details:"
             echo "$output"
-            echo "Please log into the container and install them manually or modify the dockerfile or docker compose."
-            echo "(script returned an error)"
-            
-            # Preguntar si se debe continuar o usar --force
-            if [[ "$*" == *"--force"* ]]; then
-                echo "Continuing due to --force flag..."
-                exit 0
-            else
-                echo ""
-                echo "Run again with '--force' to ignore script errors"
-                exit 1
-            fi
+            echo ""
+            echo "ACTION REQUIRED:"
+            echo "Please log into the container and install the dependencies manually:"
+            echo "  docker exec -it <container_name> bash"
+            echo "  pip install -r $file_to_check"
+            echo ""
+            echo "Or modify your Dockerfile/docker-compose to handle these dependencies."
+            echo "=========================================="
+            echo ""
+            # No detenemos el proceso, solo advertimos
+            exit 0
         else
             echo "All dependencies installed successfully!"
         fi
