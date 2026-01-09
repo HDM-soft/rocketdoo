@@ -179,6 +179,7 @@ class VPSDeployer(BaseDeployer):
         - SSH connectivity
         - Remote paths exist
         - Required commands available
+        - Sudo permissions (if needed)
         
         Returns:
             True if all checks pass
@@ -194,6 +195,29 @@ class VPSDeployer(BaseDeployer):
             
             self.log("✓ SSH connection established", "success")
             
+            # Check sudo permissions if using native deployment with restart enabled
+            if (self.deployment_type == 'native' and 
+                self.post_deploy_config.get('restart_service', False)):
+                self.log("Checking sudo permissions...", "info")
+                
+                # Test sudo without password (passwordless sudo)
+                result = self._run_ssh_command("sudo -n true 2>&1")
+                
+                if result.returncode != 0:
+                    if self.auth_method == 'password':
+                        self.log("✓ Sudo requires password (will use authentication password)", "info")
+                    else:
+                        self.log(
+                            "⚠️  Sudo requires password but SSH key authentication is used.\n"
+                            "   Configure passwordless sudo for service restart or disable 'restart_service'.\n"
+                            "   Run on server: sudo visudo\n"
+                            f"   Add: {self.user} ALL=(ALL) NOPASSWD: /bin/systemctl restart {self.service_name}",
+                            "warning"
+                        )
+                        # Don't fail, just warn
+                else:
+                    self.log("✓ Passwordless sudo available", "success")
+            
             # Check if remote path exists
             if self.deployment_type == 'docker':
                 remote_path = f"{self.compose_path}"
@@ -206,7 +230,7 @@ class VPSDeployer(BaseDeployer):
                 self.log(f"Warning: Remote path {remote_path} does not exist", "warning")
                 # Try to create it
                 self.log(f"Attempting to create {remote_path}...", "info")
-                create_result = self._run_ssh_command(f"sudo mkdir -p {remote_path}")
+                create_result = self._run_ssh_command(f"sudo mkdir -p {remote_path}", use_sudo=True)
                 if create_result.returncode != 0:
                     self.log(f"Failed to create remote path: {create_result.stderr}", "error")
                     return False
@@ -268,7 +292,6 @@ class VPSDeployer(BaseDeployer):
                     local_path = temp_dir / module_name
                     remote_module_path = f"{target_path}/{module_name}"
                     
-                    # ✅ SIMPLIFICADO: Siempre actualiza (rsync con --delete ya hace esto)
                     # Upload module
                     success = self._upload_directory(local_path, remote_module_path)
                     
@@ -332,9 +355,10 @@ class VPSDeployer(BaseDeployer):
                             message="Failed to restart Docker container"
                         )
                 else:
-                    # Restart systemd service
+                    # Restart systemd service with sudo (handles password if needed)
                     result = self._run_ssh_command(
-                        f"sudo systemctl restart {self.service_name}"
+                        f"systemctl restart {self.service_name}",
+                        use_sudo=True
                     )
                     
                     if result.returncode != 0:
@@ -397,17 +421,27 @@ class VPSDeployer(BaseDeployer):
                 message=f"Post-deploy error: {e}"
             )
     
-    def _run_ssh_command(self, command: str, timeout: int = 300) -> subprocess.CompletedProcess:
+    def _run_ssh_command(self, command: str, timeout: int = 300, use_sudo: bool = False) -> subprocess.CompletedProcess:
         """
         Execute command on remote server via SSH
         
         Args:
             command: Command to execute
             timeout: Command timeout in seconds
+            use_sudo: If True, prepend sudo to command and handle password if needed
             
         Returns:
             CompletedProcess with result
         """
+        # Handle sudo with password authentication
+        if use_sudo:
+            if self.auth_method == 'password' and self.password:
+                # Use echo password | sudo -S for password-based sudo
+                command = f"echo '{self.password}' | sudo -S {command}"
+            else:
+                # Try passwordless sudo or rely on SSH key having sudo access
+                command = f"sudo {command}"
+        
         ssh_cmd = ['ssh']
         
         # Add SSH options
@@ -606,7 +640,7 @@ class VPSDeployer(BaseDeployer):
             if self.deployment_type == 'docker':
                 self._run_ssh_command(f"cd {self.compose_path} && docker-compose restart {self.container_name}")
             else:
-                self._run_ssh_command(f"sudo systemctl restart {self.service_name}")
+                self._run_ssh_command(f"systemctl restart {self.service_name}", use_sudo=True)
             
             self.log("✓ Rollback completed", "success")
             
