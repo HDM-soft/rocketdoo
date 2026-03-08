@@ -19,6 +19,8 @@ from rocketdoo.deploy_cli import (
     deploy_run, 
     validate_modules
 )
+from rocketdoo.pack_environment import pack_environment
+from rocketdoo.unpack_environment import unpack_environment
 
 # Detect the command name used to invoke the CLI
 PROG_NAME = "rkd" if "rkd" in sys.argv[0] else "rocketdoo"
@@ -424,6 +426,12 @@ main.add_command(pause)
 main.add_command(logs)
 main.add_command(build)
 main.add_command(delete_command)
+
+# ============================================================
+# 📦 Register Share/Unpack commands
+# ============================================================
+main.add_command(pack_environment, name="pack")
+main.add_command(unpack_environment, name="unpack")
 
 # ============================================================
 # 🚀 Register Deploy commands as Rocketdoo subcommands
