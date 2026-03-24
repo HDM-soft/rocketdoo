@@ -108,37 +108,67 @@ def _backup_database(db_container: str, db_name: str, output_path: Path) -> bool
 def _backup_filestore(odoo_container: str, db_name: str, output_path: Path) -> bool:
     """
     Copies and compresses the Odoo filestore from the container to the host.
-    Filestore path inside container: /var/lib/odoo/.local/share/Odoo/filestore/<db_name>/
-    """
-    filestore_path = f"/var/lib/odoo/.local/share/Odoo/filestore/{db_name}"
-    console.print(f"  [dim]Copying filestore from container...[/dim]")
-    try:
-        check = subprocess.run(
-            ["docker", "exec", odoo_container, "test", "-d", filestore_path],
-            capture_output=True
-        )
-        if check.returncode != 0:
-            console.print(f"  [yellow]⚠[/yellow]  Filestore not found at [dim]{filestore_path}[/dim] — skipping.")
-            return True  # Not a fatal error
 
+    Supports multiple filestore layouts:
+      - /var/lib/odoo/.local/share/Odoo/filestore/<db_name>
+      - /var/lib/odoo/filestore/<db_name>
+    """
+    console.print(f"  [dim]Copying filestore from container...[/dim]")
+
+    POSSIBLE_PATHS = [
+        f"/var/lib/odoo/.local/share/Odoo/filestore/{db_name}",
+        f"/var/lib/odoo/filestore/{db_name}",
+    ]
+
+    filestore_path = None
+    filestore_base = None
+
+    try:
+        # ── Detect filestore path dynamically ──
+        for path in POSSIBLE_PATHS:
+            check = subprocess.run(
+                ["docker", "exec", odoo_container, "test", "-d", path],
+                capture_output=True
+            )
+            if check.returncode == 0:
+                filestore_path = path
+                filestore_base = str(Path(path).parent)
+                break
+
+        if not filestore_path:
+            console.print(
+                f"  [yellow]⚠[/yellow]  Filestore not found for database "
+                f"[cyan]{db_name}[/cyan] in any known location — skipping."
+            )
+            return True  # Not fatal
+
+        console.print(f"  [dim]Detected filestore path:[/dim] [cyan]{filestore_path}[/cyan]")
+
+        # ── Compress filestore ──
         with open(output_path, "wb") as f:
             result = subprocess.run(
                 [
                     "docker", "exec", odoo_container,
                     "tar", "-czf", "-", "-C",
-                    "/var/lib/odoo/.local/share/Odoo/filestore/",
+                    filestore_base,
                     db_name
                 ],
                 stdout=f,
                 stderr=subprocess.PIPE
             )
+
         if result.returncode != 0:
             console.print(f"  [red]✗ Error copying filestore:[/red] {result.stderr.decode()}")
             return False
 
         size_mb = output_path.stat().st_size / (1024 * 1024)
-        console.print(f"  [green]✓[/green] Filestore compressed: [yellow]{output_path.name}[/yellow] ({size_mb:.1f} MB)")
+        console.print(
+            f"  [green]✓[/green] Filestore compressed: "
+            f"[yellow]{output_path.name}[/yellow] ({size_mb:.1f} MB)"
+        )
+
         return True
+
     except Exception as e:
         console.print(f"  [red]✗ Exception during filestore backup:[/red] {e}")
         return False
@@ -199,11 +229,11 @@ def _verify_no_ssh_in_zip(zip_path: Path) -> list[str]:
 def _create_zip(project_dir: Path, zip_path: Path, backup_dir: Path, exclude_dirs: list[str]) -> int:
     """
     Creates the ZIP archive of the full environment.
-    Excludes: .ssh/, __pycache__, .git/, node_modules, and any extra dirs provided.
+    Excludes: .ssh/, __pycache__, node_modules, and any extra dirs provided.
     Includes the backup directory contents under rkd_backups/.
     Returns the number of files included.
     """
-    ALWAYS_EXCLUDE = {".ssh", "__pycache__", ".git", "node_modules", ".mypy_cache"}
+    ALWAYS_EXCLUDE = {".ssh", "__pycache__", "node_modules", ".mypy_cache"}
     excluded = ALWAYS_EXCLUDE | set(exclude_dirs)
 
     file_count = 0

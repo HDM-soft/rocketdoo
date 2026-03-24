@@ -206,6 +206,30 @@ def _wait_for_postgres(db_container: str, max_wait: int = 60) -> bool:
     return False
 
 
+def _wait_for_odoo_volume(odoo_container: str, max_wait: int = 90) -> bool:
+    """
+    Waits until /var/lib/odoo is mounted and accessible inside the Odoo container.
+
+    Replaces time.sleep(5): the Docker volume may take several seconds to become
+    available after the container starts, especially on first run. Without this
+    check the filestore restore would silently fail writing to a non-existent path.
+    """
+    console.print(f"  [dim]Waiting for Odoo volume to be ready (max {max_wait}s)...[/dim]")
+    for i in range(max_wait):
+        result = subprocess.run(
+            ["docker", "exec", odoo_container, "test", "-d", "/var/lib/odoo"],
+            capture_output=True
+        )
+        if result.returncode == 0:
+            console.print(f"  [green]✓[/green] Odoo volume is ready.")
+            return True
+        time.sleep(1)
+        if i % 15 == 14:
+            console.print(f"  [dim]  ...{i + 1}s[/dim]")
+    console.print(f"  [yellow]⚠[/yellow]  Odoo volume not ready after {max_wait}s.")
+    return False
+
+
 def _restore_database(db_container: str, dump_path: Path) -> str | None:
     """
     Restores the PostgreSQL dump into the container.
@@ -264,9 +288,16 @@ def _restore_database(db_container: str, dump_path: Path) -> str | None:
 
 
 def _restore_filestore(odoo_container: str, filestore_tar: Path, db_name: str) -> bool:
-    """Restores the Odoo filestore into the web container."""
+    """Restores the Odoo filestore into the web container (supports multiple layouts)."""
     console.print(f"  [dim]Restoring filestore for [cyan]{db_name}[/cyan]...[/dim]")
+
+    POSSIBLE_BASES = [
+        "/var/lib/odoo/.local/share/Odoo/filestore",
+        "/var/lib/odoo/filestore",
+    ]
+
     try:
+        # ── 1. Copy tar to container ──
         copy_result = subprocess.run(
             ["docker", "cp", str(filestore_tar), f"{odoo_container}:/tmp/rkd_filestore.tar.gz"],
             capture_output=True, text=True
@@ -275,23 +306,67 @@ def _restore_filestore(odoo_container: str, filestore_tar: Path, db_name: str) -
             console.print(f"  [yellow]⚠[/yellow]  Could not copy filestore: {copy_result.stderr}")
             return False
 
-        filestore_base = "/var/lib/odoo/.local/share/Odoo/filestore"
+        # ── 2. Detect filestore base ──
+        filestore_base = None
+
+        for base in POSSIBLE_BASES:
+            check = subprocess.run(
+                ["docker", "exec", odoo_container, "test", "-d", base],
+                capture_output=True
+            )
+            if check.returncode == 0:
+                filestore_base = base
+                break
+
+        # fallback → usar layout simple
+        if not filestore_base:
+            filestore_base = "/var/lib/odoo/filestore"
+            console.print(
+                f"  [yellow]⚠[/yellow]  Filestore base not found. Using fallback: "
+                f"[cyan]{filestore_base}[/cyan]"
+            )
+
+        console.print(f"  [dim]Using filestore base:[/dim] [cyan]{filestore_base}[/cyan]")
+
+        # ── 3. Ensure base exists ──
         subprocess.run(
             ["docker", "exec", odoo_container, "mkdir", "-p", filestore_base],
             capture_output=True
         )
 
+        # ── 4. Clean existing filestore (VERY IMPORTANT) ──
+        console.print(f"  [dim]Cleaning existing filestore for {db_name}...[/dim]")
+        subprocess.run(
+            ["docker", "exec", odoo_container, "rm", "-rf", f"{filestore_base}/{db_name}"],
+            capture_output=True
+        )
+
+        # ── 5. Extract tar ──
         extract_result = subprocess.run(
-            ["docker", "exec", odoo_container,
-             "tar", "-xzf", "/tmp/rkd_filestore.tar.gz", "-C", filestore_base],
+            [
+                "docker", "exec", odoo_container,
+                "tar", "-xzf", "/tmp/rkd_filestore.tar.gz",
+                "-C", filestore_base
+            ],
             capture_output=True, text=True
         )
+
         if extract_result.returncode != 0:
             console.print(f"  [yellow]⚠[/yellow]  Error extracting filestore: {extract_result.stderr}")
             return False
 
-        console.print(f"  [green]✓[/green] Filestore restored inside the container.")
+        # ── 6. Fix permissions ──
+        subprocess.run(
+            [
+                "docker", "exec", odoo_container,
+                "chown", "-R", "odoo:odoo", f"{filestore_base}/{db_name}"
+            ],
+            capture_output=True
+        )
+
+        console.print(f"  [green]✓[/green] Filestore restored successfully.")
         return True
+
     except Exception as e:
         console.print(f"  [yellow]⚠[/yellow]  Exception while restoring filestore: {e}")
         return False
@@ -451,11 +526,18 @@ def unpack_environment(no_restore, build):
                     console.print("[bold]🗂️  Restoring filestore:[/bold]")
                     console.print("[dim]  Starting web service to restore filestore...[/dim]")
                     subprocess.run(["docker", "compose", "up", "-d", "web"], capture_output=True)
-                    time.sleep(5)
 
                     odoo_container = _get_odoo_container_name(project_dir)
                     if odoo_container:
-                        _restore_filestore(odoo_container, filestore_tar, restored_db)
+                        volume_ready = _wait_for_odoo_volume(odoo_container)
+                        if volume_ready:
+                            _restore_filestore(odoo_container, filestore_tar, restored_db)
+                        else:
+                            console.print(
+                                "[yellow]⚠[/yellow]  Skipping filestore restore: "
+                                "Odoo volume was not ready in time.\n"
+                                "[dim]  Try running the restore manually after the environment is up.[/dim]"
+                            )
 
         _launch_environment(build=build)
     else:
