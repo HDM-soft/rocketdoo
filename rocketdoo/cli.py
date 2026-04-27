@@ -6,6 +6,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich import box
+from .gui import start_gui
 from .scaffold import scaffold_project
 from .init_project import init_project
 from .project_info import get_project_info, project_exists
@@ -26,6 +27,7 @@ from rocketdoo.unpack_environment import unpack_environment
 PROG_NAME = "rkd" if "rkd" in sys.argv[0] else "rocketdoo"
 
 console = Console()
+
 
 def find_and_delete_identifiers(root_dir, dry_run=False, verbose=True):
     """
@@ -202,7 +204,7 @@ def scaffold(ctx, template, force):
 
 @main.command()
 @click.option('--docker-compose', '-d', is_flag=True, help='Generate docker-compose.yml configuration')
-@click.option('--odoo-version', '-o', default='16.0', type=click.Choice(['14.0', '15.0', '16.0', '17.0']),
+@click.option('--odoo-version', '-o', default='16.0', type=click.Choice(['14.0', '15.0', '16.0', '17.0','18.0','19.0']),
               help='Odoo version to configure for the project')
 @click.pass_context
 def init(ctx, docker_compose, odoo_version):
@@ -445,6 +447,16 @@ main.add_command(list_modules, name="deploy-list")
 main.add_command(deploy_run, name="deploy-run")
 main.add_command(deploy_config, name="deploy-config")
 main.add_command(validate_modules, name="deploy-validate")
+
+@main.command()
+def gui():
+    """Starts the Rocketdoo Graphical User Interface (GUI)"""
+    try:
+        console.print("[green]🚀 Starting Rocketdoo GUI...[/green]")
+        start_gui()
+    except Exception as e:
+        console.print(f"[red]❌ Error starting GUI: {e}[/red]")
+        console.print("[yellow]Make sure you are using an environment with graphical support (e.g., WSLg on Windows 11).[/yellow]")
 
 if __name__ == "__main__":
     main()
