@@ -28,11 +28,17 @@ givent_port = 8072
 ; max_cron_threads = 2
 ; osv_memory_age_limit = 1.0
 ; osv_memory_count_limit = False
+{% if enable_mailpit %}
+smtp_port = 1025
+smtp_server = mailpit
+smtp_ssl = False
+{% else %}
 ; smtp_password = False
 ; smtp_port = 25
 ; smtp_server = localhost
 ; smtp_ssl = False
 ; smtp_user = False
+{% endif %}
 ; workers = 4
 ; xmlrpc = True
 ; xmlrpc_interface = 

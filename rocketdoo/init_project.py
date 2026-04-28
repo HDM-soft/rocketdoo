@@ -7,6 +7,7 @@ import questionary
 from rocketdoo.welcome import show_welcome
 from rocketdoo.core.port_validation import validate_port, find_available_port
 from rocketdoo.core.edition_setup import setup_enterprise_edition
+from rocketdoo.core.port_validation import validate_port, find_available_port, is_port_in_use
 from rocketdoo.core.ssh_manager import (
     list_private_keys,
     copy_key_to_build_context,
@@ -226,6 +227,13 @@ def init_project():
                 if not questionary.confirm("Would you like to add another repository?", default=False).ask():
                     break
 
+    # ========== QUESTION: MAILPIT ==========
+    click.echo("\n📧 Do you want to include Mailpit to catch outgoing emails (Recommended for Dev)?")
+    enable_mailpit = questionary.confirm(
+        "Enable Mailpit?",
+        default=True
+    ).ask()
+    
     db_versions = ["13", "14", "15", "16"]
     click.echo("\n📦 Select the PostgreSQL version (use ↑↓ and ENTER):")
     db_version = questionary.select(
@@ -245,6 +253,11 @@ def init_project():
     
     # Ports validations
     odoo_port, vsc_port = prompt_ports_until_valid()
+    
+    mailpit_port = 8025
+    if enable_mailpit:
+        if is_port_in_use(8025):
+            mailpit_port = find_available_port(8026)
 
     # Containers names
     odoo_container = f"odoo-{project_name}"
@@ -266,6 +279,9 @@ def init_project():
         "use_private_repos": use_private_repos,
         "ssh_key_name": selected_ssh_key,
         "use_third_party_repos": use_third_party_repos,
+        "use_third_party_repos": use_third_party_repos,
+        "enable_mailpit": enable_mailpit,
+        "mailpit_port": mailpit_port,
     }
 
     # === Generate files ===
@@ -345,6 +361,51 @@ def init_project():
         except Exception as e:
             click.echo(f"\n⚠️  Warning: Gitman could not be fully configured: {e}")
             click.echo("You can configure it manually later.")
+        
+    if enable_mailpit:
+        
+        mailpit_module_dir = os.path.join(os.getcwd(), "addons", "setup_mailpit")
+        mailpit_data_dir = os.path.join(mailpit_module_dir, "data")
+        
+        # Crear los directorios (addons/setup_mailpit/data)
+        os.makedirs(mailpit_data_dir, exist_ok=True)
+        
+        # 1. Crear __init__.py
+        with open(os.path.join(mailpit_module_dir, "__init__.py"), "w", encoding="utf-8") as f:
+            f.write("")
+            
+        # 2. Crear __manifest__.py
+        manifest_content = """{
+    'name': 'Setup Mailpit',
+    'version': '1.0',
+    'category': 'Hidden',
+    'summary': 'Configura automáticamente el servidor SMTP de Mailpit para desarrollo',
+    'depends': ['base', 'mail'],
+    'data': [
+        'data/ir_mail_server.xml',
+    ],
+    'installable': True,
+    'auto_install': True,
+}"""
+        with open(os.path.join(mailpit_module_dir, "__manifest__.py"), "w", encoding="utf-8") as f:
+            f.write(manifest_content)
+            
+        # 3. Crear ir_mail_server.xml (¡Fijo en 1025!)
+        xml_content = """<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="mail_server_mailpit_dev" model="ir.mail_server">
+            <field name="name">Mailpit Local Dev</field>
+            <field name="smtp_host">mailpit</field>
+            <field name="smtp_port">1025</field>
+            <field name="smtp_encryption">none</field>
+            <field name="sequence">10</field>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>"""
+        with open(os.path.join(mailpit_data_dir, "ir_mail_server.xml"), "w", encoding="utf-8") as f:
+            f.write(xml_content)
 
     # Final summary
     click.echo("\n" + "="*60)
@@ -360,6 +421,9 @@ def init_project():
     
     if odoo_edition == "Enterprise":
         click.echo("\n🏢 Enterprise Edition available")
+        
+    if enable_mailpit:
+        click.echo(f"\n📧 Mailpit Web UI: http://localhost:{mailpit_port}")
     
     if use_third_party_repos:
         if gitman_sources:

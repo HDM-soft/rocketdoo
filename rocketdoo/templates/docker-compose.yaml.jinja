@@ -7,6 +7,9 @@ services:
     container_name: {{odoo_container}}
     depends_on:
       - db
+{% if enable_mailpit %}
+      - mailpit
+{% endif %}
     ports:
       - "{{odoo_port}}:8069"
       - "{{vsc_port}}:8888"
@@ -29,6 +32,17 @@ services:
       - {{project_name}}-db-data:/var/lib/postgresql/data/pgdata
     secrets:
       - postgresql_password
+{% if enable_mailpit %}
+  mailpit:
+    image: axllent/mailpit
+    container_name: mailpit-{{project_name}}
+    restart: {{restart}}
+    ports:
+      - "{{mailpit_port}}:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+{% endif %}
+
 volumes:
   {{project_name}}-web-data:
   {{project_name}}-db-data:
