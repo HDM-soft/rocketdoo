@@ -30,7 +30,8 @@ class RocketdooGUI(ctk.CTk):
         self.btn_scaffold = ctk.CTkButton(self.sidebar_frame, text="1. Scaffold", command=lambda: self.run_command(["rkd", "scaffold"]))
         self.btn_scaffold.grid(row=1, column=0, padx=20, pady=10)
 
-        self.btn_init = ctk.CTkButton(self.sidebar_frame, text="2. Init", command=lambda: self.run_command(["rkd", "init"]))
+        # SE AÑADIÓ: interactive=True para el comando init
+        self.btn_init = ctk.CTkButton(self.sidebar_frame, text="2. Init", command=lambda: self.run_command(["rkd", "init"], interactive=True))
         self.btn_init.grid(row=2, column=0, padx=20, pady=10)
 
         self.btn_up = ctk.CTkButton(self.sidebar_frame, text="▶ Start (Up)", command=lambda: self.run_command(["rkd", "up", "-d"]), fg_color="green")
@@ -60,12 +61,29 @@ class RocketdooGUI(ctk.CTk):
         self.console_textbox.see("end")  # Auto-scroll to end
         self.console_textbox.configure(state="disabled")
 
-    def run_command(self, cmd_list):
+    def run_command(self, cmd_list, interactive=False):
         """Executes a command in a separate thread to avoid blocking the GUI."""
         self.log_to_console(f"\n> {' '.join(cmd_list)}\n")
         
-        # Disable buttons while running a command (optional, recommended for init/scaffold)
+        # Lógica para comandos que necesitan pedir información al usuario (como init)
+        if interactive:
+            self.log_to_console("⚠️  Este comando es interactivo.\n👉 Por favor, ve a la terminal desde la cual abriste esta GUI para completar el asistente.\n")
+            
+            def interactive_task():
+                try:
+                    # Ejecuta el comando SIN redirigir stdout/stderr. 
+                    # Esto hace que las preguntas aparezcan en la consola nativa.
+                    process = subprocess.Popen(cmd_list)
+                    process.wait()
+                    self.after(0, self.log_to_console, f"\n[Process finished with exit code {process.returncode}]\n")
+                except Exception as e:
+                    self.after(0, self.log_to_console, f"\n[Execution error: {str(e)}]\n")
+            
+            # Ejecutamos el hilo interactivo y salimos
+            threading.Thread(target=interactive_task, daemon=True).start()
+            return
         
+        # Lógica original para comandos normales sin interacción (scaffold, up, stop, down)
         def task():
             try:
                 # Use subprocess to call the real rkd CLI
