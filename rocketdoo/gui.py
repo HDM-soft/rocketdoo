@@ -21,7 +21,8 @@ class RocketdooGUI(ctk.CTk):
         # --- SIDE PANEL (Buttons) ---
         self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(6, weight=1) # Bottom spacing
+        
+        self.sidebar_frame.grid_rowconfigure(7, weight=1) 
 
         self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Rocketdoo", font=ctk.CTkFont(size=20, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
@@ -30,18 +31,20 @@ class RocketdooGUI(ctk.CTk):
         self.btn_scaffold = ctk.CTkButton(self.sidebar_frame, text="1. Scaffold", command=lambda: self.run_command(["rkd", "scaffold"]))
         self.btn_scaffold.grid(row=1, column=0, padx=20, pady=10)
 
-        # SE AÑADIÓ: interactive=True para el comando init
         self.btn_init = ctk.CTkButton(self.sidebar_frame, text="2. Init", command=lambda: self.run_command(["rkd", "init"], interactive=True))
         self.btn_init.grid(row=2, column=0, padx=20, pady=10)
 
-        self.btn_up = ctk.CTkButton(self.sidebar_frame, text="▶ Start (Up)", command=lambda: self.run_command(["rkd", "up", "-d"]), fg_color="green")
+        self.btn_up = ctk.CTkButton(self.sidebar_frame, text="Start (Up)", command=lambda: self.run_command(["rkd", "up", "-d"]), fg_color="green")
         self.btn_up.grid(row=3, column=0, padx=20, pady=10)
 
+        self.btn_restart = ctk.CTkButton(self.sidebar_frame, text="Restart", command=lambda: self.run_command(["rkd", "restart"]), fg_color="#1D4ED8") #
+        self.btn_restart.grid(row=4, column=0, padx=20, pady=10)
+
         self.btn_stop = ctk.CTkButton(self.sidebar_frame, text="Stop", command=lambda: self.run_command(["rkd", "stop"]), fg_color="orange")
-        self.btn_stop.grid(row=4, column=0, padx=20, pady=10)
+        self.btn_stop.grid(row=5, column=0, padx=20, pady=10)
         
         self.btn_down = ctk.CTkButton(self.sidebar_frame, text="Destroy (Down)", command=lambda: self.run_command(["rkd", "down", "-v"]), fg_color="red")
-        self.btn_down.grid(row=5, column=0, padx=20, pady=10)
+        self.btn_down.grid(row=6, column=0, padx=20, pady=10)
 
         # --- MAIN PANEL (Console) ---
         self.console_frame = ctk.CTkFrame(self)
