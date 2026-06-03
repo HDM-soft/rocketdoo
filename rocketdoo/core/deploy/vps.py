@@ -271,7 +271,7 @@ class VPSDeployer(BaseDeployer):
             
             # Determine target path on remote server
             if self.deployment_type == 'docker':
-                target_path = f"{self.compose_path}/addons"
+                target_path = self.addons_mount
             else:
                 target_path = self.remote_addons_path
             
@@ -622,7 +622,7 @@ class VPSDeployer(BaseDeployer):
             
             # Upload backup to server
             if self.deployment_type == 'docker':
-                target_path = f"{self.compose_path}/addons"
+                target_path = self.addons_mount
             else:
                 target_path = self.remote_addons_path
             
@@ -635,10 +635,11 @@ class VPSDeployer(BaseDeployer):
                     )
                     if not success:
                         self.log(f"Failed to restore module: {module_dir.name}", "error")
-            
+
             # Restart service
             if self.deployment_type == 'docker':
                 self._run_ssh_command(f"cd {self.compose_path} && docker-compose restart {self.container_name}")
+
             else:
                 self._run_ssh_command(f"systemctl restart {self.service_name}", use_sudo=True)
             
