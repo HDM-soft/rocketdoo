@@ -8,8 +8,10 @@ from .instances import router as instances_router
 from .setup import router as setup_router
 from .deploy_ops import router as deploy_router
 from .pack_ops import router as pack_router
+from .workspace import router as workspace_router
 
 router = APIRouter()
+router.include_router(workspace_router, prefix="/workspace", tags=["workspace"])
 router.include_router(project_router, prefix="/project", tags=["project"])
 router.include_router(docker_router, prefix="/docker", tags=["docker"])
 router.include_router(modules_router, prefix="/modules", tags=["modules"])
