@@ -962,7 +962,7 @@ const Setup = {
             <div>
               <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Odoo version</label>
               <select v-model="form.odoo_version" class="input">
-                <option>15.0</option><option>16.0</option><option>17.0</option><option>18.0</option>
+                <option>15.0</option><option>16.0</option><option>17.0</option><option>18.0</option><option>19.0</option>
               </select>
             </div>
             <div>
@@ -975,7 +975,7 @@ const Setup = {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
               <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">PostgreSQL version</label>
-              <select v-model="form.db_version" class="input"><option>14</option><option>15</option><option>16</option></select>
+              <select v-model="form.db_version" class="input"><option>13</option><option>14</option><option>15</option><option>16</option></select>
             </div>
             <div>
               <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Restart policy</label>
@@ -1340,16 +1340,17 @@ const Projects = {
           currentPath.value = r.path
           customPath.value = r.path
           projects.value = projects.value.map(p => ({ ...p, is_current: p.path === r.path }))
-          notify('Switched to ' + r.name)
-        } else notify(r.error || 'Failed', 'err')
+          notify('Project "' + r.name + '" opened — switching to Dashboard')
+          setTimeout(() => { view.value = 'dashboard' }, 400)
+        } else notify(r.error || 'Failed to open project', 'err')
       } catch(e) { notify(e.message, 'err') }
-      finally { delete navBusy.value[path] }
+      finally { navBusy.value[path] = false }
     }
 
     async function navigateCustom() {
       if (!customPath.value.trim()) return
-      await navigate(customPath.value.trim())
       editing.value = false
+      await navigate(customPath.value.trim())
     }
 
     async function createProject() {
