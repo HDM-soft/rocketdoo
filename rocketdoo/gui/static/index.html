@@ -238,9 +238,11 @@ const LogViewer = {
   props: { name: String },
   setup(props) {
     const lines = ref([])
-    const live = ref(false)
-    const el = ref(null)
-    let ws = null
+    const live  = ref(false)
+    const el    = ref(null)
+    let ws      = null
+    let pending = []
+    let raf     = null
 
     function lineClass(l) {
       const lc = l.toLowerCase()
@@ -249,21 +251,38 @@ const LogViewer = {
       return ''
     }
 
+    function flush() {
+      raf = null
+      if (!pending.length) return
+      lines.value.push(...pending.splice(0))
+      if (lines.value.length > 1500) lines.value.splice(0, lines.value.length - 1300)
+      nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+    }
+
     function connect() {
       if (ws) ws.close()
+      if (raf) { cancelAnimationFrame(raf); raf = null }
+      pending = []
       lines.value = []
       live.value = true
       const proto = location.protocol==='https:'?'wss':'ws'
       ws = new WebSocket(`${proto}://${location.host}/ws/logs/${props.name}`)
       ws.onmessage = e => {
-        lines.value.push(e.data)
-        if (lines.value.length > 1500) lines.value.splice(0, 200)
-        nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+        pending.push(e.data)
+        if (!raf) raf = requestAnimationFrame(flush)
       }
-      ws.onclose = () => { live.value = false }
+      ws.onclose = () => {
+        live.value = false
+        if (raf) { cancelAnimationFrame(raf); raf = null }
+        if (pending.length) flush()
+      }
       ws.onerror = () => { live.value = false; lines.value.push('[connection error]') }
     }
-    function stop() { if (ws) ws.close(); live.value = false }
+    function stop() {
+      if (raf) { cancelAnimationFrame(raf); raf = null }
+      if (ws) ws.close()
+      live.value = false
+    }
 
     onMounted(connect)
     onUnmounted(stop)
@@ -302,7 +321,18 @@ const DockerTerminal = {
     const running  = ref(true)
     const exitCode = ref(null)
     const el       = ref(null)
-    let ws = null
+    let ws      = null
+    let pending = []   // non-reactive line buffer
+    let raf     = null // requestAnimationFrame handle
+
+    // Flush the buffer into reactive state in one batch — max 60 updates/sec
+    function flush() {
+      raf = null
+      if (!pending.length) return
+      lines.value.push(...pending.splice(0))
+      if (lines.value.length > 2000) lines.value.splice(0, lines.value.length - 1700)
+      nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+    }
 
     onMounted(() => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -310,19 +340,31 @@ const DockerTerminal = {
       ws.onmessage = e => {
         const txt = e.data
         if (txt.startsWith('\x00exit:')) {
+          // Drain any buffered lines before showing the exit banner
+          if (raf) { cancelAnimationFrame(raf); raf = null }
+          if (pending.length) flush()
           exitCode.value = parseInt(txt.slice(6))
           running.value  = false
           emit('done', exitCode.value)
         } else {
-          if (txt.trim()) lines.value.push(txt)
-          if (lines.value.length > 2000) lines.value.splice(0, 300)
-          nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+          if (txt.trim()) pending.push(txt)
+          if (!raf) raf = requestAnimationFrame(flush)
         }
       }
-      ws.onclose = () => { running.value = false }
-      ws.onerror = () => { running.value = false; lines.value.push('[WebSocket error — is the server running?]') }
+      ws.onclose = () => {
+        running.value = false
+        if (raf) { cancelAnimationFrame(raf); raf = null }
+        if (pending.length) flush()
+      }
+      ws.onerror = () => {
+        running.value = false
+        lines.value.push('[WebSocket error — is the server running?]')
+      }
     })
-    onUnmounted(() => { if (ws) ws.close() })
+    onUnmounted(() => {
+      if (raf) cancelAnimationFrame(raf)
+      if (ws) ws.close()
+    })
 
     function lineClass(l) {
       const lc = l.toLowerCase()
