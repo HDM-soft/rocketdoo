@@ -12,16 +12,16 @@ Odoo Development Framework
 
 ## Developed by:
 
-   - "Horacio Montaño" and "Elias Braceras"
+   - "Horacio Montaño"
 
 ## Version: 
-   - "2.3.1"
+   - "3.0.0"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ### Simple Description:
 
-  RKD, also known as ROCKETDOO, is version 2 of the framework designed for assisted and automated deployment of development environments.
+  RKD, also known as ROCKETDOO, is version 3 of the framework designed for assisted and automated deployment of development environments.
    In this version, unlike its predecessor, it no longer depends on a repository. In other words, it is no longer necessary to create a repository from a template — the framework is now fully independent.
 
    Developers simply need to install the framework on their local machines using either the pip or pipx package managers. The latter is the recommended option, as it allows installing the framework globally on the developer’s system without dealing with Ubuntu and Debian security restrictions that prevent the direct use of pip install.
@@ -146,6 +146,96 @@ Below we will list the commands that make up the new version of **rocketdoo**
 
 ```
  rocketdoo deploy
+
+```
+
+
+```
+ rocketdoo mail on
+
+```
+
+
+```
+ rocketdoo mail off
+
+```
+
+
+```
+ rocketdoo mail status
+
+```
+
+
+```
+ rocketdoo mail open
+
+```
+
+
+```
+ rocketdoo traefik on
+
+```
+
+
+```
+ rocketdoo traefik off
+
+```
+
+
+```
+ rocketdoo traefik status
+
+```
+
+
+```
+ rocketdoo traefik guide
+
+```
+
+
+```
+ rocketdoo instance init
+
+```
+
+
+```
+ rocketdoo instance deploy --env stage
+
+```
+
+
+```
+ rocketdoo instance deploy --env prod
+
+```
+
+
+```
+ rocketdoo instance status
+
+```
+
+
+```
+ rocketdoo gui
+
+```
+
+
+```
+ rocketdoo gui --port 9090
+
+```
+
+
+```
+ rocketdoo gui --open
 
 ```
 
@@ -284,6 +374,104 @@ This private information is as ephemeral as your environment.
 
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+### New in Version 3: Mail, Traefik & Instance Deployment
+
+#### `rkd mail` — Email Testing with Mailpit
+
+Rocketdoo v3 integrates [Mailpit](https://github.com/axllent/mailpit), a local SMTP testing server. All emails sent by Odoo are captured in Mailpit's web UI instead of reaching real inboxes.
+
+```bash
+rkd mail on      # Enable Mailpit (SMTP on port 1025, Web UI on port 8025)
+rkd mail off     # Disable Mailpit and restore Odoo mail settings
+rkd mail status  # Check if Mailpit is active
+rkd mail open    # Open http://localhost:8025 in your browser
+```
+
+Mailpit is toggled by commenting/uncommenting its service block in `docker-compose.yaml` using special markers (`# rkd:mailpit`). When enabled, Odoo's SMTP configuration is automatically updated to route emails through Mailpit.
+
+---
+
+#### `rkd traefik` — Traefik Reverse Proxy
+
+Integrate [Traefik v2](https://traefik.io/) as a reverse proxy for your development or production environment. Supports two modes:
+
+- **local**: HTTP only, use with `/etc/hosts`
+- **production**: HTTPS with automatic Let's Encrypt certificate
+
+```bash
+rkd traefik on     # Interactive wizard — choose local or production mode
+rkd traefik off    # Remove Traefik integration
+rkd traefik status # Show current Traefik configuration
+rkd traefik guide  # Show /etc/hosts setup instructions for your OS
+```
+
+Traefik is configured via a generated `docker-compose.override.yml` (Docker Compose merges it automatically). Disabling Traefik simply deletes the override file — your original `docker-compose.yaml` is never modified.
+
+---
+
+#### `rkd instance` — Full Odoo Instance Deployment to VPS
+
+Deploy a complete Odoo instance (stage and/or production) to a remote VPS. Supports two deployment strategies:
+
+- **Docker** (recommended): Transfers files and builds the Docker image directly on the VPS using BuildKit SSH agent forwarding for private repositories.
+- **Native**: Installs Odoo via official nightly packages (`apt`), configures `/etc/odoo/odoo.conf`, and manages it as a `systemd` service.
+
+```bash
+rkd instance init                    # Interactive configuration wizard
+rkd instance deploy --env stage      # Deploy to staging environment
+rkd instance deploy --env prod       # Deploy to production environment
+rkd instance deploy --env stage --dry-run  # Preview without executing
+rkd instance status                  # Show configured environments
+```
+
+**Authentication options:**
+- SSH key: select from keys listed in `~/.ssh/`
+- Password: stored as environment variable reference (`${INSTANCE_PROD_PASSWORD}`)
+
+**PostgreSQL resource profiles:** small (<2 GB RAM), medium (4–8 GB), large (16+ GB)
+
+**Odoo tuning by environment:**
+- Stage: 2 workers, `log_level = info`, 1.5 GB memory limit
+- Production: 4 workers, `log_level = warn`, 2.5 GB memory limit, `proxy_mode = True`, `list_db = False`
+
+> **Note:** Docker deployment requires a running SSH agent with the relevant keys loaded (`ssh-add -l`). Password authentication requires `sshpass` installed on your local machine.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------
+
+---
+
+#### `rkd gui` — Web GUI Interface
+
+Rocketdoo v3 includes a professional web-based management interface, accessible from your browser just like Odoo — no installation of additional tools required.
+
+```bash
+rkd gui                  # Launch GUI on http://localhost:8070
+rkd gui --open           # Also open the browser automatically
+rkd gui --port 9090      # Use a custom port
+rkd gui --cwd /my/proj   # Point to a specific project directory
+```
+
+The GUI provides a complete visual interface for all Rocketdoo v3 features:
+
+| Section | What you can do |
+|---------|-----------------|
+| **Projects** | Discover all Rocketdoo projects on your host, switch between them, create new project directories |
+| **Dashboard** | Project overview, container status cards, quick start/stop/restart/build controls, inline log viewer |
+| **Containers** | Full container list with status, per-service start/stop/restart, real-time log streaming |
+| **Modules** | Scan and browse Odoo addons with version and dependency info; manage `gitman.yaml` external repos and trigger Docker rebuild |
+| **Instances** | View configured stage/prod environments, trigger deployments with dry-run support |
+| **Services** | Toggle Mailpit email testing on/off, manage Traefik reverse proxy |
+| **Help** | Quick reference guide for all `rkd` commands |
+
+Additional interface features:
+- **Dark / Light mode toggle** — persisted per browser session
+- Real-time log streaming via WebSocket
+- Runs entirely from the installed package — no Node.js or build step required
+
+> The GUI server runs locally and is bound to `127.0.0.1` by default, so it is only accessible from your own machine.
+
+---
 
 ### Technical Support
 

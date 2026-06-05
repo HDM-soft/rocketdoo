@@ -1,0 +1,2153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocketdoo GUI — v3</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { background: #07091A; color: #DDE4F0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1C2952; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #1A3DCC; }
+
+/* Layout */
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 224px; min-height: 100vh; background: #090D22; border-right: 1px solid #151E45; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
+.main { flex: 1; overflow-y: auto; }
+.page { padding: 32px 36px; max-width: 1120px; }
+
+/* Sidebar logo */
+.logo-area { padding: 22px 18px 18px; border-bottom: 1px solid #151E45; display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, #1A3DCC 0%, #7553C8 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(26,61,204,0.4); }
+.logo-text { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: .02em; line-height: 1; }
+.logo-sub { font-size: 10px; color: #4D6A92; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+.v3-badge { font-size: 9px; font-weight: 700; background: rgba(26,61,204,0.3); color: #6D9CFF; padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
+
+/* Sidebar active path */
+.active-path { padding: 9px 14px 10px; border-bottom: 1px solid #151E45; cursor: pointer; transition: background .15s; }
+.active-path:hover { background: rgba(26,61,204,0.08); }
+.active-path-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #5577A2; margin-bottom: 2px; }
+.active-path-val { font-size: 11px; color: #6D9CFF; font-family: monospace; word-break: break-all; line-height: 1.4; }
+
+/* Sidebar nav */
+.nav { flex: 1; padding: 12px 10px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: #6B82A8; font-size: 13px; font-weight: 500; margin-bottom: 2px; transition: all .15s; border: 1px solid transparent; user-select: none; }
+.nav-item:hover { background: rgba(26,61,204,0.1); color: #DDE4F0; }
+.nav-item.active { background: rgba(26,61,204,0.18); color: #7AA3FF; border-color: rgba(26,61,204,0.3); }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.nav-sep { height: 1px; background: #151E45; margin: 8px 10px; }
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid #151E45; font-size: 11px; color: #4D6A92; line-height: 1.7; }
+
+/* Cards */
+.card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 20px; transition: border-color .15s; }
+.card:hover { border-color: rgba(26,61,204,0.35); }
+.card-flat { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; overflow: hidden; }
+.card-header { padding: 12px 20px; border-bottom: 1px solid #151E45; display: flex; align-items: center; justify-content: space-between; }
+
+/* Badges */
+.badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.badge-blue   { background: rgba(26,61,204,0.22); color: #6D9CFF; }
+.badge-green  { background: rgba(34,197,94,0.18);  color: #4ADE80; }
+.badge-red    { background: rgba(239,68,68,0.18);  color: #F87171; }
+.badge-yellow { background: rgba(245,158,11,0.18); color: #FCD34D; }
+.badge-purple { background: rgba(117,83,200,0.22); color: #A78BFA; }
+.badge-gray   { background: rgba(107,114,128,0.18); color: #9CA3AF; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
+.btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.btn-primary { background: #1A3DCC; color: #fff; }
+.btn-primary:hover { background: #2450E8; box-shadow: 0 0 14px rgba(26,61,204,0.45); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-ghost { background: transparent; color: #7A92BA; border: 1px solid #1A2A50; }
+.btn-ghost:hover { color: #DDE4F0; border-color: rgba(26,61,204,0.5); background: rgba(26,61,204,0.1); }
+.btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
+.btn-danger { background: transparent; color: #F87171; border: 1px solid rgba(239,68,68,0.4); }
+.btn-danger:hover { background: rgba(239,68,68,0.1); border-color: #EF4444; }
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+.btn-sm svg { width: 11px; height: 11px; }
+
+/* Status dot */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.dot-green  { background: #22C55E; box-shadow: 0 0 6px rgba(34,197,94,.5); }
+.dot-red    { background: #EF4444; }
+.dot-yellow { background: #F59E0B; }
+.dot-gray   { background: #4B5563; }
+
+/* Page header */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+.page-title { font-size: 22px; font-weight: 700; color: #DDE4F0; }
+.page-sub { font-size: 13px; color: #6B82A8; margin-top: 3px; }
+
+/* Stats grid */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.stat-card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 16px 18px; }
+.stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #5C7498; margin-bottom: 10px; }
+.stat-value { font-size: 28px; font-weight: 700; color: #DDE4F0; line-height: 1; }
+.stat-note { font-size: 12px; color: #6B82A8; margin-top: 6px; }
+
+/* Table */
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #5577A2; border-bottom: 1px solid #151E45; }
+.table td { padding: 13px 18px; border-bottom: 1px solid #0F1830; vertical-align: middle; }
+.table tr:last-child td { border-bottom: none; }
+.table tr:hover td { background: rgba(26,61,204,0.04); }
+
+/* Log terminal */
+.log-term { background: #040711; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.65; color: #7EC87E; height: 300px; overflow-y: auto; padding: 12px 14px; border-radius: 8px; border: 1px solid #0F1830; }
+.log-err { color: #F87171; }
+.log-warn { color: #FCD34D; }
+
+/* Toggle */
+.toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-track { position: absolute; inset: 0; background: #1A2A50; border-radius: 22px; transition: .2s; cursor: pointer; }
+.toggle-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: #4B6080; border-radius: 50%; transition: .2s; }
+input:checked ~ .toggle-track { background: #1A3DCC; }
+input:checked ~ .toggle-track::before { transform: translateX(18px); background: #fff; }
+
+/* Input */
+.input { background: #0D1230; border: 1px solid #1A2A50; border-radius: 7px; padding: 8px 12px; color: #DDE4F0; font-size: 13px; outline: none; transition: border-color .15s; width: 100%; }
+.input:focus { border-color: #1A3DCC; }
+
+/* Animations */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; display: inline-block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn .2s ease; }
+
+/* Notifications */
+.notif-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 9999; min-width: 280px; max-width: 360px; }
+.notif { padding: 11px 14px; border-radius: 8px; display: flex; align-items: center; gap: 9px; font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,.5); animation: fadeIn .2s ease; }
+.notif-ok  { background: #081A10; border: 1px solid rgba(34,197,94,.35); }
+.notif-err { background: #160808; border: 1px solid rgba(239,68,68,.35); }
+.notif svg { width: 15px; height: 15px; flex-shrink: 0; }
+.notif-ok svg  { color: #22C55E; }
+.notif-err svg { color: #EF4444; }
+
+/* Empty state */
+.empty { text-align: center; padding: 56px 32px; }
+.empty svg { width: 44px; height: 44px; color: #1A2A50; margin-bottom: 16px; }
+.empty h3 { font-size: 16px; font-weight: 600; color: #5C7498; margin-bottom: 8px; }
+.empty p { font-size: 13px; color: #5577A2; }
+.code-block { background: #040711; border: 1px solid #0F1830; border-radius: 8px; padding: 14px 20px; display: inline-block; font-family: monospace; font-size: 13px; color: #4ADE80; text-align: left; margin-top: 20px; }
+
+/* Project card */
+.proj-card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 18px; transition: all .15s; }
+.proj-card:hover { border-color: rgba(26,61,204,0.4); }
+.proj-card.active-proj { border-color: rgba(26,61,204,0.55); background: rgba(26,61,204,0.05); }
+
+/* ── Light Mode ─────────────────────────────────────────────────────────── */
+html.light body { background: #C8D4E2; color: #0A1528; }
+html.light .page-title { color: #0A1528; }
+html.light .page-sub   { color: #1E3A58; }
+/* Nav items inside dark sidebar keep their dark-mode colors — no override needed */
+html.light .btn-ghost  { color: #1E3558; border-color: #6A88B0; }
+html.light .btn-ghost:hover { color: #0A1528; background: rgba(26,61,204,0.12); border-color: rgba(26,61,204,0.4); }
+html.light .btn-ghost:disabled { color: #3A5880; }
+/* Sidebar stays dark: logo-sub, active-path-label, sidebar-footer use same colors */
+html.light ::-webkit-scrollbar-track { background: #B2C0D5; }
+html.light ::-webkit-scrollbar-thumb { background: #7A8EAA; }
+html.light ::-webkit-scrollbar-thumb:hover { background: #4A6080; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const { createApp, ref, computed, onMounted, onActivated, onUnmounted, watch, nextTick } = Vue
+
+/* ── API ─────────────────────────────────────────────────────────────────── */
+const api = {
+  async get(p) { const r = await fetch('/api'+p); return r.json() },
+  async post(p, b={}) {
+    const r = await fetch('/api'+p, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b) })
+    return r.json()
+  }
+}
+
+/* ── Module-level reactive state ─────────────────────────────────────────── */
+const notifs = ref([])
+const currentPath = ref('')
+const view = ref('projects')
+
+let _nid = 0
+function notify(msg, type='ok') {
+  const id = ++_nid
+  notifs.value.push({ id, msg, type })
+  setTimeout(() => { notifs.value = notifs.value.filter(n=>n.id!==id) }, 4500)
+}
+
+/* ── Icons SVG strings ───────────────────────────────────────────────────── */
+const I = {
+  rocket:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>`,
+  dashboard:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+  containers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+  modules:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`,
+  instances:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
+  services:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14M15.54 8.46a5 5 0 010 7.07M8.46 8.46a5 5 0 000 7.07"/></svg>`,
+  refresh:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>`,
+  play:       `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
+  stop:       `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
+  restart:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`,
+  logs:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  ext:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
+  deploy:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>`,
+  mail:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
+  globe:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>`,
+  check:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
+  x:          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  warn:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  spin:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>`,
+  build:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>`,
+  setup:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`,
+  pack:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`,
+  folder:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`,
+  search:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  compass:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>`,
+  plus:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  link:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>`,
+  terminal:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
+  sun:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`,
+  moon:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`,
+  help:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  book:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>`,
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function cstatus(s) {
+  const v = (s||'').toLowerCase()
+  if (v.includes('running')||v.includes(' up')) return 'running'
+  if (v.includes('exited')||v.includes('stopped')) return 'stopped'
+  if (v.includes('paused')) return 'paused'
+  return 'unknown'
+}
+function dotClass(s) {
+  const m = {running:'dot-green', stopped:'dot-red', paused:'dot-yellow'}
+  return m[cstatus(s)] || 'dot-gray'
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LOG VIEWER COMPONENT
+══════════════════════════════════════════════════════════════════════════ */
+const LogViewer = {
+  props: { name: String },
+  setup(props) {
+    const lines = ref([])
+    const live  = ref(false)
+    const el    = ref(null)
+    let ws      = null
+    let pending = []
+    let raf     = null
+
+    function lineClass(l) {
+      const lc = l.toLowerCase()
+      if (/error|traceback|exception|critical/.test(lc)) return 'log-err'
+      if (/warn/.test(lc)) return 'log-warn'
+      return ''
+    }
+
+    function flush() {
+      raf = null
+      if (!pending.length) return
+      lines.value.push(...pending.splice(0))
+      if (lines.value.length > 1500) lines.value.splice(0, lines.value.length - 1300)
+      nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+    }
+
+    function connect() {
+      if (ws) ws.close()
+      if (raf) { cancelAnimationFrame(raf); raf = null }
+      pending = []
+      lines.value = []
+      live.value = true
+      const proto = location.protocol==='https:'?'wss':'ws'
+      ws = new WebSocket(`${proto}://${location.host}/ws/logs/${props.name}`)
+      ws.onmessage = e => {
+        pending.push(e.data)
+        if (!raf) raf = requestAnimationFrame(flush)
+      }
+      ws.onclose = () => {
+        live.value = false
+        if (raf) { cancelAnimationFrame(raf); raf = null }
+        if (pending.length) flush()
+      }
+      ws.onerror = () => { live.value = false; lines.value.push('[connection error]') }
+    }
+    function stop() {
+      if (raf) { cancelAnimationFrame(raf); raf = null }
+      if (ws) ws.close()
+      live.value = false
+    }
+
+    onMounted(connect)
+    onUnmounted(stop)
+    watch(() => props.name, connect)
+
+    return { lines, live, el, connect, stop, lineClass, I }
+  },
+  template: `
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:600;color:#DDE4F0;">{{ name }}</span>
+        <span v-if="live" style="display:flex;align-items:center;gap:5px;font-size:11px;color:#22C55E;">
+          <span class="dot dot-green" style="width:6px;height:6px;"></span> Live
+        </span>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button @click="live?stop():connect()" class="btn btn-ghost btn-sm" v-html="(live?I.stop:I.play)+' '+(live?'Stop':'Connect')"></button>
+          <button @click="lines=[]" class="btn btn-ghost btn-sm">Clear</button>
+        </div>
+      </div>
+      <div ref="el" class="log-term">
+        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Waiting for output…</div>
+        <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
+      </div>
+    </div>
+  `
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DOCKER TERMINAL — streaming WebSocket output for compose commands
+══════════════════════════════════════════════════════════════════════════ */
+const DockerTerminal = {
+  props: { action: String },
+  emits: ['done', 'close'],
+  setup(props, { emit }) {
+    const lines    = ref([])
+    const running  = ref(true)
+    const exitCode = ref(null)
+    const el       = ref(null)
+    let ws      = null
+    let pending = []   // non-reactive line buffer
+    let raf     = null // requestAnimationFrame handle
+
+    // Flush the buffer into reactive state in one batch — max 60 updates/sec
+    function flush() {
+      raf = null
+      if (!pending.length) return
+      lines.value.push(...pending.splice(0))
+      if (lines.value.length > 2000) lines.value.splice(0, lines.value.length - 1700)
+      nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+    }
+
+    onMounted(() => {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      ws = new WebSocket(`${proto}://${location.host}/ws/docker/${props.action}`)
+      ws.onmessage = e => {
+        const txt = e.data
+        if (txt.startsWith('\x00exit:')) {
+          // Drain any buffered lines before showing the exit banner
+          if (raf) { cancelAnimationFrame(raf); raf = null }
+          if (pending.length) flush()
+          exitCode.value = parseInt(txt.slice(6))
+          running.value  = false
+          emit('done', exitCode.value)
+        } else {
+          if (txt.trim()) pending.push(txt)
+          if (!raf) raf = requestAnimationFrame(flush)
+        }
+      }
+      ws.onclose = () => {
+        running.value = false
+        if (raf) { cancelAnimationFrame(raf); raf = null }
+        if (pending.length) flush()
+      }
+      ws.onerror = () => {
+        running.value = false
+        lines.value.push('[WebSocket error — is the server running?]')
+      }
+    })
+    onUnmounted(() => {
+      if (raf) cancelAnimationFrame(raf)
+      if (ws) ws.close()
+    })
+
+    function lineClass(l) {
+      const lc = l.toLowerCase()
+      if (/\berror\b|failed|traceback|exception|no such/.test(lc)) return 'log-err'
+      if (/\bwarn(ing)?\b/.test(lc)) return 'log-warn'
+      return ''
+    }
+
+    return { lines, running, exitCode, el, lineClass, I }
+  },
+  template: `
+    <div class="card-flat" style="border-color:rgba(26,61,204,0.2);">
+      <div style="display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:1px solid #151E45;background:#090D22;">
+        <span v-if="running" v-html="I.spin" class="spin" style="width:13px;height:13px;color:#6D9CFF;display:inline-block;flex-shrink:0;"></span>
+        <span v-else-if="exitCode===0" v-html="I.check" style="width:13px;height:13px;color:#22C55E;flex-shrink:0;"></span>
+        <span v-else v-html="I.warn" style="width:13px;height:13px;color:#F87171;flex-shrink:0;"></span>
+        <code style="font-size:12px;color:#DDE4F0;flex:1;font-family:monospace;">docker compose {{ action }}</code>
+        <span v-if="running" style="font-size:11px;color:#6B82A8;">running…</span>
+        <span v-else-if="exitCode===0" style="font-size:11px;color:#22C55E;">✓ completed</span>
+        <span v-else style="font-size:11px;color:#F87171;">✗ exit {{ exitCode }}</span>
+        <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" title="Close terminal">✕</button>
+      </div>
+      <div ref="el" class="log-term" style="height:320px;">
+        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Connecting to docker compose {{ action }}…</div>
+        <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
+      </div>
+    </div>
+  `
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DASHBOARD
+══════════════════════════════════════════════════════════════════════════ */
+const Dashboard = {
+  components: { LogViewer, DockerTerminal },
+  setup() {
+    const proj       = ref(null)
+    const ctrs       = ref([])
+    const busy       = ref(true)
+    const act        = ref('')
+    const logOf      = ref(null)
+    const termAction = ref(null)
+
+    async function load() {
+      busy.value = true
+      try {
+        const [p, c] = await Promise.all([api.get('/project'), api.get('/project/containers')])
+        proj.value = p; ctrs.value = c.containers||[]
+      } catch(e) { notify('Load failed: '+e.message, 'err') }
+      finally { busy.value = false }
+    }
+
+    function docker(cmd) {
+      act.value      = cmd
+      termAction.value = cmd
+    }
+    function onTermDone(code) {
+      act.value = ''
+      if (code === 0) {
+        // Auto-close terminal then refresh — order matters: clear first to avoid remount loop
+        setTimeout(() => { termAction.value = null; load() }, 1800)
+      } else {
+        // On failure keep terminal open so the user can read the error, but still refresh status
+        setTimeout(load, 1000)
+      }
+    }
+    function closeTerminal() {
+      termAction.value = null
+      act.value        = ''
+      load()
+    }
+
+    const running = computed(() => ctrs.value.filter(c=>cstatus(c.State||c.Status)==='running').length)
+
+    onActivated(load)
+    return { proj, ctrs, busy, act, logOf, running, termAction, load, docker, onTermDone, closeTerminal, dotClass, cstatus, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Dashboard</div><div class="page-sub">Project overview and quick controls</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Containers</div>
+          <div class="stat-value" :style="{color: running>0?'#22C55E':'#4B5563'}">
+            {{ running }}<span style="font-size:16px;color:#5577A2;"> / {{ ctrs.length }}</span>
+          </div>
+          <div class="stat-note">{{ running }} running</div>
+        </div>
+        <div class="stat-card" v-if="proj?.exists">
+          <div class="stat-label">Odoo Version</div>
+          <div class="stat-value">{{ proj.odoo_version||'—' }}</div>
+          <div class="stat-note" style="margin-top:7px;">
+            <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-blue'">{{ proj.odoo_edition }}</span>
+          </div>
+        </div>
+        <div class="stat-card" v-if="proj?.exists">
+          <div class="stat-label">PostgreSQL</div>
+          <div class="stat-value">{{ proj.db_version||'—' }}</div>
+          <div class="stat-note">Database</div>
+        </div>
+        <div class="stat-card" v-if="proj?.exists">
+          <div class="stat-label">Web Port</div>
+          <div class="stat-value">{{ proj.odoo_port||'—' }}</div>
+          <div class="stat-note" style="margin-top:7px;">
+            <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank"
+               style="color:#1A3DCC;text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
+              Open Odoo <span v-html="I.ext" style="width:10px;height:10px;"></span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- No project -->
+      <div v-if="!proj?.exists" class="card empty" style="border-style:dashed;">
+        <div v-html="I.rocket"></div>
+        <h3>No project found in this directory</h3>
+        <p>Initialize a Rocketdoo project to get started</p>
+        <div class="code-block"><div style="color:#6B82A8;">## Create a new project</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
+      </div>
+
+      <!-- Project card -->
+      <div v-if="proj?.exists" style="margin-bottom:24px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Project</div>
+        <div class="card" style="border-color:rgba(26,61,204,0.3);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span v-html="I.rocket" style="width:18px;height:18px;color:#1A3DCC;flex-shrink:0;"></span>
+                <span style="font-size:17px;font-weight:700;color:#DDE4F0;">{{ proj.project_name||'Unnamed Project' }}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                <span class="badge badge-blue">Odoo {{ proj.odoo_version }}</span>
+                <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-gray'">{{ proj.odoo_edition }}</span>
+                <span class="badge badge-gray" v-if="proj.db_version">PG {{ proj.db_version }}</span>
+                <span class="badge badge-yellow" v-if="proj.use_private_repos">SSH Key</span>
+                <span class="badge badge-blue" v-if="proj.use_third_party_repos">Gitman</span>
+              </div>
+            </div>
+            <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank" class="btn btn-primary" style="text-decoration:none;flex-shrink:0;">
+              <span v-html="I.ext"></span> Open Odoo
+            </a>
+          </div>
+
+          <!-- Containers -->
+          <div style="border-top:1px solid #151E45;padding-top:14px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Containers</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <div v-for="c in ctrs" :key="c.Name||c.Service"
+                   @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
+                   :style="{background:'#090D22',border:'1px solid '+(logOf===(c.Name||c.Service)?'#1A3DCC':'#151E45'),borderRadius:'8px',padding:'10px 14px',cursor:'pointer',minWidth:'150px',transition:'all .15s'}">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+                  <span class="dot" :class="dotClass(c.State||c.Status)"></span>
+                  <span style="font-size:13px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</span>
+                </div>
+                <div style="font-size:11px;color:#6B82A8;font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
+                <div v-if="c.Ports" style="font-size:10px;color:#5577A2;margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
+              </div>
+              <div v-if="!ctrs.length" style="color:#5577A2;font-size:13px;padding:8px 0;">No containers running</div>
+            </div>
+          </div>
+
+          <!-- Inline logs -->
+          <div v-if="logOf" style="margin-top:14px;border-top:1px solid #151E45;padding-top:14px;">
+            <LogViewer :name="logOf" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div v-if="proj?.exists">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Quick Actions</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <button @click="docker('up')" class="btn btn-primary" :disabled="act!==''">
+            <span v-html="act==='up'?I.spin:I.play" :class="act==='up'?'spin':''"></span> Start All
+          </button>
+          <button @click="docker('restart')" class="btn btn-ghost" :disabled="act!==''">
+            <span v-html="act==='restart'?I.spin:I.restart" :class="act==='restart'?'spin':''"></span> Restart
+          </button>
+          <button @click="docker('stop')" class="btn btn-ghost" :disabled="act!==''">
+            <span v-html="act==='stop'?I.spin:I.stop" :class="act==='stop'?'spin':''"></span> Stop
+          </button>
+          <button @click="docker('build')" class="btn btn-ghost" :disabled="act!==''">
+            <span v-html="act==='build'?I.spin:I.build" :class="act==='build'?'spin':''"></span> Build
+          </button>
+          <button @click="docker('down')" class="btn btn-danger" :disabled="act!==''">
+            <span v-html="act==='down'?I.spin:I.x" :class="act==='down'?'spin':''"></span> Down
+          </button>
+        </div>
+      </div>
+
+    </template>
+
+    <!-- Terminal lives OUTSIDE v-else so busy toggling never destroys/remounts it -->
+    <div v-if="termAction" style="margin-top:20px;">
+      <DockerTerminal :action="termAction" @done="onTermDone" @close="closeTerminal" />
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONTAINERS
+══════════════════════════════════════════════════════════════════════════ */
+const Containers = {
+  components: { LogViewer },
+  setup() {
+    const ctrs = ref([])
+    const busy = ref(true)
+    const acts = ref({})
+    const logOf = ref(null)
+
+    async function load() {
+      busy.value = true
+      try { const r = await api.get('/project/containers'); ctrs.value = r.containers||[] }
+      catch(e) { notify('Load failed','err') }
+      finally { busy.value = false }
+    }
+
+    async function action(svc, cmd) {
+      const key = svc+cmd; acts.value[key] = true
+      try {
+        const r = await api.post('/docker/service/'+cmd, { service: svc })
+        if (r.ok) { notify(svc+': '+cmd); setTimeout(load, 1500) }
+        else notify(r.stderr||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { delete acts.value[key] }
+    }
+
+    onActivated(load)
+    return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Containers</div><div class="page-sub">Manage Docker services for this project</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <div v-if="!ctrs.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.containers"></div>
+        <h3>No containers found</h3>
+        <p>Make sure you are in a Rocketdoo project directory and run <code style="color:#6D9CFF;">rkd up</code></p>
+      </div>
+
+      <div v-else class="card-flat">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Status</th><th>Service</th><th>Image</th><th>Ports</th><th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="c in ctrs" :key="c.Name||c.Service">
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:7px;">
+                    <span class="dot" :class="dotClass(c.State||c.Status)"></span>
+                    <span style="font-size:12px;color:#6B82A8;text-transform:capitalize;">{{ cstatus(c.State||c.Status) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div style="font-size:14px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</div>
+                  <div style="font-size:11px;color:#5577A2;font-family:monospace;">{{ c.Name }}</div>
+                </td>
+                <td style="font-family:monospace;font-size:12px;color:#6B82A8;">{{ c.Image||'—' }}</td>
+                <td style="font-family:monospace;font-size:11px;color:#6B82A8;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
+                <td style="text-align:right;">
+                  <div style="display:flex;gap:5px;justify-content:flex-end;">
+                    <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" title="Start" :disabled="acts[(c.Service||c.Name)+'start']">
+                      <span v-html="acts[(c.Service||c.Name)+'start']?I.spin:I.play" :class="acts[(c.Service||c.Name)+'start']?'spin':''"></span>
+                    </button>
+                    <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" title="Stop" :disabled="acts[(c.Service||c.Name)+'stop']">
+                      <span v-html="acts[(c.Service||c.Name)+'stop']?I.spin:I.stop" :class="acts[(c.Service||c.Name)+'stop']?'spin':''"></span>
+                    </button>
+                    <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" title="Restart" :disabled="acts[(c.Service||c.Name)+'restart']">
+                      <span v-html="acts[(c.Service||c.Name)+'restart']?I.spin:I.restart" :class="acts[(c.Service||c.Name)+'restart']?'spin':''"></span>
+                    </button>
+                    <button @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
+                            class="btn btn-ghost btn-sm" title="Logs"
+                            :style="logOf===(c.Name||c.Service)?'color:#1A3DCC;border-color:#1A3DCC;':''">
+                      <span v-html="I.logs"></span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="logOf===(c.Name||c.Service)" :key="(c.Name||c.Service)+'-log'">
+                <td colspan="5" style="background:#040711;padding:14px 18px;">
+                  <LogViewer :name="c.Name||c.Service" />
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MODULES
+══════════════════════════════════════════════════════════════════════════ */
+const Modules = {
+  setup() {
+    // ── Local addons ─────────────────────────────────────────────────────
+    const mods     = ref([])
+    const busy     = ref(true)
+    const all      = ref(false)
+    const q        = ref('')
+    const filtered = computed(() => mods.value.filter(m =>
+      !q.value || m.name.toLowerCase().includes(q.value.toLowerCase())
+    ))
+
+    async function load() {
+      busy.value = true
+      try {
+        const r = await api.get('/modules?include_all='+all.value)
+        mods.value = r.modules || []
+        if (r.error) notify('Scan: '+r.error, 'err')
+      } catch(e) { notify('Scan failed','err') }
+      finally { busy.value = false }
+      loadGitman()
+    }
+
+    // ── Gitman repos ──────────────────────────────────────────────────────
+    const gitSources  = ref([])
+    const gitOriginal = ref([])
+    const gitBusy     = ref(false)
+    const gitSaving   = ref(false)
+    const rebuildBusy = ref(false)
+    const gitForm     = ref(null)
+    const gitDirty    = computed(() =>
+      JSON.stringify(gitSources.value) !== JSON.stringify(gitOriginal.value)
+    )
+
+    async function loadGitman() {
+      gitBusy.value = true
+      try {
+        const r = await api.get('/gitman')
+        gitSources.value  = r.sources || []
+        gitOriginal.value = JSON.parse(JSON.stringify(r.sources || []))
+      } catch {}
+      finally { gitBusy.value = false }
+    }
+
+    function addGitRepo() {
+      gitForm.value = { idx: -1, name: '', repo: '', rev: '18.0', type: 'git' }
+    }
+    function editGitRepo(idx) {
+      const s = gitSources.value[idx]
+      gitForm.value = { idx, name: s.name, repo: s.repo, rev: s.rev, type: s.type }
+    }
+    function deleteGitRepo(idx) {
+      gitSources.value.splice(idx, 1)
+    }
+    function autoName() {
+      if (gitForm.value && !gitForm.value.name && gitForm.value.repo) {
+        gitForm.value.name = gitForm.value.repo.split('/').pop().replace(/\.git$/, '')
+      }
+    }
+    function confirmGitForm() {
+      const f = gitForm.value
+      if (!f.name.trim() || !f.repo.trim()) { notify('Name and URL are required','err'); return }
+      const entry = { name: f.name.trim(), repo: f.repo.trim(), rev: f.rev.trim() || 'main', type: 'git' }
+      if (f.idx === -1) { gitSources.value.push(entry) }
+      else              { gitSources.value[f.idx] = entry }
+      gitForm.value = null
+    }
+    async function saveGitman() {
+      gitSaving.value = true
+      try {
+        const r = await api.post('/gitman', { sources: gitSources.value })
+        if (r.ok) {
+          gitOriginal.value = JSON.parse(JSON.stringify(gitSources.value))
+          notify('gitman.yaml saved')
+        } else notify(r.error || 'Save failed', 'err')
+      } catch(e) { notify(e.message,'err') }
+      finally { gitSaving.value = false }
+    }
+    async function rebuildDocker() {
+      rebuildBusy.value = true
+      try {
+        const r = await api.post('/docker/build')
+        r.ok ? notify('Build completed') : notify(r.stderr || 'Build failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { rebuildBusy.value = false }
+    }
+
+    watch(all, load)
+    onActivated(load)
+    return {
+      mods, busy, all, q, filtered, load,
+      gitSources, gitBusy, gitSaving, rebuildBusy, gitForm, gitDirty,
+      addGitRepo, editGitRepo, deleteGitRepo, autoName, confirmGitForm,
+      saveGitman, rebuildDocker, I
+    }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Modules</div><div class="page-sub">Local addons and external Gitman repositories</div></div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#5577A2;cursor:pointer;">
+          <input type="checkbox" v-model="all" style="accent-color:#1A3DCC;"> Show all
+        </label>
+        <button class="btn btn-ghost" @click="load" :disabled="busy">
+          <span v-html="I.refresh" :class="busy?'spin':''"></span> Scan
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Local Addons ────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+      Local Addons <span class="badge badge-blue">{{ mods.length }}</span>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <input v-model="q" class="input" placeholder="Search modules…" style="max-width:340px;" />
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:60px 0;color:#6B82A8;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <div v-if="!filtered.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.modules"></div>
+        <h3>{{ mods.length ? 'No matches' : 'No modules found' }}</h3>
+        <p>{{ mods.length ? 'Try a different search term' : 'Add Odoo modules to the addons/ directory' }}</p>
+      </div>
+      <div v-else class="card-flat">
+        <table class="table">
+          <thead>
+            <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>Depends</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in filtered" :key="m.name">
+              <td>
+                <div style="font-family:monospace;font-size:13px;font-weight:600;color:#DDE4F0;">{{ m.name }}</div>
+                <div v-if="m.has_invalid_name" style="font-size:11px;color:#FCD34D;margin-top:2px;">⚠ Invalid name</div>
+              </td>
+              <td style="font-family:monospace;font-size:11px;color:#6B82A8;">{{ m.path }}</td>
+              <td style="font-size:12px;color:#6B82A8;">{{ m.version||'—' }}</td>
+              <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?'Installable':'Disabled' }}</span></td>
+              <td style="font-size:11px;color:#5577A2;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+
+    <!-- ── External Repos (Gitman) ────────────────────────────────────── -->
+    <div style="margin-top:36px;padding-top:24px;border-top:1px solid #151E45;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;">External Repos (Gitman)</div>
+          <div style="font-size:12px;color:#6B82A8;margin-top:3px;">Managed via <code style="color:#6D9CFF;">gitman.yaml</code> → <code style="color:#6D9CFF;">external_addons/</code></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button v-if="gitDirty" @click="saveGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
+            <span v-html="gitSaving?I.spin:I.check" :class="gitSaving?'spin':''"></span>
+            {{ gitSaving ? 'Saving…' : 'Save Changes' }}
+          </button>
+          <button @click="rebuildDocker" class="btn btn-ghost btn-sm" :disabled="rebuildBusy" title="Rebuild Docker image after gitman changes">
+            <span v-html="rebuildBusy?I.spin:I.build" :class="rebuildBusy?'spin':''"></span>
+            {{ rebuildBusy ? 'Building…' : 'Rebuild' }}
+          </button>
+          <button @click="addGitRepo" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">
+            <span v-html="I.plus"></span> Add Repo
+          </button>
+        </div>
+      </div>
+
+      <!-- Inline Add/Edit form -->
+      <div v-if="gitForm" class="card" style="margin-bottom:14px;border-color:rgba(26,61,204,0.4);">
+        <div style="font-size:13px;font-weight:600;color:#DDE4F0;margin-bottom:14px;">
+          {{ gitForm.idx === -1 ? 'Add Repository' : 'Edit Repository' }}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Repository URL</label>
+            <input v-model="gitForm.repo" @blur="autoName" class="input" placeholder="https://github.com/org/repo.git" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Folder name</label>
+            <input v-model="gitForm.name" class="input" placeholder="auto-filled from URL" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:14px;align-items:end;">
+          <div>
+            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Branch / Rev</label>
+            <input v-model="gitForm.rev" class="input" placeholder="18.0" />
+          </div>
+          <div style="font-size:12px;color:#6B82A8;padding-bottom:9px;">
+            Clones into <code style="color:#6D9CFF;">external_addons/{{ gitForm.name || '&lt;name&gt;' }}</code>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button @click="confirmGitForm" class="btn btn-primary btn-sm">
+            <span v-html="I.check"></span> {{ gitForm.idx === -1 ? 'Add' : 'Update' }}
+          </button>
+          <button @click="gitForm=null" class="btn btn-ghost btn-sm">
+            <span v-html="I.x"></span> Cancel
+          </button>
+        </div>
+      </div>
+
+      <div v-if="gitBusy" style="text-align:center;padding:36px 0;color:#6B82A8;">
+        <span v-html="I.spin" class="spin" style="width:22px;height:22px;display:inline-block;"></span>
+      </div>
+
+      <template v-else>
+        <div v-if="!gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
+          <div v-html="I.link" style="width:30px;height:30px;color:#1A2A50;margin:0 auto 10px;"></div>
+          <div style="font-size:14px;font-weight:600;color:#6B82A8;margin-bottom:5px;">No external repos configured</div>
+          <div style="font-size:12px;color:#5577A2;">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
+        </div>
+        <div v-else-if="gitSources.length" class="card-flat">
+          <table class="table">
+            <thead>
+              <tr><th>Name</th><th>Repository URL</th><th>Branch</th><th style="text-align:right">Actions</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(s, idx) in gitSources" :key="idx">
+                <td style="font-family:monospace;font-size:13px;font-weight:600;color:#DDE4F0;">{{ s.name }}</td>
+                <td style="font-family:monospace;font-size:11px;color:#6B82A8;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="s.repo">{{ s.repo }}</td>
+                <td><span class="badge badge-blue">{{ s.rev }}</span></td>
+                <td style="text-align:right;">
+                  <div style="display:flex;gap:5px;justify-content:flex-end;">
+                    <button @click="editGitRepo(idx)" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">Edit</button>
+                    <button @click="deleteGitRepo(idx)" class="btn btn-danger btn-sm">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   INSTANCES
+══════════════════════════════════════════════════════════════════════════ */
+const Instances = {
+  setup() {
+    const inst  = ref([])
+    const busy  = ref(true)
+    const dep   = ref({})
+    const dry   = ref({})
+
+    async function load() {
+      busy.value = true
+      try { const r = await api.get('/instances'); inst.value = r.instances||[] }
+      catch(e) { notify('Load failed','err') }
+      finally { busy.value = false }
+    }
+
+    async function deploy(env) {
+      dep.value[env] = true
+      try {
+        const r = await api.post('/instances/deploy', { env, dry_run: !!dry.value[env] })
+        if (r.ok) notify(env+' deploy '+(dry.value[env]?'(dry-run) ':'')+'completed')
+        else notify(r.error||'Deploy failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { dep.value[env] = false }
+    }
+
+    onActivated(load)
+    return { inst, busy, dep, dry, load, deploy, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Instances</div><div class="page-sub">Deploy Odoo to remote VPS environments</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <div v-if="!inst.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.instances"></div>
+        <h3>No instances configured</h3>
+        <p>Configure deployment targets with:</p>
+        <div class="code-block">$ rkd instance init</div>
+      </div>
+
+      <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:18px;">
+        <div v-for="i in inst" :key="i.env" class="card" :style="{borderColor:i.env==='prod'?'rgba(239,68,68,0.25)':'rgba(26,61,204,0.3)'}">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:9px;">
+              <span v-html="I.instances" style="width:18px;height:18px;color:#1A3DCC;"></span>
+              <span style="font-size:16px;font-weight:700;color:#DDE4F0;text-transform:capitalize;">{{ i.env }}</span>
+            </div>
+            <span class="badge" :class="i.env==='prod'?'badge-red':'badge-blue'">{{ i.env==='prod'?'Production':'Staging' }}</span>
+          </div>
+
+          <div style="display:grid;gap:7px;margin-bottom:18px;font-size:12px;">
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ i.host||'—' }}</span></div>
+            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Domain</span>
+              <a :href="'https://'+i.domain" target="_blank" style="color:#1A3DCC;text-decoration:none;font-family:monospace;display:flex;align-items:center;gap:4px;">
+                {{ i.domain }} <span v-html="I.ext" style="width:10px;height:10px;"></span>
+              </a>
+            </div>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Odoo</span><span style="color:#DDE4F0;">{{ i.odoo_version||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Type</span><span class="badge badge-gray">{{ i.type }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Path</span><span style="color:#6B82A8;font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
+          </div>
+
+          <div style="border-top:1px solid #151E45;padding-top:14px;display:flex;align-items:center;gap:10px;">
+            <button @click="deploy(i.env)" class="btn btn-primary" :disabled="dep[i.env]">
+              <span v-html="dep[i.env]?I.spin:I.deploy" :class="dep[i.env]?'spin':''"></span>
+              {{ dep[i.env]?'Deploying…':'Deploy' }}
+            </button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6B82A8;cursor:pointer;">
+              <input type="checkbox" v-model="dry[i.env]" style="accent-color:#1A3DCC;"> Dry run
+            </label>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SERVICES
+══════════════════════════════════════════════════════════════════════════ */
+const Services = {
+  setup() {
+    const mail = ref({ enabled:false, running:false })
+    const traefik = ref({ enabled:false, mode:null, domain:null, override_exists:false })
+    const busy = ref(true)
+    const mailBusy = ref(false)
+    const traefikBusy = ref(false)
+
+    async function load() {
+      busy.value = true
+      try {
+        const [m,t] = await Promise.all([api.get('/mail/status'), api.get('/traefik/status')])
+        mail.value = m; traefik.value = t
+      } catch(e) { notify('Load failed','err') }
+      finally { busy.value = false }
+    }
+
+    async function toggleMail() {
+      mailBusy.value = true
+      try {
+        const r = await api.post(mail.value.enabled ? '/mail/off' : '/mail/on')
+        if (r.ok) { notify('Mailpit '+(mail.value.enabled?'disabled':'enabled')); await load() }
+        else notify(r.error||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { mailBusy.value = false }
+    }
+
+    async function traefikOff() {
+      traefikBusy.value = true
+      try {
+        const r = await api.post('/traefik/off')
+        if (r.ok) { notify('Traefik disabled'); await load() }
+        else notify(r.error||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { traefikBusy.value = false }
+    }
+
+    const traefikForm = ref({ mode: 'local', domain: 'myodoo.local', email: '' })
+    const traefikOnBusy = ref(false)
+
+    async function traefikOn() {
+      traefikOnBusy.value = true
+      try {
+        const r = await api.post('/traefik/on', traefikForm.value)
+        if (r.ok) { notify('Traefik enabled'); await load() }
+        else notify(r.error||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { traefikOnBusy.value = false }
+    }
+
+    onActivated(load)
+    return { mail, traefik, busy, mailBusy, traefikBusy, traefikForm, traefikOnBusy, load, toggleMail, traefikOff, traefikOn, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Services</div><div class="page-sub">Optional services for local development</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px;">
+
+      <!-- Mailpit -->
+      <div class="card" :style="{borderColor:mail.enabled?'rgba(34,197,94,0.3)':''}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:38px;height:38px;background:rgba(26,61,204,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span v-html="I.mail" style="width:18px;height:18px;color:#1A3DCC;"></span>
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Mailpit</div>
+              <div style="font-size:12px;color:#6B82A8;">Local SMTP testing</div>
+            </div>
+          </div>
+          <label class="toggle" :style="mailBusy?'opacity:.5;pointer-events:none':''">
+            <input type="checkbox" :checked="mail.enabled" @change="toggleMail">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+
+        <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Service</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?'Enabled':'Disabled' }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Container</span>
+            <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:#6B82A8;">{{ mail.running?'Running':'Stopped' }}</span></div>
+          </div>
+          <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">SMTP</span><span style="color:#DDE4F0;font-family:monospace;">:1025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Web UI</span><span style="color:#DDE4F0;font-family:monospace;">:8025</span></div>
+        </div>
+
+        <div style="border-top:1px solid #151E45;padding-top:12px;">
+          <a href="http://localhost:8025" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
+            <span v-html="I.ext"></span> Open Mailpit
+          </a>
+        </div>
+      </div>
+
+      <!-- Traefik -->
+      <div class="card" :style="{borderColor:traefik.enabled?'rgba(26,61,204,0.35)':''}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:38px;height:38px;background:rgba(26,61,204,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span v-html="I.globe" style="width:18px;height:18px;color:#1A3DCC;"></span>
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Traefik</div>
+              <div style="font-size:12px;color:#6B82A8;">Reverse proxy / HTTPS</div>
+            </div>
+          </div>
+          <span class="badge" :class="traefik.enabled?'badge-green':'badge-gray'">{{ traefik.enabled?'Active':'Inactive' }}</span>
+        </div>
+
+        <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Mode</span>
+            <span v-if="traefik.mode" class="badge" :class="traefik.mode==='production'?'badge-purple':'badge-blue'">{{ traefik.mode }}</span>
+            <span v-else style="color:#5577A2;">Not configured</span>
+          </div>
+          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Domain</span><span style="color:#DDE4F0;font-family:monospace;">{{ traefik.domain }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Override</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?'Present':'Not found' }}</span></div>
+        </div>
+
+        <div style="border-top:1px solid #151E45;padding-top:12px;">
+          <button v-if="traefik.enabled" @click="traefikOff" class="btn btn-danger" :disabled="traefikBusy">
+            <span v-html="traefikBusy?I.spin:I.x" :class="traefikBusy?'spin':''"></span> Disable Traefik
+          </button>
+          <div v-else style="font-size:12px;">
+            <div style="display:grid;gap:9px;margin-bottom:12px;">
+              <div>
+                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Mode</label>
+                <select v-model="traefikForm.mode" class="input" style="width:auto;">
+                  <option value="local">local (HTTP)</option>
+                  <option value="production">production (HTTPS + Let's Encrypt)</option>
+                </select>
+              </div>
+              <div>
+                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Domain</label>
+                <input v-model="traefikForm.domain" class="input" placeholder="myodoo.local" />
+              </div>
+              <div v-if="traefikForm.mode==='production'">
+                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Let's Encrypt email</label>
+                <input v-model="traefikForm.email" type="email" class="input" placeholder="you@example.com" />
+              </div>
+            </div>
+            <button @click="traefikOn" class="btn btn-primary btn-sm" :disabled="traefikOnBusy">
+              <span v-html="traefikOnBusy?I.spin:I.globe" :class="traefikOnBusy?'spin':''"></span>
+              {{ traefikOnBusy ? 'Enabling…' : 'Enable Traefik' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SETUP
+══════════════════════════════════════════════════════════════════════════ */
+const Setup = {
+  setup() {
+    const sshKeys   = ref([])
+    const busy      = ref(false)
+    const scaffBusy = ref(false)
+    const output    = ref('')
+    const form      = ref({
+      project_name: '', odoo_version: '18.0', odoo_edition: 'Community',
+      db_version: '16', admin_passwd: 'admin', odoo_port: 8069,
+      vsc_port: 8888, restart: 'unless-stopped',
+      use_private_repos: false, ssh_key_name: '',
+      use_third_party_repos: false, template: 'basic',
+    })
+    const portStatus = ref({})
+
+    async function loadKeys() {
+      try { const r = await api.get('/setup/ssh-keys'); sshKeys.value = r.keys||[] }
+      catch {}
+    }
+    async function checkPort(field) {
+      try { const r = await api.get('/setup/port/check?port='+form.value[field]); portStatus.value[field] = r.available }
+      catch { portStatus.value[field] = null }
+    }
+    async function scaffold() {
+      scaffBusy.value = true; output.value = ''
+      try {
+        const r = await api.post('/setup/scaffold', { template: form.value.template, force: false })
+        output.value = r.ok ? '✓ Scaffold complete.' : '✗ '+r.error
+        r.ok ? notify('Scaffold complete') : notify(r.error||'Failed','err')
+      } finally { scaffBusy.value = false }
+    }
+    async function initProject() {
+      if (!form.value.project_name.trim()) { notify('Project name required','err'); return }
+      busy.value = true; output.value = ''
+      try {
+        const r = await api.post('/setup/init', {
+          project_name: form.value.project_name, odoo_version: form.value.odoo_version,
+          odoo_edition: form.value.odoo_edition, db_version: form.value.db_version,
+          admin_passwd: form.value.admin_passwd, odoo_port: Number(form.value.odoo_port),
+          vsc_port: Number(form.value.vsc_port), restart: form.value.restart,
+          use_private_repos: form.value.use_private_repos,
+          ssh_key_name: form.value.ssh_key_name || null,
+          use_third_party_repos: form.value.use_third_party_repos,
+        })
+        if (r.ok) { output.value = '✓ Project initialized: '+r.project_name; notify('Project initialized') }
+        else { output.value = '✗ '+r.error+(r.detail?'\n'+r.detail:''); notify(r.error||'Failed','err') }
+      } finally { busy.value = false }
+    }
+    onActivated(loadKeys)
+    return { sshKeys, busy, scaffBusy, output, form, portStatus, scaffold, initProject, checkPort, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Setup</div><div class="page-sub">Scaffold and initialize a new Rocketdoo project in the active directory</div></div>
+    </div>
+    <div style="display:grid;gap:20px;max-width:700px;">
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.rocket" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Step 1 — Scaffold Templates
+        </div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:12px;">Copies base template files to the current directory. Run this first in a new project.</div>
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:6px;">Template type</label>
+          <select v-model="form.template" class="input" style="width:auto;">
+            <option value="basic">basic — standard Odoo setup with Docker</option>
+            <option value="advanced">advanced — with extra tooling</option>
+            <option value="minimal">minimal — bare minimum</option>
+          </select>
+        </div>
+        <button @click="scaffold" class="btn btn-ghost" :disabled="scaffBusy">
+          <span v-html="scaffBusy?I.spin:I.build" :class="scaffBusy?'spin':''"></span>
+          {{ scaffBusy ? 'Scaffolding…' : 'Run Scaffold (rkd scaffold)' }}
+        </button>
+      </div>
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.setup" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Step 2 — Initialize Project
+        </div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:14px;">Generates Dockerfile, docker-compose.yaml, odoo.conf and launch.json from your answers below.</div>
+        <div style="display:grid;gap:12px;">
+          <div>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Project name *</label>
+            <input v-model="form.project_name" class="input" placeholder="my-odoo-project — used as container name prefix" />
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Odoo version</label>
+              <select v-model="form.odoo_version" class="input">
+                <option>15.0</option><option>16.0</option><option>17.0</option><option>18.0</option><option>19.0</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Edition</label>
+              <select v-model="form.odoo_edition" class="input">
+                <option>Community</option><option>Enterprise — requires access to Odoo Enterprise repo</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">PostgreSQL version</label>
+              <select v-model="form.db_version" class="input"><option>13</option><option>14</option><option>15</option><option>16</option></select>
+            </div>
+            <div>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Restart policy</label>
+              <select v-model="form.restart" class="input">
+                <option value="unless-stopped">unless-stopped — restart unless manually stopped</option>
+                <option value="always">always — restart on any exit</option>
+                <option value="no">no — never auto-restart</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Odoo port</label>
+              <div style="display:flex;gap:7px;">
+                <input v-model="form.odoo_port" type="number" class="input" placeholder="8069" @blur="checkPort('odoo_port')" />
+                <button @click="checkPort('odoo_port')" class="btn btn-ghost btn-sm" title="Check port availability">
+                  <span v-html="I.check" :style="{color:portStatus.odoo_port===true?'#22C55E':portStatus.odoo_port===false?'#EF4444':'inherit'}"></span>
+                </button>
+              </div>
+              <div v-if="portStatus.odoo_port===false" style="font-size:11px;color:#F87171;margin-top:3px;">Port in use — choose another</div>
+              <div v-if="portStatus.odoo_port===true" style="font-size:11px;color:#4ADE80;margin-top:3px;">Available</div>
+            </div>
+            <div>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">VSCode debug port</label>
+              <input v-model="form.vsc_port" type="number" class="input" placeholder="8888 — for debugpy remote attach" />
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Master password (admin_passwd)</label>
+            <input v-model="form.admin_passwd" type="password" class="input" placeholder="admin — Odoo database manager password" />
+          </div>
+          <div style="display:flex;gap:20px;">
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
+              <input type="checkbox" v-model="form.use_private_repos" style="accent-color:#1A3DCC;"> SSH / Private repos
+            </label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
+              <input type="checkbox" v-model="form.use_third_party_repos" style="accent-color:#1A3DCC;"> Gitman repos
+            </label>
+          </div>
+          <div v-if="form.use_private_repos">
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">SSH key (from ~/.ssh/)</label>
+            <select v-model="form.ssh_key_name" class="input">
+              <option value="">— none —</option>
+              <option v-for="k in sshKeys" :key="k" :value="k">{{ k }}</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:18px;border-top:1px solid #151E45;padding-top:14px;">
+          <button @click="initProject" class="btn btn-primary" :disabled="busy">
+            <span v-html="busy?I.spin:I.play" :class="busy?'spin':''"></span>
+            {{ busy ? 'Initializing…' : 'Initialize Project (rkd init)' }}
+          </button>
+        </div>
+      </div>
+      <div v-if="output" class="card-flat">
+        <div class="log-term" style="height:auto;min-height:60px;white-space:pre-wrap;">{{ output }}</div>
+      </div>
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DEPLOY
+══════════════════════════════════════════════════════════════════════════ */
+const Deploy = {
+  setup() {
+    const targets    = ref([])
+    const busy       = ref(true)
+    const depBusy    = ref({})
+    const valBusy    = ref(false)
+    const validation = ref(null)
+    const output     = ref('')
+    const hasConfig  = ref(false)
+    const initForm   = ref({ target_name:'production', target_type:'vps', host:'', user:'ubuntu', ssh_port:22, ssh_key:'', deployment_type:'docker', force:false })
+    const initBusy   = ref(false)
+
+    async function load() {
+      busy.value = true
+      try {
+        const [t,c] = await Promise.all([api.get('/deploy/targets'), api.get('/deploy/config')])
+        targets.value = t.targets||[]; hasConfig.value = c.exists
+      } catch { notify('Load failed','err') }
+      finally { busy.value = false }
+    }
+    async function deployTarget(target, dry_run=false) {
+      const k = target+dry_run; depBusy.value[k] = true; output.value = ''
+      try {
+        const r = await api.post('/deploy/run', { target, dry_run, modules:[], skip_backup:false, skip_validation:false })
+        output.value = r.ok ? '✓ '+(dry_run?'[dry-run] ':'')+'Deploy done.\n'+(r.result||r.message||'') : '✗ '+r.error
+        r.ok ? notify((dry_run?'Dry run':'Deploy')+' '+target+' done') : notify(r.error||'Failed','err')
+      } catch(e) { notify(e.message,'err'); output.value = '✗ '+e.message }
+      finally { delete depBusy.value[k] }
+    }
+    async function validate() {
+      valBusy.value = true; validation.value = null
+      try {
+        const r = await api.post('/deploy/validate')
+        validation.value = r
+        r.ok ? notify('All '+r.total+' modules valid') : notify('Validation errors found','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { valBusy.value = false }
+    }
+    async function initDeploy() {
+      initBusy.value = true
+      try {
+        const r = await api.post('/deploy/init', { ...initForm.value, ssh_port: Number(initForm.value.ssh_port) })
+        if (r.ok) { notify('deploy.yaml created'); await load() }
+        else notify(r.error||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { initBusy.value = false }
+    }
+    onActivated(load)
+    return { targets, busy, depBusy, valBusy, validation, output, hasConfig, initForm, initBusy, load, deployTarget, validate, initDeploy, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Deploy</div><div class="page-sub">Deploy Odoo modules to configured VPS targets</div></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" @click="validate" :disabled="valBusy">
+          <span v-html="valBusy?I.spin:I.check" :class="valBusy?'spin':''"></span> Validate Modules
+        </button>
+        <button class="btn btn-ghost" @click="load" :disabled="busy">
+          <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+        </button>
+      </div>
+    </div>
+
+    <div v-if="validation" class="card" :style="{borderColor:validation.ok?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)',marginBottom:'20px'}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span v-html="validation.ok?I.check:I.warn" :style="{width:'16px',height:'16px',color:validation.ok?'#22C55E':'#F87171',flexShrink:0}"></span>
+        <span style="font-size:14px;font-weight:600;color:#DDE4F0;">{{ validation.ok ? 'All '+validation.total+' modules valid' : 'Validation errors' }}</span>
+      </div>
+      <div v-if="!validation.ok" style="font-size:12px;color:#F87171;">
+        <div v-for="(errs,mod) in validation.errors" :key="mod" style="margin-bottom:3px;">
+          <span style="color:#FCD34D;font-family:monospace;">{{ mod }}</span>: <span v-for="e in errs" :key="e">{{ e }} </span>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <div v-if="!hasConfig" class="card" style="max-width:600px;margin-bottom:20px;">
+        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.deploy" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Create Deploy Config
+        </div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:14px;">Creates <code style="color:#6D9CFF;">.rkd/deploy.yaml</code> with your VPS target configuration.</div>
+        <div style="display:grid;gap:11px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Target name</label>
+              <input v-model="initForm.target_name" class="input" placeholder="production — identifier for this target" /></div>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Type</label>
+              <select v-model="initForm.target_type" class="input"><option value="vps">vps — self-hosted Linux server</option><option value="odoo-sh">odoo-sh — Odoo.sh platform</option></select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 80px;gap:10px;">
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Host / IP</label>
+              <input v-model="initForm.host" class="input" placeholder="10.0.0.1 or vps.example.com" /></div>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">SSH Port</label>
+              <input v-model="initForm.ssh_port" type="number" class="input" placeholder="22" /></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">User</label>
+              <input v-model="initForm.user" class="input" placeholder="ubuntu — SSH user on the VPS" /></div>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Deployment</label>
+              <select v-model="initForm.deployment_type" class="input"><option value="docker">docker</option><option value="native">native</option></select></div>
+          </div>
+          <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">SSH Key path</label>
+            <input v-model="initForm.ssh_key" class="input" placeholder="~/.ssh/id_rsa — leave empty to use ssh-agent" /></div>
+        </div>
+        <div style="margin-top:14px;border-top:1px solid #151E45;padding-top:12px;">
+          <button @click="initDeploy" class="btn btn-primary" :disabled="initBusy">
+            <span v-html="initBusy?I.spin:I.play" :class="initBusy?'spin':''"></span>
+            {{ initBusy ? 'Creating…' : 'Create deploy.yaml' }}
+          </button>
+        </div>
+      </div>
+
+      <div v-else-if="!targets.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.deploy"></div>
+        <h3>No deploy targets found</h3>
+        <p>Add targets to <code style="color:#6D9CFF;">.rkd/deploy.yaml</code></p>
+      </div>
+
+      <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;margin-bottom:20px;">
+        <div v-for="t in targets" :key="t.name" class="card" style="border-color:rgba(26,61,204,0.3);">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">
+            <span v-html="I.deploy" style="width:17px;height:17px;color:#1A3DCC;flex-shrink:0;"></span>
+            <span style="font-size:15px;font-weight:700;color:#DDE4F0;">{{ t.name }}</span>
+            <span class="badge badge-blue" style="margin-left:auto;">{{ t.type }}</span>
+          </div>
+          <div style="font-size:12px;margin-bottom:14px;">
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:48px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ t.host||'—' }}</span></div>
+          </div>
+          <div style="border-top:1px solid #151E45;padding-top:12px;display:flex;gap:8px;">
+            <button @click="deployTarget(t.name,false)" class="btn btn-primary btn-sm" :disabled="depBusy[t.name+'false']">
+              <span v-html="depBusy[t.name+'false']?I.spin:I.deploy" :class="depBusy[t.name+'false']?'spin':''"></span> Deploy
+            </button>
+            <button @click="deployTarget(t.name,true)" class="btn btn-ghost btn-sm" :disabled="depBusy[t.name+'true']">
+              <span v-html="depBusy[t.name+'true']?I.spin:I.play" :class="depBusy[t.name+'true']?'spin':''"></span> Dry run
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="output" class="card-flat">
+        <div class="log-term" style="height:auto;min-height:60px;max-height:260px;overflow-y:auto;white-space:pre-wrap;">{{ output }}</div>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PACK
+══════════════════════════════════════════════════════════════════════════ */
+const Pack = {
+  setup() {
+    const status     = ref({ project_exists: false, shared_json_found: false })
+    const packForm   = ref({ include_db: true, output_path: '', db_name: '' })
+    const packBusy   = ref(false)
+    const unpackBusy = ref(false)
+    const output     = ref('')
+    const busy       = ref(true)
+
+    async function load() {
+      busy.value = true
+      try { const r = await api.get('/pack/status'); status.value = r }
+      catch {} finally { busy.value = false }
+    }
+    async function pack() {
+      packBusy.value = true; output.value = ''
+      try {
+        const body = { include_db: packForm.value.include_db }
+        if (packForm.value.output_path) body.output_path = packForm.value.output_path
+        if (packForm.value.db_name) body.db_name = packForm.value.db_name
+        const r = await api.post('/pack/pack', body)
+        output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
+        r.ok ? notify('Pack completed') : notify(r.stderr||'Pack failed','err')
+        if (r.ok) await load()
+      } finally { packBusy.value = false }
+    }
+    async function unpack() {
+      unpackBusy.value = true; output.value = ''
+      try {
+        const r = await api.post('/pack/unpack')
+        output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
+        r.ok ? notify('Unpack completed') : notify(r.stderr||'Unpack failed','err')
+      } finally { unpackBusy.value = false }
+    }
+    onActivated(load)
+    return { status, packForm, packBusy, unpackBusy, output, busy, pack, unpack, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Pack / Unpack</div><div class="page-sub">Package and share complete Rocketdoo environments</div></div>
+    </div>
+    <div style="display:grid;gap:20px;max-width:680px;">
+      <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
+        <div class="stat-card">
+          <div class="stat-label">Project</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:8px;">
+            <span class="dot" :class="status.project_exists?'dot-green':'dot-red'"></span>
+            <span style="color:#DDE4F0;">{{ status.project_exists?'Found':'Not found' }}</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">rkd-shared.json</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:8px;">
+            <span class="dot" :class="status.shared_json_found?'dot-green':'dot-gray'"></span>
+            <span style="color:#DDE4F0;">{{ status.shared_json_found?'Found':'Not found' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.pack" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Pack Environment
+        </div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:12px;">Creates a ZIP with the full project (code + DB backup + filestore) to share with another developer.</div>
+        <div style="display:grid;gap:11px;margin-bottom:14px;">
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
+            <input type="checkbox" v-model="packForm.include_db" style="accent-color:#1A3DCC;"> Include database backup (pg_dump)
+          </label>
+          <div>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Output path (optional)</label>
+            <input v-model="packForm.output_path" class="input" placeholder="~/my-project.zip — default: auto-named in current dir" />
+          </div>
+          <div>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Database name (optional)</label>
+            <input v-model="packForm.db_name" class="input" placeholder="auto-detect — leave empty to detect automatically" />
+          </div>
+        </div>
+        <button @click="pack" class="btn btn-primary" :disabled="packBusy||!status.project_exists">
+          <span v-html="packBusy?I.spin:I.pack" :class="packBusy?'spin':''"></span>
+          {{ packBusy ? 'Packing…' : 'Pack (rkd pack)' }}
+        </button>
+      </div>
+      <div class="card">
+        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.pack" style="width:16px;height:16px;color:#7553C8;flex-shrink:0;"></span> Unpack Environment
+        </div>
+        <div style="font-size:13px;color:#6B82A8;margin-bottom:14px;">
+          Restore a previously packed environment in the current directory.
+          Requires <code style="background:#090D22;padding:1px 5px;border-radius:4px;color:#6D9CFF;font-size:11px;">rkd-shared.json</code> to be present.
+        </div>
+        <button @click="unpack" class="btn btn-ghost" :disabled="unpackBusy||!status.shared_json_found">
+          <span v-html="unpackBusy?I.spin:I.play" :class="unpackBusy?'spin':''"></span>
+          {{ unpackBusy ? 'Unpacking…' : 'Unpack (rkd unpack)' }}
+        </button>
+      </div>
+      <div v-if="output" class="card-flat">
+        <div class="log-term" style="height:auto;min-height:80px;max-height:280px;overflow-y:auto;white-space:pre-wrap;">{{ output }}</div>
+      </div>
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PROJECTS — Discover, navigate & create Rocketdoo projects
+══════════════════════════════════════════════════════════════════════════ */
+const Projects = {
+  setup() {
+    const projects   = ref([])
+    const busy       = ref(false)
+    const scanDir    = ref('')
+    const newName    = ref('')
+    const createBusy = ref(false)
+    const navBusy    = ref({})
+    const editing    = ref(false)
+    const customPath = ref('')
+    const scanned    = ref(false)
+
+    async function loadWorkspace() {
+      try {
+        const r = await api.get('/workspace')
+        currentPath.value = r.path
+        customPath.value = r.path
+        if (!scanDir.value) scanDir.value = r.default_scan
+      } catch {}
+    }
+
+    async function discover() {
+      busy.value = true; scanned.value = false
+      try {
+        const r = await api.post('/workspace/discover', { base_dir: scanDir.value, max_depth: 3 })
+        projects.value = r.projects || []
+        scanned.value = true
+        if (r.error) notify(r.error, 'err')
+        else if (r.total > 0) notify('Found ' + r.total + ' project' + (r.total !== 1 ? 's' : ''))
+        else notify('No Rocketdoo projects found in ' + r.base_dir, 'err')
+      } catch(e) { notify(e.message, 'err') }
+      finally { busy.value = false }
+    }
+
+    async function navigate(path) {
+      navBusy.value[path] = true
+      try {
+        const r = await api.post('/workspace/navigate', { path })
+        if (r.ok) {
+          currentPath.value = r.path
+          customPath.value = r.path
+          projects.value = projects.value.map(p => ({ ...p, is_current: p.path === r.path }))
+          notify('Project "' + r.name + '" opened — switching to Dashboard')
+          setTimeout(() => { view.value = 'dashboard' }, 400)
+        } else notify(r.error || 'Failed to open project', 'err')
+      } catch(e) { notify(e.message, 'err') }
+      finally { navBusy.value[path] = false }
+    }
+
+    async function navigateCustom() {
+      if (!customPath.value.trim()) return
+      editing.value = false
+      await navigate(customPath.value.trim())
+    }
+
+    async function createProject() {
+      const name = newName.value.trim()
+      if (!name) { notify('Project name required', 'err'); return }
+      createBusy.value = true
+      try {
+        const mkr = await api.post('/workspace/mkdir', { name, base_dir: scanDir.value })
+        if (!mkr.ok) { notify(mkr.error || 'Failed to create directory', 'err'); return }
+        const navr = await api.post('/workspace/navigate', { path: mkr.path })
+        if (navr.ok) { currentPath.value = navr.path; customPath.value = navr.path }
+        notify('Created ' + mkr.name + ' — opening Setup…')
+        newName.value = ''
+        // Small delay so the notify is visible before switching
+        setTimeout(() => { view.value = 'setup' }, 600)
+      } catch(e) { notify(e.message, 'err') }
+      finally { createBusy.value = false }
+    }
+
+    onMounted(async () => {
+      await loadWorkspace()
+      discover()
+    })
+
+    return {
+      projects, busy, scanDir, newName, createBusy, navBusy,
+      editing, customPath, scanned, currentPath,
+      navigate, navigateCustom, createProject, discover, I
+    }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Projects</div>
+        <div class="page-sub">Discover, navigate and create Rocketdoo projects on this host</div>
+      </div>
+      <button class="btn btn-ghost" @click="discover" :disabled="busy">
+        <span v-html="busy?I.spin:I.search" :class="busy?'spin':''"></span>
+        {{ busy ? 'Scanning…' : 'Scan' }}
+      </button>
+    </div>
+
+    <!-- ── Active project directory ──────────────────────────────────────── -->
+    <div style="margin-bottom:24px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Active Project Directory</div>
+      <div class="card">
+        <div v-if="!editing" style="display:flex;align-items:center;gap:12px;">
+          <span v-html="I.folder" style="width:18px;height:18px;color:#1A3DCC;flex-shrink:0;"></span>
+          <span style="font-family:monospace;font-size:13px;color:#DDE4F0;flex:1;word-break:break-all;">{{ currentPath || '…' }}</span>
+          <button @click="editing=true" class="btn btn-ghost btn-sm">Change</button>
+        </div>
+        <div v-else style="display:flex;gap:8px;align-items:center;">
+          <input v-model="customPath" class="input"
+                 placeholder="/home/user/projects/my-project — absolute path"
+                 @keyup.enter="navigateCustom"
+                 style="font-family:monospace;font-size:12px;" />
+          <button @click="navigateCustom" class="btn btn-primary btn-sm">Go</button>
+          <button @click="editing=false" class="btn btn-ghost btn-sm">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Create new project ────────────────────────────────────────────── -->
+    <div style="margin-bottom:28px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Create New Project</div>
+      <div class="card">
+        <div style="font-size:13px;color:#6B82A8;margin-bottom:14px;">
+          Creates a new directory in the scan folder → navigates to it → opens Setup so you can scaffold and initialize.
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <input v-model="newName" class="input"
+                 placeholder="my-odoo-project — directory name, no spaces"
+                 @keyup.enter="createProject"
+                 style="font-family:monospace;" />
+          <button @click="createProject" class="btn btn-primary"
+                  :disabled="createBusy || !newName.trim()"
+                  style="white-space:nowrap;flex-shrink:0;">
+            <span v-html="createBusy?I.spin:I.plus" :class="createBusy?'spin':''"></span>
+            {{ createBusy ? 'Creating…' : 'Create & Setup' }}
+          </button>
+        </div>
+        <div style="font-size:11px;color:#5577A2;">
+          Will create:
+          <span style="font-family:monospace;color:#6B82A8;">{{ scanDir }}/{{ newName || '&lt;name&gt;' }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Discover section ──────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Discover Projects</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+      <input v-model="scanDir" class="input"
+             placeholder="~/workspace — base directory to scan recursively"
+             @keyup.enter="discover" />
+      <button @click="discover" class="btn btn-ghost" :disabled="busy" style="white-space:nowrap;flex-shrink:0;">
+        <span v-html="busy?I.spin:I.search" :class="busy?'spin':''"></span> Discover
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:60px 0;color:#6B82A8;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+      <div style="margin-top:12px;font-size:13px;">Scanning for projects…</div>
+    </div>
+
+    <template v-else>
+      <div v-if="scanned && !projects.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.compass"></div>
+        <h3>No projects found</h3>
+        <p>A Rocketdoo project must have both <code style="color:#6D9CFF;">Dockerfile</code> and <code style="color:#6D9CFF;">docker-compose.yaml</code></p>
+      </div>
+
+      <div v-else-if="projects.length">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:14px;">
+          {{ projects.length }} Project{{ projects.length !== 1 ? 's' : '' }} Found
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+          <div v-for="p in projects" :key="p.path"
+               class="proj-card" :class="{ 'active-proj': p.is_current }">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                  <span v-html="I.folder" style="width:15px;height:15px;color:#1A3DCC;flex-shrink:0;"></span>
+                  <span style="font-size:15px;font-weight:700;color:#DDE4F0;">{{ p.name }}</span>
+                </div>
+                <div style="font-size:10px;color:#5577A2;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                     :title="p.path">{{ p.path }}</div>
+              </div>
+              <span v-if="p.is_current" class="badge badge-blue" style="margin-left:8px;flex-shrink:0;">Active</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+              <span class="dot"
+                    :class="p.running>0 ? 'dot-green' : p.containers>0 ? 'dot-red' : 'dot-gray'"></span>
+              <span style="font-size:12px;color:#6B82A8;">
+                {{ p.containers > 0
+                   ? p.running + '/' + p.containers + ' container' + (p.containers!==1?'s':'') + ' running'
+                   : 'No containers' }}
+              </span>
+            </div>
+            <div style="border-top:1px solid #151E45;padding-top:12px;">
+              <button v-if="!p.is_current"
+                      @click="navigate(p.path)"
+                      class="btn btn-primary btn-sm"
+                      :disabled="navBusy[p.path]">
+                <span v-html="navBusy[p.path]?I.spin:I.folder"
+                      :class="navBusy[p.path]?'spin':''"></span>
+                {{ navBusy[p.path] ? 'Switching…' : 'Open Project' }}
+              </button>
+              <div v-else style="display:flex;align-items:center;gap:6px;">
+                <span class="dot dot-green" style="width:6px;height:6px;"></span>
+                <span style="font-size:12px;color:#22C55E;font-weight:500;">Currently active</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   HELP & QUICK GUIDE
+══════════════════════════════════════════════════════════════════════════ */
+const Help = {
+  setup() { return { I } },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header" style="margin-bottom:24px;">
+      <div>
+        <div class="page-title">Help &amp; Quick Guide</div>
+        <div class="page-sub">Reference for all GUI features with their CLI equivalents</div>
+      </div>
+      <a href="https://rkd-docs.readthedocs.io" target="_blank" class="btn btn-ghost" style="text-decoration:none;flex-shrink:0;">
+        <span v-html="I.ext"></span> Full Docs
+      </a>
+    </div>
+
+    <!-- ── Quick Start ───────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Quick Start</div>
+    <div class="card-flat" style="margin-bottom:28px;">
+      <div style="padding:20px 24px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;">
+          <div v-for="(step,i) in [
+            {n:1, title:'Navigate', desc:'Use Projects to open or switch to your project directory.', cli:'cd my-project'},
+            {n:2, title:'Scaffold', desc:'Copy the base template files into the current directory.', cli:'rkd scaffold'},
+            {n:3, title:'Initialize', desc:'Run the interactive wizard to configure Docker and Odoo.', cli:'rkd init'},
+            {n:4, title:'Start', desc:'Build the image and start all containers in the background.', cli:'rkd up -d'},
+            {n:5, title:'Develop', desc:'Open Odoo in the browser, check logs, add modules.', cli:'http://localhost:8069'},
+            {n:6, title:'Deploy', desc:'Push modules to a VPS target when ready for production.', cli:'rkd deploy run -t prod'},
+          ]" :key="i"
+          style="display:flex;gap:14px;padding:14px 16px;border-right:1px solid #151E45;border-bottom:1px solid #151E45;">
+            <div style="width:26px;height:26px;border-radius:50%;background:rgba(26,61,204,0.25);border:1px solid rgba(26,61,204,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:#6D9CFF;">{{ step.n }}</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#DDE4F0;margin-bottom:3px;">{{ step.title }}</div>
+              <div style="font-size:12px;color:#6B82A8;margin-bottom:7px;line-height:1.5;">{{ step.desc }}</div>
+              <code style="font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;color:#4ADE80;font-family:monospace;">{{ step.cli }}</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── View Reference ────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">View Reference</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:28px;">
+
+      <!-- Projects -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.compass" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Projects</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalent</div>
+        <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:4px 9px;display:inline-block;">cd /path/to/project &amp;&amp; rkd gui</code>
+      </div>
+
+      <!-- Dashboard -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.dashboard" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Dashboard</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:#DDE4F0;">Start</b> / <b style="color:#DDE4F0;">Stop</b> / <b style="color:#DDE4F0;">Build</b> buttons open a real-time terminal showing the full docker output.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd up -d</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd down</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd restart</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd build --rebuild</code>
+        </div>
+      </div>
+
+      <!-- Containers -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.containers" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Containers</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:#DDE4F0;">Logs</b> to open a live WebSocket stream for that container.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd status</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd logs web -f</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd docker restart web</code>
+        </div>
+      </div>
+
+      <!-- Modules -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.modules" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Modules</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Scans the <code style="color:#6D9CFF;font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:#DDE4F0;">External Repos</b> section shows and edits <code style="color:#6D9CFF;font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy list-modules</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">gitman update</code>
+        </div>
+      </div>
+
+      <!-- Instances -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.instances" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Instances</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:#DDE4F0;">stage</b> and <b style="color:#DDE4F0;">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance init</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance deploy --env stage</code>
+        </div>
+      </div>
+
+      <!-- Services -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.services" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Services</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;"><b style="color:#DDE4F0;">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:#6D9CFF;font-size:11px;">localhost:8025</code> to inspect them. <b style="color:#DDE4F0;">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd mail on/off</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd traefik on/off</code>
+        </div>
+      </div>
+
+      <!-- Deploy -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.deploy" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Deploy</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Deploy specific Odoo <b style="color:#DDE4F0;">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:#DDE4F0;">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy init</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy run -t prod</code>
+        </div>
+      </div>
+
+      <!-- Pack -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.pack" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Pack</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:#DDE4F0;">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd pack</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd unpack</code>
+        </div>
+      </div>
+
+      <!-- Setup -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.setup" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Setup</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;"><b style="color:#DDE4F0;">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:#DDE4F0;">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd scaffold</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd init</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd info</code>
+        </div>
+      </div>
+
+    </div><!-- /grid -->
+
+    <!-- ── CLI Quick Reference ────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">CLI Quick Reference</div>
+    <div class="card-flat" style="margin-bottom:8px;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:38%;">Command</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="([cmd,desc],i) in [
+            ['rkd scaffold',                    'Copy base template files into the current directory'],
+            ['rkd init',                        'Interactive wizard — Dockerfile, docker-compose, odoo.conf'],
+            ['rkd info',                        'Display current project configuration in tables'],
+            ['rkd up -d',                       'Start all containers in detached mode'],
+            ['rkd down [-v]',                   'Stop and remove containers (optionally delete volumes)'],
+            ['rkd restart',                     'Restart all services'],
+            ['rkd build --rebuild',             'Rebuild Docker image and restart'],
+            ['rkd status',                      'Show container status (docker compose ps)'],
+            ['rkd stop',                        'Stop containers without removing them'],
+            ['rkd logs [service] -f',           'Stream container logs (live follow)'],
+            ['rkd mail on / off / status',      'Toggle Mailpit SMTP testing server'],
+            ['rkd mail open',                   'Open Mailpit web UI at localhost:8025'],
+            ['rkd traefik on / off / status',   'Toggle Traefik reverse proxy'],
+            ['rkd traefik guide',               'Show /etc/hosts setup instructions'],
+            ['rkd deploy init',                 'Configure module deployment targets'],
+            ['rkd deploy list-modules',         'Scan and list Odoo modules in addons/'],
+            ['rkd deploy run -t TARGET',        'Deploy modules to a configured target'],
+            ['rkd deploy validate',             'Validate modules before deployment'],
+            ['rkd instance init',               'Configure stage/prod VPS environments'],
+            ['rkd instance deploy --env STAGE', 'Deploy full Odoo instance to VPS'],
+            ['rkd instance status',             'Show configured deployment environments'],
+            ['rkd pack',                        'Package environment (code + DB) as a ZIP'],
+            ['rkd unpack',                      'Restore an environment from a ZIP'],
+            ['rkd del -i',                      'Remove .Identifier files generated by WSL2'],
+          ]" :key="i">
+            <td style="font-family:monospace;font-size:12px;color:#6D9CFF;white-space:nowrap;">{{ cmd }}</td>
+            <td style="font-size:12px;color:#6B82A8;">{{ desc }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="text-align:center;padding:16px 0 4px;font-size:12px;color:#5577A2;">
+      Run <code style="color:#6D9CFF;font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:4px;padding:2px 7px;">rkd --help</code> or
+      <code style="color:#6D9CFF;font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
+      for full option details in the terminal.
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ROOT APP
+══════════════════════════════════════════════════════════════════════════ */
+const App = {
+  components: { Projects, Dashboard, Containers, Modules, Instances, Services, Setup, Deploy, Pack, Help },
+  setup() {
+    const nav = [
+      { id:'projects',   label:'Projects',   icon: I.compass    },
+      { id:'dashboard',  label:'Dashboard',  icon: I.dashboard  },
+      { id:'containers', label:'Containers', icon: I.containers },
+      { id:'modules',    label:'Modules',    icon: I.modules    },
+      { id:'instances',  label:'Instances',  icon: I.instances  },
+      { id:'services',   label:'Services',   icon: I.services   },
+      { id:'deploy',     label:'Deploy',     icon: I.deploy     },
+      { id:'setup',      label:'Setup',      icon: I.setup      },
+      { id:'pack',       label:'Pack',       icon: I.pack       },
+      { id:'help',       label:'Help',       icon: I.help       },
+    ]
+    const viewMap = {
+      projects:'Projects', dashboard:'Dashboard', containers:'Containers',
+      modules:'Modules', instances:'Instances', services:'Services',
+      deploy:'Deploy', setup:'Setup', pack:'Pack', help:'Help'
+    }
+
+    const darkMode = ref(localStorage.getItem('rkd-theme') !== 'light')
+    function toggleTheme() {
+      darkMode.value = !darkMode.value
+      localStorage.setItem('rkd-theme', darkMode.value ? 'dark' : 'light')
+      document.documentElement.classList.toggle('light', !darkMode.value)
+    }
+
+    async function init() {
+      try {
+        const r = await api.get('/workspace')
+        currentPath.value = r.path
+      } catch {}
+    }
+
+    onMounted(() => {
+      if (!darkMode.value) document.documentElement.classList.add('light')
+      init()
+    })
+    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme }
+  },
+  template: `
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo-area">
+        <div class="logo-icon">
+          <span v-html="I.rocket" style="width:18px;height:18px;color:white;"></span>
+        </div>
+        <div>
+          <div class="logo-text">RKD <span class="v3-badge">v3</span></div>
+          <div class="logo-sub">Rocketdoo</div>
+        </div>
+      </div>
+
+      <!-- Active path pill -->
+      <div v-if="currentPath" class="active-path" @click="view='projects'" title="Click to manage projects">
+        <div class="active-path-label">Working Dir</div>
+        <div class="active-path-val">{{ currentPath.split('/').slice(-2).join('/') || currentPath }}</div>
+      </div>
+
+      <nav class="nav">
+        <div v-for="n in nav" :key="n.id"
+             class="nav-item" :class="{ active: view===n.id }"
+             @click="view=n.id">
+          <span v-html="n.icon"></span>
+          {{ n.label }}
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#4D6A92;">Rocketdoo GUI v3.0.0</span>
+          <button @click="toggleTheme" class="btn btn-ghost btn-sm"
+                  :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                  style="padding:3px 8px;border-radius:6px;">
+            <span v-html="darkMode ? I.sun : I.moon" style="width:14px;height:14px;display:block;"></span>
+          </button>
+        </div>
+        <a href="https://rkd-docs.readthedocs.io" target="_blank"
+           style="color:#1A3DCC;text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:4px;">
+          <span v-html="I.ext" style="width:10px;height:10px;"></span> Documentation
+        </a>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <keep-alive>
+        <component :is="viewMap[view]||'Projects'"></component>
+      </keep-alive>
+    </main>
+
+    <!-- Notifications -->
+    <div class="notif-wrap">
+      <div v-for="n in notifs" :key="n.id" class="notif" :class="n.type==='err'?'notif-err':'notif-ok'">
+        <span v-html="n.type==='err'?I.warn:I.check"></span>
+        {{ n.msg }}
+      </div>
+    </div>
+  </div>`
+}
+
+createApp(App).mount('#app')
+</script>
+</body>
