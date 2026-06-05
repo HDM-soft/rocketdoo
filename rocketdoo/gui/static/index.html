@@ -141,6 +141,17 @@ input:checked ~ .toggle-track::before { transform: translateX(18px); background:
 .proj-card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 18px; transition: all .15s; }
 .proj-card:hover { border-color: rgba(26,61,204,0.4); }
 .proj-card.active-proj { border-color: rgba(26,61,204,0.55); background: rgba(26,61,204,0.05); }
+
+/* ── Light Mode ─────────────────────────────────────────────────────────── */
+html.light body { background: #BEC9D8; }
+html.light .page-title { color: #0D1835; }
+html.light .page-sub   { color: #3A5070; }
+html.light .btn-ghost  { color: #2A4060; border-color: #7A94B8; }
+html.light .btn-ghost:hover { color: #0D1835; background: rgba(26,61,204,0.12); border-color: rgba(26,61,204,0.4); }
+html.light .btn-ghost:disabled { color: #2A4060; }
+html.light ::-webkit-scrollbar-track { background: #B0BBD0; }
+html.light ::-webkit-scrollbar-thumb { background: #7A8EAA; }
+html.light ::-webkit-scrollbar-thumb:hover { background: #4A6080; }
 </style>
 </head>
 <body>
@@ -199,6 +210,8 @@ const I = {
   plus:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   link:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>`,
   terminal:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
+  sun:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`,
+  moon:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`,
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -1534,6 +1547,13 @@ const App = {
       deploy:'Deploy', setup:'Setup', pack:'Pack'
     }
 
+    const darkMode = ref(localStorage.getItem('rkd-theme') !== 'light')
+    function toggleTheme() {
+      darkMode.value = !darkMode.value
+      localStorage.setItem('rkd-theme', darkMode.value ? 'dark' : 'light')
+      document.documentElement.classList.toggle('light', !darkMode.value)
+    }
+
     async function init() {
       try {
         const r = await api.get('/workspace')
@@ -1541,8 +1561,11 @@ const App = {
       } catch {}
     }
 
-    onMounted(init)
-    return { view, nav, notifs, I, viewMap, currentPath }
+    onMounted(() => {
+      if (!darkMode.value) document.documentElement.classList.add('light')
+      init()
+    })
+    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme }
   },
   template: `
   <div class="layout">
@@ -1574,7 +1597,14 @@ const App = {
       </nav>
 
       <div class="sidebar-footer">
-        <div style="margin-bottom:5px;color:#3D5480;">Rocketdoo GUI v3.0.0</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:#3D5480;">Rocketdoo GUI v3.0.0</span>
+          <button @click="toggleTheme" class="btn btn-ghost btn-sm"
+                  :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                  style="padding:3px 8px;border-radius:6px;">
+            <span v-html="darkMode ? I.sun : I.moon" style="width:14px;height:14px;display:block;"></span>
+          </button>
+        </div>
         <a href="https://rkd-docs.readthedocs.io" target="_blank"
            style="color:#1A3DCC;text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:4px;">
           <span v-html="I.ext" style="width:10px;height:10px;"></span> Documentation
