@@ -214,6 +214,8 @@ const I = {
   terminal:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
   sun:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`,
   moon:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>`,
+  help:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  book:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>`,
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
@@ -1765,10 +1767,237 @@ const Projects = {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   HELP & QUICK GUIDE
+══════════════════════════════════════════════════════════════════════════ */
+const Help = {
+  setup() { return { I } },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header" style="margin-bottom:24px;">
+      <div>
+        <div class="page-title">Help &amp; Quick Guide</div>
+        <div class="page-sub">Reference for all GUI features with their CLI equivalents</div>
+      </div>
+      <a href="https://rkd-docs.readthedocs.io" target="_blank" class="btn btn-ghost" style="text-decoration:none;flex-shrink:0;">
+        <span v-html="I.ext"></span> Full Docs
+      </a>
+    </div>
+
+    <!-- ── Quick Start ───────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Quick Start</div>
+    <div class="card-flat" style="margin-bottom:28px;">
+      <div style="padding:20px 24px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;">
+          <div v-for="(step,i) in [
+            {n:1, title:'Navigate', desc:'Use Projects to open or switch to your project directory.', cli:'cd my-project'},
+            {n:2, title:'Scaffold', desc:'Copy the base template files into the current directory.', cli:'rkd scaffold'},
+            {n:3, title:'Initialize', desc:'Run the interactive wizard to configure Docker and Odoo.', cli:'rkd init'},
+            {n:4, title:'Start', desc:'Build the image and start all containers in the background.', cli:'rkd up -d'},
+            {n:5, title:'Develop', desc:'Open Odoo in the browser, check logs, add modules.', cli:'http://localhost:8069'},
+            {n:6, title:'Deploy', desc:'Push modules to a VPS target when ready for production.', cli:'rkd deploy run -t prod'},
+          ]" :key="i"
+          style="display:flex;gap:14px;padding:14px 16px;border-right:1px solid #151E45;border-bottom:1px solid #151E45;">
+            <div style="width:26px;height:26px;border-radius:50%;background:rgba(26,61,204,0.25);border:1px solid rgba(26,61,204,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:#6D9CFF;">{{ step.n }}</div>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:#DDE4F0;margin-bottom:3px;">{{ step.title }}</div>
+              <div style="font-size:12px;color:#6B82A8;margin-bottom:7px;line-height:1.5;">{{ step.desc }}</div>
+              <code style="font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;color:#4ADE80;font-family:monospace;">{{ step.cli }}</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── View Reference ────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">View Reference</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:28px;">
+
+      <!-- Projects -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.compass" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Projects</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalent</div>
+        <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:4px 9px;display:inline-block;">cd /path/to/project &amp;&amp; rkd gui</code>
+      </div>
+
+      <!-- Dashboard -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.dashboard" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Dashboard</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:#DDE4F0;">Start</b> / <b style="color:#DDE4F0;">Stop</b> / <b style="color:#DDE4F0;">Build</b> buttons open a real-time terminal showing the full docker output.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd up -d</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd down</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd restart</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd build --rebuild</code>
+        </div>
+      </div>
+
+      <!-- Containers -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.containers" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Containers</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:#DDE4F0;">Logs</b> to open a live WebSocket stream for that container.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd status</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd logs web -f</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd docker restart web</code>
+        </div>
+      </div>
+
+      <!-- Modules -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.modules" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Modules</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Scans the <code style="color:#6D9CFF;font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:#DDE4F0;">External Repos</b> section shows and edits <code style="color:#6D9CFF;font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy list-modules</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">gitman update</code>
+        </div>
+      </div>
+
+      <!-- Instances -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.instances" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Instances</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:#DDE4F0;">stage</b> and <b style="color:#DDE4F0;">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance init</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance deploy --env stage</code>
+        </div>
+      </div>
+
+      <!-- Services -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.services" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Services</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;"><b style="color:#DDE4F0;">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:#6D9CFF;font-size:11px;">localhost:8025</code> to inspect them. <b style="color:#DDE4F0;">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd mail on/off</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd traefik on/off</code>
+        </div>
+      </div>
+
+      <!-- Deploy -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.deploy" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Deploy</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Deploy specific Odoo <b style="color:#DDE4F0;">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:#DDE4F0;">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy init</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy run -t prod</code>
+        </div>
+      </div>
+
+      <!-- Pack -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.pack" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Pack</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:#DDE4F0;">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd pack</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd unpack</code>
+        </div>
+      </div>
+
+      <!-- Setup -->
+      <div class="card" style="padding:16px 18px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <span v-html="I.setup" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Setup</span>
+        </div>
+        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;"><b style="color:#DDE4F0;">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:#DDE4F0;">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd scaffold</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd init</code>
+          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd info</code>
+        </div>
+      </div>
+
+    </div><!-- /grid -->
+
+    <!-- ── CLI Quick Reference ────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">CLI Quick Reference</div>
+    <div class="card-flat" style="margin-bottom:8px;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th style="width:38%;">Command</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="([cmd,desc],i) in [
+            ['rkd scaffold',                    'Copy base template files into the current directory'],
+            ['rkd init',                        'Interactive wizard — Dockerfile, docker-compose, odoo.conf'],
+            ['rkd info',                        'Display current project configuration in tables'],
+            ['rkd up -d',                       'Start all containers in detached mode'],
+            ['rkd down [-v]',                   'Stop and remove containers (optionally delete volumes)'],
+            ['rkd restart',                     'Restart all services'],
+            ['rkd build --rebuild',             'Rebuild Docker image and restart'],
+            ['rkd status',                      'Show container status (docker compose ps)'],
+            ['rkd stop',                        'Stop containers without removing them'],
+            ['rkd logs [service] -f',           'Stream container logs (live follow)'],
+            ['rkd mail on / off / status',      'Toggle Mailpit SMTP testing server'],
+            ['rkd mail open',                   'Open Mailpit web UI at localhost:8025'],
+            ['rkd traefik on / off / status',   'Toggle Traefik reverse proxy'],
+            ['rkd traefik guide',               'Show /etc/hosts setup instructions'],
+            ['rkd deploy init',                 'Configure module deployment targets'],
+            ['rkd deploy list-modules',         'Scan and list Odoo modules in addons/'],
+            ['rkd deploy run -t TARGET',        'Deploy modules to a configured target'],
+            ['rkd deploy validate',             'Validate modules before deployment'],
+            ['rkd instance init',               'Configure stage/prod VPS environments'],
+            ['rkd instance deploy --env STAGE', 'Deploy full Odoo instance to VPS'],
+            ['rkd instance status',             'Show configured deployment environments'],
+            ['rkd pack',                        'Package environment (code + DB) as a ZIP'],
+            ['rkd unpack',                      'Restore an environment from a ZIP'],
+            ['rkd del -i',                      'Remove .Identifier files generated by WSL2'],
+          ]" :key="i">
+            <td style="font-family:monospace;font-size:12px;color:#6D9CFF;white-space:nowrap;">{{ cmd }}</td>
+            <td style="font-size:12px;color:#6B82A8;">{{ desc }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="text-align:center;padding:16px 0 4px;font-size:12px;color:#5577A2;">
+      Run <code style="color:#6D9CFF;font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:4px;padding:2px 7px;">rkd --help</code> or
+      <code style="color:#6D9CFF;font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
+      for full option details in the terminal.
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    ROOT APP
 ══════════════════════════════════════════════════════════════════════════ */
 const App = {
-  components: { Projects, Dashboard, Containers, Modules, Instances, Services, Setup, Deploy, Pack },
+  components: { Projects, Dashboard, Containers, Modules, Instances, Services, Setup, Deploy, Pack, Help },
   setup() {
     const nav = [
       { id:'projects',   label:'Projects',   icon: I.compass    },
@@ -1780,11 +2009,12 @@ const App = {
       { id:'deploy',     label:'Deploy',     icon: I.deploy     },
       { id:'setup',      label:'Setup',      icon: I.setup      },
       { id:'pack',       label:'Pack',       icon: I.pack       },
+      { id:'help',       label:'Help',       icon: I.help       },
     ]
     const viewMap = {
       projects:'Projects', dashboard:'Dashboard', containers:'Containers',
       modules:'Modules', instances:'Instances', services:'Services',
-      deploy:'Deploy', setup:'Setup', pack:'Pack'
+      deploy:'Deploy', setup:'Setup', pack:'Pack', help:'Help'
     }
 
     const darkMode = ref(localStorage.getItem('rkd-theme') !== 'light')
