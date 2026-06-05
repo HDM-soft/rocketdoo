@@ -1,5 +1,6 @@
 import yaml
 from pathlib import Path
+from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -34,6 +35,41 @@ async def list_instances():
             "port": cfg.get("port", 22),
         })
     return {"instances": envs}
+
+
+class EnvConfig(BaseModel):
+    type: str = "docker"
+    host: str = ""
+    port: int = 22
+    user: str = "ubuntu"
+    auth_method: str = "ssh_key"
+    ssh_key: str = ""
+    password_ref: str = ""
+    odoo_version: str = "17.0"
+    odoo_tag: str = "17.0"
+    domain: str = ""
+    email: str = ""
+    db_user: str = "odoo"
+    db_version: str = "16"
+    pg_profile: str = "small"
+    remote_path: str = ""
+
+
+class InstanceInitRequest(BaseModel):
+    environments: dict[str, EnvConfig]
+
+
+@router.post("/init")
+async def init_instances(body: InstanceInitRequest):
+    """Save instance configuration (.rkd/instance.yaml) from GUI form data."""
+    try:
+        from rocketdoo.core.instance.config_manager import InstanceConfigManager
+        manager = InstanceConfigManager(Path.cwd())
+        config = {"environments": {env: cfg.model_dump() for env, cfg in body.environments.items()}}
+        manager.save(config)
+        return {"ok": True, "environments": list(body.environments.keys())}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 class DeployRequest(BaseModel):

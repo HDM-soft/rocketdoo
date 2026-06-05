@@ -221,6 +221,24 @@ Below we will list the commands that make up the new version of **rocketdoo**
 
 ```
 
+
+```
+ rocketdoo gui
+
+```
+
+
+```
+ rocketdoo gui --port 9090
+
+```
+
+
+```
+ rocketdoo gui --no-open
+
+```
+
   
  
 ------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -420,6 +438,35 @@ rkd instance status                  # Show configured environments
 > **Note:** Docker deployment requires a running SSH agent with the relevant keys loaded (`ssh-add -l`). Password authentication requires `sshpass` installed on your local machine.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
+
+---
+
+#### `rkd gui` — Web GUI Interface
+
+Rocketdoo v3 includes a professional web-based management interface, accessible from your browser just like Odoo — no installation of additional tools required.
+
+```bash
+rkd gui                  # Launch GUI on http://localhost:8070 (opens browser automatically)
+rkd gui --port 9090      # Use a custom port
+rkd gui --no-open        # Start server without opening the browser
+rkd gui --cwd /my/proj   # Point to a specific project directory
+```
+
+The GUI provides a complete visual interface for all Rocketdoo v3 features:
+
+| Section | What you can do |
+|---------|-----------------|
+| **Dashboard** | Project overview, container status cards, quick start/stop/restart/build controls, inline log viewer |
+| **Containers** | Full container list with status, per-service start/stop/restart, real-time log streaming |
+| **Modules** | Scan and browse Odoo addons, view version and dependency info |
+| **Instances** | View configured stage/prod environments, trigger deployments with dry-run support |
+| **Services** | Toggle Mailpit email testing on/off, manage Traefik reverse proxy |
+
+The interface uses the Rocketdoo brand palette (Prussian blue + dark navy), features real-time log streaming via WebSocket, and runs entirely from the installed package — no Node.js or build step required.
+
+> The GUI server runs locally and is bound to `127.0.0.1` by default, so it is only accessible from your own machine.
+
+---
 
 ### Technical Support
 
