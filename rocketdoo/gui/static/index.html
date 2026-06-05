@@ -157,7 +157,7 @@ html.light ::-webkit-scrollbar-thumb:hover { background: #4A6080; }
 <body>
 <div id="app"></div>
 <script>
-const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue
+const { createApp, ref, computed, onMounted, onActivated, onUnmounted, watch, nextTick } = Vue
 
 /* ── API ─────────────────────────────────────────────────────────────────── */
 const api = {
@@ -320,7 +320,7 @@ const Dashboard = {
 
     const running = computed(() => ctrs.value.filter(c=>cstatus(c.State||c.Status)==='running').length)
 
-    onMounted(load)
+    onActivated(load)
     return { proj, ctrs, busy, act, logOf, running, load, docker, dotClass, cstatus, I }
   },
   template: `
@@ -479,7 +479,7 @@ const Containers = {
       finally { delete acts.value[key] }
     }
 
-    onMounted(load)
+    onActivated(load)
     return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, I }
   },
   template: `
@@ -561,27 +561,103 @@ const Containers = {
 ══════════════════════════════════════════════════════════════════════════ */
 const Modules = {
   setup() {
-    const mods = ref([])
-    const busy = ref(true)
-    const all  = ref(false)
-    const q    = ref('')
-    const filtered = computed(() => mods.value.filter(m => !q.value || m.name.toLowerCase().includes(q.value.toLowerCase())))
+    // ── Local addons ─────────────────────────────────────────────────────
+    const mods     = ref([])
+    const busy     = ref(true)
+    const all      = ref(false)
+    const q        = ref('')
+    const filtered = computed(() => mods.value.filter(m =>
+      !q.value || m.name.toLowerCase().includes(q.value.toLowerCase())
+    ))
 
     async function load() {
       busy.value = true
-      try { const r = await api.get('/modules?include_all='+all.value); mods.value = r.modules||[] }
-      catch(e) { notify('Scan failed','err') }
+      try {
+        const r = await api.get('/modules?include_all='+all.value)
+        mods.value = r.modules || []
+        if (r.error) notify('Scan: '+r.error, 'err')
+      } catch(e) { notify('Scan failed','err') }
       finally { busy.value = false }
+      loadGitman()
+    }
+
+    // ── Gitman repos ──────────────────────────────────────────────────────
+    const gitSources  = ref([])
+    const gitOriginal = ref([])
+    const gitBusy     = ref(false)
+    const gitSaving   = ref(false)
+    const rebuildBusy = ref(false)
+    const gitForm     = ref(null)
+    const gitDirty    = computed(() =>
+      JSON.stringify(gitSources.value) !== JSON.stringify(gitOriginal.value)
+    )
+
+    async function loadGitman() {
+      gitBusy.value = true
+      try {
+        const r = await api.get('/gitman')
+        gitSources.value  = r.sources || []
+        gitOriginal.value = JSON.parse(JSON.stringify(r.sources || []))
+      } catch {}
+      finally { gitBusy.value = false }
+    }
+
+    function addGitRepo() {
+      gitForm.value = { idx: -1, name: '', repo: '', rev: '18.0', type: 'git' }
+    }
+    function editGitRepo(idx) {
+      const s = gitSources.value[idx]
+      gitForm.value = { idx, name: s.name, repo: s.repo, rev: s.rev, type: s.type }
+    }
+    function deleteGitRepo(idx) {
+      gitSources.value.splice(idx, 1)
+    }
+    function autoName() {
+      if (gitForm.value && !gitForm.value.name && gitForm.value.repo) {
+        gitForm.value.name = gitForm.value.repo.split('/').pop().replace(/\.git$/, '')
+      }
+    }
+    function confirmGitForm() {
+      const f = gitForm.value
+      if (!f.name.trim() || !f.repo.trim()) { notify('Name and URL are required','err'); return }
+      const entry = { name: f.name.trim(), repo: f.repo.trim(), rev: f.rev.trim() || 'main', type: 'git' }
+      if (f.idx === -1) { gitSources.value.push(entry) }
+      else              { gitSources.value[f.idx] = entry }
+      gitForm.value = null
+    }
+    async function saveGitman() {
+      gitSaving.value = true
+      try {
+        const r = await api.post('/gitman', { sources: gitSources.value })
+        if (r.ok) {
+          gitOriginal.value = JSON.parse(JSON.stringify(gitSources.value))
+          notify('gitman.yaml saved')
+        } else notify(r.error || 'Save failed', 'err')
+      } catch(e) { notify(e.message,'err') }
+      finally { gitSaving.value = false }
+    }
+    async function rebuildDocker() {
+      rebuildBusy.value = true
+      try {
+        const r = await api.post('/docker/build')
+        r.ok ? notify('Build completed') : notify(r.stderr || 'Build failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { rebuildBusy.value = false }
     }
 
     watch(all, load)
-    onMounted(load)
-    return { mods, busy, all, q, filtered, load, I }
+    onActivated(load)
+    return {
+      mods, busy, all, q, filtered, load,
+      gitSources, gitBusy, gitSaving, rebuildBusy, gitForm, gitDirty,
+      addGitRepo, editGitRepo, deleteGitRepo, autoName, confirmGitForm,
+      saveGitman, rebuildDocker, I
+    }
   },
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Modules</div><div class="page-sub">Odoo addons detected in the project</div></div>
+      <div><div class="page-title">Modules</div><div class="page-sub">Local addons and external Gitman repositories</div></div>
       <div style="display:flex;gap:10px;align-items:center;">
         <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
           <input type="checkbox" v-model="all" style="accent-color:#1A3DCC;"> Show all
@@ -592,11 +668,16 @@ const Modules = {
       </div>
     </div>
 
+    <!-- ── Local Addons ────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+      Local Addons <span class="badge badge-blue">{{ mods.length }}</span>
+    </div>
+
     <div style="margin-bottom:18px;">
       <input v-model="q" class="input" placeholder="Search modules…" style="max-width:340px;" />
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:60px 0;color:#4B6080;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -606,11 +687,7 @@ const Modules = {
         <h3>{{ mods.length ? 'No matches' : 'No modules found' }}</h3>
         <p>{{ mods.length ? 'Try a different search term' : 'Add Odoo modules to the addons/ directory' }}</p>
       </div>
-
       <div v-else class="card-flat">
-        <div class="card-header">
-          <span style="font-size:13px;color:#6B82A8;">{{ filtered.length }} module{{ filtered.length!==1?'s':'' }}</span>
-        </div>
         <table class="table">
           <thead>
             <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>Depends</th></tr>
@@ -630,6 +707,95 @@ const Modules = {
         </table>
       </div>
     </template>
+
+    <!-- ── External Repos (Gitman) ────────────────────────────────────── -->
+    <div style="margin-top:36px;padding-top:24px;border-top:1px solid #151E45;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;">External Repos (Gitman)</div>
+          <div style="font-size:12px;color:#4B6080;margin-top:3px;">Managed via <code style="color:#6D9CFF;">gitman.yaml</code> → <code style="color:#6D9CFF;">external_addons/</code></div>
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <button v-if="gitDirty" @click="saveGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
+            <span v-html="gitSaving?I.spin:I.check" :class="gitSaving?'spin':''"></span>
+            {{ gitSaving ? 'Saving…' : 'Save Changes' }}
+          </button>
+          <button @click="rebuildDocker" class="btn btn-ghost btn-sm" :disabled="rebuildBusy" title="Rebuild Docker image after gitman changes">
+            <span v-html="rebuildBusy?I.spin:I.build" :class="rebuildBusy?'spin':''"></span>
+            {{ rebuildBusy ? 'Building…' : 'Rebuild' }}
+          </button>
+          <button @click="addGitRepo" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">
+            <span v-html="I.plus"></span> Add Repo
+          </button>
+        </div>
+      </div>
+
+      <!-- Inline Add/Edit form -->
+      <div v-if="gitForm" class="card" style="margin-bottom:14px;border-color:rgba(26,61,204,0.4);">
+        <div style="font-size:13px;font-weight:600;color:#DDE4F0;margin-bottom:14px;">
+          {{ gitForm.idx === -1 ? 'Add Repository' : 'Edit Repository' }}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <label style="font-size:11px;color:#4B6080;display:block;margin-bottom:4px;">Repository URL</label>
+            <input v-model="gitForm.repo" @blur="autoName" class="input" placeholder="https://github.com/org/repo.git" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:#4B6080;display:block;margin-bottom:4px;">Folder name</label>
+            <input v-model="gitForm.name" class="input" placeholder="auto-filled from URL" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:14px;align-items:end;">
+          <div>
+            <label style="font-size:11px;color:#4B6080;display:block;margin-bottom:4px;">Branch / Rev</label>
+            <input v-model="gitForm.rev" class="input" placeholder="18.0" />
+          </div>
+          <div style="font-size:12px;color:#4B6080;padding-bottom:9px;">
+            Clones into <code style="color:#6D9CFF;">external_addons/{{ gitForm.name || '&lt;name&gt;' }}</code>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button @click="confirmGitForm" class="btn btn-primary btn-sm">
+            <span v-html="I.check"></span> {{ gitForm.idx === -1 ? 'Add' : 'Update' }}
+          </button>
+          <button @click="gitForm=null" class="btn btn-ghost btn-sm">
+            <span v-html="I.x"></span> Cancel
+          </button>
+        </div>
+      </div>
+
+      <div v-if="gitBusy" style="text-align:center;padding:36px 0;color:#4B6080;">
+        <span v-html="I.spin" class="spin" style="width:22px;height:22px;display:inline-block;"></span>
+      </div>
+
+      <template v-else>
+        <div v-if="!gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
+          <div v-html="I.link" style="width:30px;height:30px;color:#1A2A50;margin:0 auto 10px;"></div>
+          <div style="font-size:14px;font-weight:600;color:#4B6080;margin-bottom:5px;">No external repos configured</div>
+          <div style="font-size:12px;color:#2E4070;">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
+        </div>
+        <div v-else-if="gitSources.length" class="card-flat">
+          <table class="table">
+            <thead>
+              <tr><th>Name</th><th>Repository URL</th><th>Branch</th><th style="text-align:right">Actions</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(s, idx) in gitSources" :key="idx">
+                <td style="font-family:monospace;font-size:13px;font-weight:600;color:#DDE4F0;">{{ s.name }}</td>
+                <td style="font-family:monospace;font-size:11px;color:#6B82A8;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="s.repo">{{ s.repo }}</td>
+                <td><span class="badge badge-blue">{{ s.rev }}</span></td>
+                <td style="text-align:right;">
+                  <div style="display:flex;gap:5px;justify-content:flex-end;">
+                    <button @click="editGitRepo(idx)" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">Edit</button>
+                    <button @click="deleteGitRepo(idx)" class="btn btn-danger btn-sm">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </div>
   </div>`
 }
 
@@ -660,7 +826,7 @@ const Instances = {
       finally { dep.value[env] = false }
     }
 
-    onMounted(load)
+    onActivated(load)
     return { inst, busy, dep, dry, load, deploy, I }
   },
   template: `
@@ -774,7 +940,7 @@ const Services = {
       finally { traefikOnBusy.value = false }
     }
 
-    onMounted(load)
+    onActivated(load)
     return { mail, traefik, busy, mailBusy, traefikBusy, traefikForm, traefikOnBusy, load, toggleMail, traefikOff, traefikOn, I }
   },
   template: `
@@ -934,7 +1100,7 @@ const Setup = {
         else { output.value = '✗ '+r.error+(r.detail?'\n'+r.detail:''); notify(r.error||'Failed','err') }
       } finally { busy.value = false }
     }
-    onMounted(loadKeys)
+    onActivated(loadKeys)
     return { sshKeys, busy, scaffBusy, output, form, portStatus, scaffold, initProject, checkPort, I }
   },
   template: `
@@ -1100,7 +1266,7 @@ const Deploy = {
       } catch(e) { notify(e.message,'err') }
       finally { initBusy.value = false }
     }
-    onMounted(load)
+    onActivated(load)
     return { targets, busy, depBusy, valBusy, validation, output, hasConfig, initForm, initBusy, load, deployTarget, validate, initDeploy, I }
   },
   template: `
@@ -1240,7 +1406,7 @@ const Pack = {
         r.ok ? notify('Unpack completed') : notify(r.stderr||'Unpack failed','err')
       } finally { unpackBusy.value = false }
     }
-    onMounted(load)
+    onActivated(load)
     return { status, packForm, packBusy, unpackBusy, output, busy, pack, unpack, I }
   },
   template: `

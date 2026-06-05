@@ -9,12 +9,14 @@ from .setup import router as setup_router
 from .deploy_ops import router as deploy_router
 from .pack_ops import router as pack_router
 from .workspace import router as workspace_router
+from .gitman import router as gitman_router
 
 router = APIRouter()
 router.include_router(workspace_router, prefix="/workspace", tags=["workspace"])
 router.include_router(project_router, prefix="/project", tags=["project"])
 router.include_router(docker_router, prefix="/docker", tags=["docker"])
 router.include_router(modules_router, prefix="/modules", tags=["modules"])
+router.include_router(gitman_router, prefix="/gitman", tags=["gitman"])
 router.include_router(mail_router, prefix="/mail", tags=["mail"])
 router.include_router(traefik_router, prefix="/traefik", tags=["traefik"])
 router.include_router(instances_router, prefix="/instances", tags=["instances"])

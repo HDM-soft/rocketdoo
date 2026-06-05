@@ -10,8 +10,9 @@ async def list_modules(path: str = "addons", include_all: bool = False):
     """Scan and return Odoo modules in the addons directory."""
     try:
         from rocketdoo.core.module_scanner import ModuleScanner
-        scanner = ModuleScanner(base_path=Path(path))
-        modules = scanner.scan()
+        scan_path = Path(path) if Path(path).is_absolute() else Path.cwd() / path
+        scanner = ModuleScanner(addons_path=scan_path)
+        modules = scanner.scan(force_rescan=True)
 
         result = []
         for m in modules:
