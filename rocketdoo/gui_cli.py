@@ -1,7 +1,4 @@
 import click
-import threading
-import time
-import webbrowser
 from rich.console import Console
 from rich.panel import Panel
 from rich import box
@@ -12,7 +9,7 @@ console = Console()
 @click.command("gui")
 @click.option("--port", default=8070, show_default=True, help="Port to run the GUI server on")
 @click.option("--host", default="127.0.0.1", show_default=True, help="Host address to bind")
-@click.option("--open/--no-open", "auto_open", default=True, help="Open browser automatically")
+@click.option("--open", "auto_open", is_flag=True, default=False, help="Open browser automatically")
 @click.option("--cwd", default=None, type=click.Path(exists=True), help="Project directory (default: current dir)")
 def gui_command(port, host, auto_open, cwd):
     """Launch the Rocketdoo web GUI.
@@ -21,7 +18,7 @@ def gui_command(port, host, auto_open, cwd):
     Examples:
       rkd gui                        # Start on default port 8070
       rkd gui --port 9090            # Custom port
-      rkd gui --no-open              # Don't open browser automatically
+      rkd gui --open                 # Also open the browser automatically
       rkd gui --cwd /path/to/project # Specify project directory
     """
     import os
@@ -38,7 +35,7 @@ def gui_command(port, host, auto_open, cwd):
         f"[bold white]Rocketdoo GUI[/bold white] [dim]v3[/dim]\n\n"
         f"  [dim]URL:[/dim]      [bold cyan]{url}[/bold cyan]\n"
         f"  [dim]Press:[/dim]    [bold]Ctrl+C[/bold] to stop",
-        title="[bold blue]🚀 RKD GUI[/bold blue]",
+        title="[bold blue]RKD GUI[/bold blue]",
         border_style="blue",
         box=box.ROUNDED,
         padding=(1, 2),
@@ -46,6 +43,9 @@ def gui_command(port, host, auto_open, cwd):
     console.print()
 
     if auto_open:
+        import threading
+        import time
+        import webbrowser
         def _open():
             time.sleep(1.2)
             webbrowser.open(url)
