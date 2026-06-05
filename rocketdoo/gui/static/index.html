@@ -25,13 +25,13 @@ body { background: #07091A; color: #DDE4F0; font-family: system-ui, -apple-syste
 .logo-area { padding: 22px 18px 18px; border-bottom: 1px solid #151E45; display: flex; align-items: center; gap: 10px; }
 .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, #1A3DCC 0%, #7553C8 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(26,61,204,0.4); }
 .logo-text { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: .02em; line-height: 1; }
-.logo-sub { font-size: 10px; color: #3D5480; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+.logo-sub { font-size: 10px; color: #4D6A92; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
 .v3-badge { font-size: 9px; font-weight: 700; background: rgba(26,61,204,0.3); color: #6D9CFF; padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
 
 /* Sidebar active path */
 .active-path { padding: 9px 14px 10px; border-bottom: 1px solid #151E45; cursor: pointer; transition: background .15s; }
 .active-path:hover { background: rgba(26,61,204,0.08); }
-.active-path-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #2E4070; margin-bottom: 2px; }
+.active-path-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #5577A2; margin-bottom: 2px; }
 .active-path-val { font-size: 11px; color: #6D9CFF; font-family: monospace; word-break: break-all; line-height: 1.4; }
 
 /* Sidebar nav */
@@ -41,7 +41,7 @@ body { background: #07091A; color: #DDE4F0; font-family: system-ui, -apple-syste
 .nav-item.active { background: rgba(26,61,204,0.18); color: #7AA3FF; border-color: rgba(26,61,204,0.3); }
 .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
 .nav-sep { height: 1px; background: #151E45; margin: 8px 10px; }
-.sidebar-footer { padding: 14px 18px; border-top: 1px solid #151E45; font-size: 11px; color: #2E4070; line-height: 1.7; }
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid #151E45; font-size: 11px; color: #4D6A92; line-height: 1.7; }
 
 /* Cards */
 .card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 20px; transition: border-color .15s; }
@@ -87,13 +87,13 @@ body { background: #07091A; color: #DDE4F0; font-family: system-ui, -apple-syste
 /* Stats grid */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
 .stat-card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 16px 18px; }
-.stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #4B6080; margin-bottom: 10px; }
+.stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #5C7498; margin-bottom: 10px; }
 .stat-value { font-size: 28px; font-weight: 700; color: #DDE4F0; line-height: 1; }
 .stat-note { font-size: 12px; color: #6B82A8; margin-top: 6px; }
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; }
-.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #2E4070; border-bottom: 1px solid #151E45; }
+.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #5577A2; border-bottom: 1px solid #151E45; }
 .table td { padding: 13px 18px; border-bottom: 1px solid #0F1830; vertical-align: middle; }
 .table tr:last-child td { border-bottom: none; }
 .table tr:hover td { background: rgba(26,61,204,0.04); }
@@ -133,8 +133,8 @@ input:checked ~ .toggle-track::before { transform: translateX(18px); background:
 /* Empty state */
 .empty { text-align: center; padding: 56px 32px; }
 .empty svg { width: 44px; height: 44px; color: #1A2A50; margin-bottom: 16px; }
-.empty h3 { font-size: 16px; font-weight: 600; color: #4B6080; margin-bottom: 8px; }
-.empty p { font-size: 13px; color: #2E4070; }
+.empty h3 { font-size: 16px; font-weight: 600; color: #5C7498; margin-bottom: 8px; }
+.empty p { font-size: 13px; color: #5577A2; }
 .code-block { background: #040711; border: 1px solid #0F1830; border-radius: 8px; padding: 14px 20px; display: inline-block; font-family: monospace; font-size: 13px; color: #4ADE80; text-align: left; margin-top: 20px; }
 
 /* Project card */
@@ -143,13 +143,15 @@ input:checked ~ .toggle-track::before { transform: translateX(18px); background:
 .proj-card.active-proj { border-color: rgba(26,61,204,0.55); background: rgba(26,61,204,0.05); }
 
 /* ── Light Mode ─────────────────────────────────────────────────────────── */
-html.light body { background: #BEC9D8; }
-html.light .page-title { color: #0D1835; }
-html.light .page-sub   { color: #3A5070; }
-html.light .btn-ghost  { color: #2A4060; border-color: #7A94B8; }
-html.light .btn-ghost:hover { color: #0D1835; background: rgba(26,61,204,0.12); border-color: rgba(26,61,204,0.4); }
-html.light .btn-ghost:disabled { color: #2A4060; }
-html.light ::-webkit-scrollbar-track { background: #B0BBD0; }
+html.light body { background: #C8D4E2; color: #0A1528; }
+html.light .page-title { color: #0A1528; }
+html.light .page-sub   { color: #1E3A58; }
+/* Nav items inside dark sidebar keep their dark-mode colors — no override needed */
+html.light .btn-ghost  { color: #1E3558; border-color: #6A88B0; }
+html.light .btn-ghost:hover { color: #0A1528; background: rgba(26,61,204,0.12); border-color: rgba(26,61,204,0.4); }
+html.light .btn-ghost:disabled { color: #3A5880; }
+/* Sidebar stays dark: logo-sub, active-path-label, sidebar-footer use same colors */
+html.light ::-webkit-scrollbar-track { background: #B2C0D5; }
 html.light ::-webkit-scrollbar-thumb { background: #7A8EAA; }
 html.light ::-webkit-scrollbar-thumb:hover { background: #4A6080; }
 </style>
@@ -280,7 +282,69 @@ const LogViewer = {
         </div>
       </div>
       <div ref="el" class="log-term">
-        <div v-if="!lines.length" style="color:#1A3050;font-style:italic;">Waiting for output…</div>
+        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Waiting for output…</div>
+        <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
+      </div>
+    </div>
+  `
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DOCKER TERMINAL — streaming WebSocket output for compose commands
+══════════════════════════════════════════════════════════════════════════ */
+const DockerTerminal = {
+  props: { action: String },
+  emits: ['done', 'close'],
+  setup(props, { emit }) {
+    const lines    = ref([])
+    const running  = ref(true)
+    const exitCode = ref(null)
+    const el       = ref(null)
+    let ws = null
+
+    onMounted(() => {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      ws = new WebSocket(`${proto}://${location.host}/ws/docker/${props.action}`)
+      ws.onmessage = e => {
+        const txt = e.data
+        if (txt.startsWith('\x00exit:')) {
+          exitCode.value = parseInt(txt.slice(6))
+          running.value  = false
+          emit('done', exitCode.value)
+        } else {
+          if (txt.trim()) lines.value.push(txt)
+          if (lines.value.length > 2000) lines.value.splice(0, 300)
+          nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+        }
+      }
+      ws.onclose = () => { running.value = false }
+      ws.onerror = () => { running.value = false; lines.value.push('[WebSocket error — is the server running?]') }
+    })
+    onUnmounted(() => { if (ws) ws.close() })
+
+    function lineClass(l) {
+      const lc = l.toLowerCase()
+      if (/\berror\b|failed|traceback|exception|no such/.test(lc)) return 'log-err'
+      if (/\bwarn(ing)?\b/.test(lc)) return 'log-warn'
+      return ''
+    }
+
+    return { lines, running, exitCode, el, lineClass, I }
+  },
+  template: `
+    <div class="card-flat" style="border-color:rgba(26,61,204,0.2);">
+      <div style="display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:1px solid #151E45;background:#090D22;">
+        <span v-if="running" v-html="I.spin" class="spin" style="width:13px;height:13px;color:#6D9CFF;display:inline-block;flex-shrink:0;"></span>
+        <span v-else-if="exitCode===0" v-html="I.check" style="width:13px;height:13px;color:#22C55E;flex-shrink:0;"></span>
+        <span v-else v-html="I.warn" style="width:13px;height:13px;color:#F87171;flex-shrink:0;"></span>
+        <code style="font-size:12px;color:#DDE4F0;flex:1;font-family:monospace;">docker compose {{ action }}</code>
+        <span v-if="running" style="font-size:11px;color:#6B82A8;">running…</span>
+        <span v-else-if="exitCode===0" style="font-size:11px;color:#22C55E;">✓ completed</span>
+        <span v-else style="font-size:11px;color:#F87171;">✗ exit {{ exitCode }}</span>
+        <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" title="Close terminal">✕</button>
+      </div>
+      <div ref="el" class="log-term" style="height:320px;">
+        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Connecting to docker compose {{ action }}…</div>
         <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
       </div>
     </div>
@@ -291,13 +355,14 @@ const LogViewer = {
    DASHBOARD
 ══════════════════════════════════════════════════════════════════════════ */
 const Dashboard = {
-  components: { LogViewer },
+  components: { LogViewer, DockerTerminal },
   setup() {
-    const proj = ref(null)
-    const ctrs = ref([])
-    const busy = ref(true)
-    const act  = ref('')
-    const logOf = ref(null)
+    const proj       = ref(null)
+    const ctrs       = ref([])
+    const busy       = ref(true)
+    const act        = ref('')
+    const logOf      = ref(null)
+    const termAction = ref(null)
 
     async function load() {
       busy.value = true
@@ -308,20 +373,24 @@ const Dashboard = {
       finally { busy.value = false }
     }
 
-    async function docker(cmd) {
-      act.value = cmd
-      try {
-        const r = await api.post('/docker/'+cmd)
-        if (r.ok) { notify(cmd+' completed'); setTimeout(load, 1800) }
-        else notify(r.stderr||'Failed', 'err')
-      } catch(e) { notify(e.message,'err') }
-      finally { act.value = '' }
+    function docker(cmd) {
+      act.value      = cmd
+      termAction.value = cmd
+    }
+    function onTermDone(code) {
+      act.value = ''
+      if (code === 0) setTimeout(load, 1500)
+    }
+    function closeTerminal() {
+      termAction.value = null
+      act.value        = ''
+      load()
     }
 
     const running = computed(() => ctrs.value.filter(c=>cstatus(c.State||c.Status)==='running').length)
 
     onActivated(load)
-    return { proj, ctrs, busy, act, logOf, running, load, docker, dotClass, cstatus, I }
+    return { proj, ctrs, busy, act, logOf, running, termAction, load, docker, onTermDone, closeTerminal, dotClass, cstatus, I }
   },
   template: `
   <div class="page fade-in">
@@ -332,7 +401,7 @@ const Dashboard = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -342,7 +411,7 @@ const Dashboard = {
         <div class="stat-card">
           <div class="stat-label">Containers</div>
           <div class="stat-value" :style="{color: running>0?'#22C55E':'#4B5563'}">
-            {{ running }}<span style="font-size:16px;color:#2E4070;"> / {{ ctrs.length }}</span>
+            {{ running }}<span style="font-size:16px;color:#5577A2;"> / {{ ctrs.length }}</span>
           </div>
           <div class="stat-note">{{ running }} running</div>
         </div>
@@ -375,12 +444,12 @@ const Dashboard = {
         <div v-html="I.rocket"></div>
         <h3>No project found in this directory</h3>
         <p>Initialize a Rocketdoo project to get started</p>
-        <div class="code-block"><div style="color:#2E5080;">## Create a new project</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
+        <div class="code-block"><div style="color:#6B82A8;">## Create a new project</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
       </div>
 
       <!-- Project card -->
       <div v-if="proj?.exists" style="margin-bottom:24px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:12px;">Project</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Project</div>
         <div class="card" style="border-color:rgba(26,61,204,0.3);">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
             <div>
@@ -403,7 +472,7 @@ const Dashboard = {
 
           <!-- Containers -->
           <div style="border-top:1px solid #151E45;padding-top:14px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:10px;">Containers</div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Containers</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
               <div v-for="c in ctrs" :key="c.Name||c.Service"
                    @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
@@ -412,10 +481,10 @@ const Dashboard = {
                   <span class="dot" :class="dotClass(c.State||c.Status)"></span>
                   <span style="font-size:13px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</span>
                 </div>
-                <div style="font-size:11px;color:#4B6080;font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
-                <div v-if="c.Ports" style="font-size:10px;color:#2E4070;margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
+                <div style="font-size:11px;color:#6B82A8;font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
+                <div v-if="c.Ports" style="font-size:10px;color:#5577A2;margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
               </div>
-              <div v-if="!ctrs.length" style="color:#2E4070;font-size:13px;padding:8px 0;">No containers running</div>
+              <div v-if="!ctrs.length" style="color:#5577A2;font-size:13px;padding:8px 0;">No containers running</div>
             </div>
           </div>
 
@@ -428,7 +497,7 @@ const Dashboard = {
 
       <!-- Quick actions -->
       <div v-if="proj?.exists">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:12px;">Quick Actions</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Quick Actions</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           <button @click="docker('up')" class="btn btn-primary" :disabled="act!==''">
             <span v-html="act==='up'?I.spin:I.play" :class="act==='up'?'spin':''"></span> Start All
@@ -446,6 +515,11 @@ const Dashboard = {
             <span v-html="act==='down'?I.spin:I.x" :class="act==='down'?'spin':''"></span> Down
           </button>
         </div>
+      </div>
+
+      <!-- Docker terminal — appears when an action is running -->
+      <div v-if="termAction" style="margin-top:20px;">
+        <DockerTerminal :action="termAction" @done="onTermDone" @close="closeTerminal" />
       </div>
     </template>
   </div>`
@@ -491,7 +565,7 @@ const Containers = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -520,7 +594,7 @@ const Containers = {
                 </td>
                 <td>
                   <div style="font-size:14px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</div>
-                  <div style="font-size:11px;color:#2E4070;font-family:monospace;">{{ c.Name }}</div>
+                  <div style="font-size:11px;color:#5577A2;font-family:monospace;">{{ c.Name }}</div>
                 </td>
                 <td style="font-family:monospace;font-size:12px;color:#6B82A8;">{{ c.Image||'—' }}</td>
                 <td style="font-family:monospace;font-size:11px;color:#6B82A8;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
@@ -659,7 +733,7 @@ const Modules = {
     <div class="page-header">
       <div><div class="page-title">Modules</div><div class="page-sub">Local addons and external Gitman repositories</div></div>
       <div style="display:flex;gap:10px;align-items:center;">
-        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#5577A2;cursor:pointer;">
           <input type="checkbox" v-model="all" style="accent-color:#1A3DCC;"> Show all
         </label>
         <button class="btn btn-ghost" @click="load" :disabled="busy">
@@ -669,7 +743,7 @@ const Modules = {
     </div>
 
     <!-- ── Local Addons ────────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
       Local Addons <span class="badge badge-blue">{{ mods.length }}</span>
     </div>
 
@@ -677,7 +751,7 @@ const Modules = {
       <input v-model="q" class="input" placeholder="Search modules…" style="max-width:340px;" />
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:60px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:60px 0;color:#6B82A8;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -698,10 +772,10 @@ const Modules = {
                 <div style="font-family:monospace;font-size:13px;font-weight:600;color:#DDE4F0;">{{ m.name }}</div>
                 <div v-if="m.has_invalid_name" style="font-size:11px;color:#FCD34D;margin-top:2px;">⚠ Invalid name</div>
               </td>
-              <td style="font-family:monospace;font-size:11px;color:#4B6080;">{{ m.path }}</td>
+              <td style="font-family:monospace;font-size:11px;color:#6B82A8;">{{ m.path }}</td>
               <td style="font-size:12px;color:#6B82A8;">{{ m.version||'—' }}</td>
               <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?'Installable':'Disabled' }}</span></td>
-              <td style="font-size:11px;color:#2E4070;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
+              <td style="font-size:11px;color:#5577A2;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -712,8 +786,8 @@ const Modules = {
     <div style="margin-top:36px;padding-top:24px;border-top:1px solid #151E45;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;">External Repos (Gitman)</div>
-          <div style="font-size:12px;color:#4B6080;margin-top:3px;">Managed via <code style="color:#6D9CFF;">gitman.yaml</code> → <code style="color:#6D9CFF;">external_addons/</code></div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;">External Repos (Gitman)</div>
+          <div style="font-size:12px;color:#6B82A8;margin-top:3px;">Managed via <code style="color:#6D9CFF;">gitman.yaml</code> → <code style="color:#6D9CFF;">external_addons/</code></div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
           <button v-if="gitDirty" @click="saveGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
@@ -737,20 +811,20 @@ const Modules = {
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <div>
-            <label style="font-size:11px;color:#4B6080;display:block;margin-bottom:4px;">Repository URL</label>
+            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Repository URL</label>
             <input v-model="gitForm.repo" @blur="autoName" class="input" placeholder="https://github.com/org/repo.git" />
           </div>
           <div>
-            <label style="font-size:11px;color:#4B6080;display:block;margin-bottom:4px;">Folder name</label>
+            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Folder name</label>
             <input v-model="gitForm.name" class="input" placeholder="auto-filled from URL" />
           </div>
         </div>
         <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:14px;align-items:end;">
           <div>
-            <label style="font-size:11px;color:#4B6080;display:block;margin-bottom:4px;">Branch / Rev</label>
+            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Branch / Rev</label>
             <input v-model="gitForm.rev" class="input" placeholder="18.0" />
           </div>
-          <div style="font-size:12px;color:#4B6080;padding-bottom:9px;">
+          <div style="font-size:12px;color:#6B82A8;padding-bottom:9px;">
             Clones into <code style="color:#6D9CFF;">external_addons/{{ gitForm.name || '&lt;name&gt;' }}</code>
           </div>
         </div>
@@ -764,15 +838,15 @@ const Modules = {
         </div>
       </div>
 
-      <div v-if="gitBusy" style="text-align:center;padding:36px 0;color:#4B6080;">
+      <div v-if="gitBusy" style="text-align:center;padding:36px 0;color:#6B82A8;">
         <span v-html="I.spin" class="spin" style="width:22px;height:22px;display:inline-block;"></span>
       </div>
 
       <template v-else>
         <div v-if="!gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
           <div v-html="I.link" style="width:30px;height:30px;color:#1A2A50;margin:0 auto 10px;"></div>
-          <div style="font-size:14px;font-weight:600;color:#4B6080;margin-bottom:5px;">No external repos configured</div>
-          <div style="font-size:12px;color:#2E4070;">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
+          <div style="font-size:14px;font-weight:600;color:#6B82A8;margin-bottom:5px;">No external repos configured</div>
+          <div style="font-size:12px;color:#5577A2;">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
         </div>
         <div v-else-if="gitSources.length" class="card-flat">
           <table class="table">
@@ -838,7 +912,7 @@ const Instances = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -861,15 +935,15 @@ const Instances = {
           </div>
 
           <div style="display:grid;gap:7px;margin-bottom:18px;font-size:12px;">
-            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ i.host||'—' }}</span></div>
-            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Domain</span>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ i.host||'—' }}</span></div>
+            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Domain</span>
               <a :href="'https://'+i.domain" target="_blank" style="color:#1A3DCC;text-decoration:none;font-family:monospace;display:flex;align-items:center;gap:4px;">
                 {{ i.domain }} <span v-html="I.ext" style="width:10px;height:10px;"></span>
               </a>
             </div>
-            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Odoo</span><span style="color:#DDE4F0;">{{ i.odoo_version||'—' }}</span></div>
-            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Type</span><span class="badge badge-gray">{{ i.type }}</span></div>
-            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Path</span><span style="color:#6B82A8;font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Odoo</span><span style="color:#DDE4F0;">{{ i.odoo_version||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Type</span><span class="badge badge-gray">{{ i.type }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Path</span><span style="color:#6B82A8;font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
           </div>
 
           <div style="border-top:1px solid #151E45;padding-top:14px;display:flex;align-items:center;gap:10px;">
@@ -952,7 +1026,7 @@ const Services = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -967,7 +1041,7 @@ const Services = {
             </div>
             <div>
               <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Mailpit</div>
-              <div style="font-size:12px;color:#4B6080;">Local SMTP testing</div>
+              <div style="font-size:12px;color:#6B82A8;">Local SMTP testing</div>
             </div>
           </div>
           <label class="toggle" :style="mailBusy?'opacity:.5;pointer-events:none':''">
@@ -977,12 +1051,12 @@ const Services = {
         </div>
 
         <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Service</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?'Enabled':'Disabled' }}</span></div>
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Container</span>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Service</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?'Enabled':'Disabled' }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Container</span>
             <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:#6B82A8;">{{ mail.running?'Running':'Stopped' }}</span></div>
           </div>
-          <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">SMTP</span><span style="color:#DDE4F0;font-family:monospace;">:1025</span></div>
-          <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Web UI</span><span style="color:#DDE4F0;font-family:monospace;">:8025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">SMTP</span><span style="color:#DDE4F0;font-family:monospace;">:1025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Web UI</span><span style="color:#DDE4F0;font-family:monospace;">:8025</span></div>
         </div>
 
         <div style="border-top:1px solid #151E45;padding-top:12px;">
@@ -1001,19 +1075,19 @@ const Services = {
             </div>
             <div>
               <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Traefik</div>
-              <div style="font-size:12px;color:#4B6080;">Reverse proxy / HTTPS</div>
+              <div style="font-size:12px;color:#6B82A8;">Reverse proxy / HTTPS</div>
             </div>
           </div>
           <span class="badge" :class="traefik.enabled?'badge-green':'badge-gray'">{{ traefik.enabled?'Active':'Inactive' }}</span>
         </div>
 
         <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Mode</span>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Mode</span>
             <span v-if="traefik.mode" class="badge" :class="traefik.mode==='production'?'badge-purple':'badge-blue'">{{ traefik.mode }}</span>
-            <span v-else style="color:#2E4070;">Not configured</span>
+            <span v-else style="color:#5577A2;">Not configured</span>
           </div>
-          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Domain</span><span style="color:#DDE4F0;font-family:monospace;">{{ traefik.domain }}</span></div>
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Override</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?'Present':'Not found' }}</span></div>
+          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Domain</span><span style="color:#DDE4F0;font-family:monospace;">{{ traefik.domain }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Override</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?'Present':'Not found' }}</span></div>
         </div>
 
         <div style="border-top:1px solid #151E45;padding-top:12px;">
@@ -1023,18 +1097,18 @@ const Services = {
           <div v-else style="font-size:12px;">
             <div style="display:grid;gap:9px;margin-bottom:12px;">
               <div>
-                <label style="color:#4B6080;display:block;margin-bottom:4px;">Mode</label>
+                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Mode</label>
                 <select v-model="traefikForm.mode" class="input" style="width:auto;">
                   <option value="local">local (HTTP)</option>
                   <option value="production">production (HTTPS + Let's Encrypt)</option>
                 </select>
               </div>
               <div>
-                <label style="color:#4B6080;display:block;margin-bottom:4px;">Domain</label>
+                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Domain</label>
                 <input v-model="traefikForm.domain" class="input" placeholder="myodoo.local" />
               </div>
               <div v-if="traefikForm.mode==='production'">
-                <label style="color:#4B6080;display:block;margin-bottom:4px;">Let's Encrypt email</label>
+                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Let's Encrypt email</label>
                 <input v-model="traefikForm.email" type="email" class="input" placeholder="you@example.com" />
               </div>
             </div>
@@ -1113,9 +1187,9 @@ const Setup = {
         <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
           <span v-html="I.rocket" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Step 1 — Scaffold Templates
         </div>
-        <div style="font-size:12px;color:#4B6080;margin-bottom:12px;">Copies base template files to the current directory. Run this first in a new project.</div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:12px;">Copies base template files to the current directory. Run this first in a new project.</div>
         <div style="margin-bottom:14px;">
-          <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:6px;">Template type</label>
+          <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:6px;">Template type</label>
           <select v-model="form.template" class="input" style="width:auto;">
             <option value="basic">basic — standard Odoo setup with Docker</option>
             <option value="advanced">advanced — with extra tooling</option>
@@ -1131,21 +1205,21 @@ const Setup = {
         <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
           <span v-html="I.setup" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Step 2 — Initialize Project
         </div>
-        <div style="font-size:12px;color:#4B6080;margin-bottom:14px;">Generates Dockerfile, docker-compose.yaml, odoo.conf and launch.json from your answers below.</div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:14px;">Generates Dockerfile, docker-compose.yaml, odoo.conf and launch.json from your answers below.</div>
         <div style="display:grid;gap:12px;">
           <div>
-            <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Project name *</label>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Project name *</label>
             <input v-model="form.project_name" class="input" placeholder="my-odoo-project — used as container name prefix" />
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Odoo version</label>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Odoo version</label>
               <select v-model="form.odoo_version" class="input">
                 <option>15.0</option><option>16.0</option><option>17.0</option><option>18.0</option><option>19.0</option>
               </select>
             </div>
             <div>
-              <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Edition</label>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Edition</label>
               <select v-model="form.odoo_edition" class="input">
                 <option>Community</option><option>Enterprise — requires access to Odoo Enterprise repo</option>
               </select>
@@ -1153,11 +1227,11 @@ const Setup = {
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">PostgreSQL version</label>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">PostgreSQL version</label>
               <select v-model="form.db_version" class="input"><option>13</option><option>14</option><option>15</option><option>16</option></select>
             </div>
             <div>
-              <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Restart policy</label>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Restart policy</label>
               <select v-model="form.restart" class="input">
                 <option value="unless-stopped">unless-stopped — restart unless manually stopped</option>
                 <option value="always">always — restart on any exit</option>
@@ -1167,7 +1241,7 @@ const Setup = {
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Odoo port</label>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Odoo port</label>
               <div style="display:flex;gap:7px;">
                 <input v-model="form.odoo_port" type="number" class="input" placeholder="8069" @blur="checkPort('odoo_port')" />
                 <button @click="checkPort('odoo_port')" class="btn btn-ghost btn-sm" title="Check port availability">
@@ -1178,12 +1252,12 @@ const Setup = {
               <div v-if="portStatus.odoo_port===true" style="font-size:11px;color:#4ADE80;margin-top:3px;">Available</div>
             </div>
             <div>
-              <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">VSCode debug port</label>
+              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">VSCode debug port</label>
               <input v-model="form.vsc_port" type="number" class="input" placeholder="8888 — for debugpy remote attach" />
             </div>
           </div>
           <div>
-            <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Master password (admin_passwd)</label>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Master password (admin_passwd)</label>
             <input v-model="form.admin_passwd" type="password" class="input" placeholder="admin — Odoo database manager password" />
           </div>
           <div style="display:flex;gap:20px;">
@@ -1195,7 +1269,7 @@ const Setup = {
             </label>
           </div>
           <div v-if="form.use_private_repos">
-            <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">SSH key (from ~/.ssh/)</label>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">SSH key (from ~/.ssh/)</label>
             <select v-model="form.ssh_key_name" class="input">
               <option value="">— none —</option>
               <option v-for="k in sshKeys" :key="k" :value="k">{{ k }}</option>
@@ -1295,7 +1369,7 @@ const Deploy = {
       </div>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -1304,27 +1378,27 @@ const Deploy = {
         <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
           <span v-html="I.deploy" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Create Deploy Config
         </div>
-        <div style="font-size:12px;color:#4B6080;margin-bottom:14px;">Creates <code style="color:#6D9CFF;">.rkd/deploy.yaml</code> with your VPS target configuration.</div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:14px;">Creates <code style="color:#6D9CFF;">.rkd/deploy.yaml</code> with your VPS target configuration.</div>
         <div style="display:grid;gap:11px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div><label style="font-size:12px;color:#4B6080;display:block;margin-bottom:4px;">Target name</label>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Target name</label>
               <input v-model="initForm.target_name" class="input" placeholder="production — identifier for this target" /></div>
-            <div><label style="font-size:12px;color:#4B6080;display:block;margin-bottom:4px;">Type</label>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Type</label>
               <select v-model="initForm.target_type" class="input"><option value="vps">vps — self-hosted Linux server</option><option value="odoo-sh">odoo-sh — Odoo.sh platform</option></select></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 80px;gap:10px;">
-            <div><label style="font-size:12px;color:#4B6080;display:block;margin-bottom:4px;">Host / IP</label>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Host / IP</label>
               <input v-model="initForm.host" class="input" placeholder="10.0.0.1 or vps.example.com" /></div>
-            <div><label style="font-size:12px;color:#4B6080;display:block;margin-bottom:4px;">SSH Port</label>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">SSH Port</label>
               <input v-model="initForm.ssh_port" type="number" class="input" placeholder="22" /></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div><label style="font-size:12px;color:#4B6080;display:block;margin-bottom:4px;">User</label>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">User</label>
               <input v-model="initForm.user" class="input" placeholder="ubuntu — SSH user on the VPS" /></div>
-            <div><label style="font-size:12px;color:#4B6080;display:block;margin-bottom:4px;">Deployment</label>
+            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Deployment</label>
               <select v-model="initForm.deployment_type" class="input"><option value="docker">docker</option><option value="native">native</option></select></div>
           </div>
-          <div><label style="font-size:12px;color:#4B6080;display:block;margin-bottom:4px;">SSH Key path</label>
+          <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">SSH Key path</label>
             <input v-model="initForm.ssh_key" class="input" placeholder="~/.ssh/id_rsa — leave empty to use ssh-agent" /></div>
         </div>
         <div style="margin-top:14px;border-top:1px solid #151E45;padding-top:12px;">
@@ -1349,7 +1423,7 @@ const Deploy = {
             <span class="badge badge-blue" style="margin-left:auto;">{{ t.type }}</span>
           </div>
           <div style="font-size:12px;margin-bottom:14px;">
-            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:48px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ t.host||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:48px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ t.host||'—' }}</span></div>
           </div>
           <div style="border-top:1px solid #151E45;padding-top:12px;display:flex;gap:8px;">
             <button @click="deployTarget(t.name,false)" class="btn btn-primary btn-sm" :disabled="depBusy[t.name+'false']">
@@ -1435,17 +1509,17 @@ const Pack = {
         <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
           <span v-html="I.pack" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Pack Environment
         </div>
-        <div style="font-size:12px;color:#4B6080;margin-bottom:12px;">Creates a ZIP with the full project (code + DB backup + filestore) to share with another developer.</div>
+        <div style="font-size:12px;color:#6B82A8;margin-bottom:12px;">Creates a ZIP with the full project (code + DB backup + filestore) to share with another developer.</div>
         <div style="display:grid;gap:11px;margin-bottom:14px;">
           <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
             <input type="checkbox" v-model="packForm.include_db" style="accent-color:#1A3DCC;"> Include database backup (pg_dump)
           </label>
           <div>
-            <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Output path (optional)</label>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Output path (optional)</label>
             <input v-model="packForm.output_path" class="input" placeholder="~/my-project.zip — default: auto-named in current dir" />
           </div>
           <div>
-            <label style="font-size:12px;color:#4B6080;display:block;margin-bottom:5px;">Database name (optional)</label>
+            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Database name (optional)</label>
             <input v-model="packForm.db_name" class="input" placeholder="auto-detect — leave empty to detect automatically" />
           </div>
         </div>
@@ -1575,7 +1649,7 @@ const Projects = {
 
     <!-- ── Active project directory ──────────────────────────────────────── -->
     <div style="margin-bottom:24px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:10px;">Active Project Directory</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Active Project Directory</div>
       <div class="card">
         <div v-if="!editing" style="display:flex;align-items:center;gap:12px;">
           <span v-html="I.folder" style="width:18px;height:18px;color:#1A3DCC;flex-shrink:0;"></span>
@@ -1595,7 +1669,7 @@ const Projects = {
 
     <!-- ── Create new project ────────────────────────────────────────────── -->
     <div style="margin-bottom:28px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:10px;">Create New Project</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Create New Project</div>
       <div class="card">
         <div style="font-size:13px;color:#6B82A8;margin-bottom:14px;">
           Creates a new directory in the scan folder → navigates to it → opens Setup so you can scaffold and initialize.
@@ -1612,15 +1686,15 @@ const Projects = {
             {{ createBusy ? 'Creating…' : 'Create & Setup' }}
           </button>
         </div>
-        <div style="font-size:11px;color:#2E4070;">
+        <div style="font-size:11px;color:#5577A2;">
           Will create:
-          <span style="font-family:monospace;color:#4B6080;">{{ scanDir }}/{{ newName || '&lt;name&gt;' }}</span>
+          <span style="font-family:monospace;color:#6B82A8;">{{ scanDir }}/{{ newName || '&lt;name&gt;' }}</span>
         </div>
       </div>
     </div>
 
     <!-- ── Discover section ──────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:10px;">Discover Projects</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Discover Projects</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
       <input v-model="scanDir" class="input"
              placeholder="~/workspace — base directory to scan recursively"
@@ -1630,7 +1704,7 @@ const Projects = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:60px 0;color:#4B6080;">
+    <div v-if="busy" style="text-align:center;padding:60px 0;color:#6B82A8;">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
       <div style="margin-top:12px;font-size:13px;">Scanning for projects…</div>
     </div>
@@ -1643,7 +1717,7 @@ const Projects = {
       </div>
 
       <div v-else-if="projects.length">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:14px;">
           {{ projects.length }} Project{{ projects.length !== 1 ? 's' : '' }} Found
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
@@ -1655,7 +1729,7 @@ const Projects = {
                   <span v-html="I.folder" style="width:15px;height:15px;color:#1A3DCC;flex-shrink:0;"></span>
                   <span style="font-size:15px;font-weight:700;color:#DDE4F0;">{{ p.name }}</span>
                 </div>
-                <div style="font-size:10px;color:#2E4070;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                <div style="font-size:10px;color:#5577A2;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
                      :title="p.path">{{ p.path }}</div>
               </div>
               <span v-if="p.is_current" class="badge badge-blue" style="margin-left:8px;flex-shrink:0;">Active</span>
@@ -1764,7 +1838,7 @@ const App = {
 
       <div class="sidebar-footer">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <span style="color:#3D5480;">Rocketdoo GUI v3.0.0</span>
+          <span style="color:#4D6A92;">Rocketdoo GUI v3.0.0</span>
           <button @click="toggleTheme" class="btn btn-ghost btn-sm"
                   :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
                   style="padding:3px 8px;border-radius:6px;">
