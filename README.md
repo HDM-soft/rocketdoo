@@ -235,7 +235,7 @@ Below we will list the commands that make up the new version of **rocketdoo**
 
 
 ```
- rocketdoo gui --no-open
+ rocketdoo gui --open
 
 ```
 
@@ -446,9 +446,9 @@ rkd instance status                  # Show configured environments
 Rocketdoo v3 includes a professional web-based management interface, accessible from your browser just like Odoo — no installation of additional tools required.
 
 ```bash
-rkd gui                  # Launch GUI on http://localhost:8070 (opens browser automatically)
+rkd gui                  # Launch GUI on http://localhost:8070
+rkd gui --open           # Also open the browser automatically
 rkd gui --port 9090      # Use a custom port
-rkd gui --no-open        # Start server without opening the browser
 rkd gui --cwd /my/proj   # Point to a specific project directory
 ```
 
@@ -456,13 +456,18 @@ The GUI provides a complete visual interface for all Rocketdoo v3 features:
 
 | Section | What you can do |
 |---------|-----------------|
+| **Projects** | Discover all Rocketdoo projects on your host, switch between them, create new project directories |
 | **Dashboard** | Project overview, container status cards, quick start/stop/restart/build controls, inline log viewer |
 | **Containers** | Full container list with status, per-service start/stop/restart, real-time log streaming |
-| **Modules** | Scan and browse Odoo addons, view version and dependency info |
+| **Modules** | Scan and browse Odoo addons with version and dependency info; manage `gitman.yaml` external repos and trigger Docker rebuild |
 | **Instances** | View configured stage/prod environments, trigger deployments with dry-run support |
 | **Services** | Toggle Mailpit email testing on/off, manage Traefik reverse proxy |
+| **Help** | Quick reference guide for all `rkd` commands |
 
-The interface uses the Rocketdoo brand palette (Prussian blue + dark navy), features real-time log streaming via WebSocket, and runs entirely from the installed package — no Node.js or build step required.
+Additional interface features:
+- **Dark / Light mode toggle** — persisted per browser session
+- Real-time log streaming via WebSocket
+- Runs entirely from the installed package — no Node.js or build step required
 
 > The GUI server runs locally and is bound to `127.0.0.1` by default, so it is only accessible from your own machine.
 

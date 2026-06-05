@@ -423,7 +423,13 @@ const Dashboard = {
     }
     function onTermDone(code) {
       act.value = ''
-      if (code === 0) setTimeout(load, 1500)
+      if (code === 0) {
+        // Auto-close terminal then refresh — order matters: clear first to avoid remount loop
+        setTimeout(() => { termAction.value = null; load() }, 1800)
+      } else {
+        // On failure keep terminal open so the user can read the error, but still refresh status
+        setTimeout(load, 1000)
+      }
     }
     function closeTerminal() {
       termAction.value = null
@@ -561,11 +567,12 @@ const Dashboard = {
         </div>
       </div>
 
-      <!-- Docker terminal — appears when an action is running -->
-      <div v-if="termAction" style="margin-top:20px;">
-        <DockerTerminal :action="termAction" @done="onTermDone" @close="closeTerminal" />
-      </div>
     </template>
+
+    <!-- Terminal lives OUTSIDE v-else so busy toggling never destroys/remounts it -->
+    <div v-if="termAction" style="margin-top:20px;">
+      <DockerTerminal :action="termAction" @done="onTermDone" @close="closeTerminal" />
+    </div>
   </div>`
 }
 
