@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rocketdoo GUI — v3</title>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { background: #07091A; color: #DDE4F0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1C2952; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #1A3DCC; }
+
+/* Layout */
+.layout { display: flex; min-height: 100vh; }
+.sidebar { width: 224px; min-height: 100vh; background: #090D22; border-right: 1px solid #151E45; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
+.main { flex: 1; overflow-y: auto; }
+.page { padding: 32px 36px; max-width: 1120px; }
+
+/* Sidebar logo */
+.logo-area { padding: 22px 18px 18px; border-bottom: 1px solid #151E45; display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, #1A3DCC 0%, #7553C8 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(26,61,204,0.4); }
+.logo-text { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: .02em; line-height: 1; }
+.logo-sub { font-size: 10px; color: #3D5480; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+.v3-badge { font-size: 9px; font-weight: 700; background: rgba(26,61,204,0.3); color: #6D9CFF; padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
+
+/* Sidebar nav */
+.nav { flex: 1; padding: 12px 10px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: #6B82A8; font-size: 13px; font-weight: 500; margin-bottom: 2px; transition: all .15s; border: 1px solid transparent; user-select: none; }
+.nav-item:hover { background: rgba(26,61,204,0.1); color: #DDE4F0; }
+.nav-item.active { background: rgba(26,61,204,0.18); color: #7AA3FF; border-color: rgba(26,61,204,0.3); }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid #151E45; font-size: 11px; color: #2E4070; line-height: 1.7; }
+
+/* Cards */
+.card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 20px; transition: border-color .15s; }
+.card:hover { border-color: rgba(26,61,204,0.35); }
+.card-flat { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; overflow: hidden; }
+.card-header { padding: 12px 20px; border-bottom: 1px solid #151E45; display: flex; align-items: center; justify-content: space-between; }
+
+/* Badges */
+.badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.badge-blue   { background: rgba(26,61,204,0.22); color: #6D9CFF; }
+.badge-green  { background: rgba(34,197,94,0.18);  color: #4ADE80; }
+.badge-red    { background: rgba(239,68,68,0.18);  color: #F87171; }
+.badge-yellow { background: rgba(245,158,11,0.18); color: #FCD34D; }
+.badge-purple { background: rgba(117,83,200,0.22); color: #A78BFA; }
+.badge-gray   { background: rgba(107,114,128,0.18); color: #9CA3AF; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
+.btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.btn-primary { background: #1A3DCC; color: #fff; }
+.btn-primary:hover { background: #2450E8; box-shadow: 0 0 14px rgba(26,61,204,0.45); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-ghost { background: transparent; color: #7A92BA; border: 1px solid #1A2A50; }
+.btn-ghost:hover { color: #DDE4F0; border-color: rgba(26,61,204,0.5); background: rgba(26,61,204,0.1); }
+.btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
+.btn-danger { background: transparent; color: #F87171; border: 1px solid rgba(239,68,68,0.4); }
+.btn-danger:hover { background: rgba(239,68,68,0.1); border-color: #EF4444; }
+.btn-sm { padding: 4px 9px; font-size: 12px; }
+.btn-sm svg { width: 11px; height: 11px; }
+
+/* Status dot */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.dot-green  { background: #22C55E; box-shadow: 0 0 6px rgba(34,197,94,.5); }
+.dot-red    { background: #EF4444; }
+.dot-yellow { background: #F59E0B; }
+.dot-gray   { background: #4B5563; }
+
+/* Page header */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+.page-title { font-size: 22px; font-weight: 700; color: #DDE4F0; }
+.page-sub { font-size: 13px; color: #6B82A8; margin-top: 3px; }
+
+/* Stats grid */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
+.stat-card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 16px 18px; }
+.stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #4B6080; margin-bottom: 10px; }
+.stat-value { font-size: 28px; font-weight: 700; color: #DDE4F0; line-height: 1; }
+.stat-note { font-size: 12px; color: #6B82A8; margin-top: 6px; }
+
+/* Table */
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #2E4070; border-bottom: 1px solid #151E45; }
+.table td { padding: 13px 18px; border-bottom: 1px solid #0F1830; vertical-align: middle; }
+.table tr:last-child td { border-bottom: none; }
+.table tr:hover td { background: rgba(26,61,204,0.04); }
+
+/* Log terminal */
+.log-term { background: #040711; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.65; color: #7EC87E; height: 300px; overflow-y: auto; padding: 12px 14px; border-radius: 8px; border: 1px solid #0F1830; }
+.log-err { color: #F87171; }
+.log-warn { color: #FCD34D; }
+
+/* Toggle */
+.toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-track { position: absolute; inset: 0; background: #1A2A50; border-radius: 22px; transition: .2s; cursor: pointer; }
+.toggle-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: #4B6080; border-radius: 50%; transition: .2s; }
+input:checked ~ .toggle-track { background: #1A3DCC; }
+input:checked ~ .toggle-track::before { transform: translateX(18px); background: #fff; }
+
+/* Input */
+.input { background: #0D1230; border: 1px solid #1A2A50; border-radius: 7px; padding: 8px 12px; color: #DDE4F0; font-size: 13px; outline: none; transition: border-color .15s; width: 100%; }
+.input:focus { border-color: #1A3DCC; }
+
+/* Animations */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; display: inline-block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn .2s ease; }
+
+/* Notifications */
+.notif-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 9999; min-width: 280px; max-width: 360px; }
+.notif { padding: 11px 14px; border-radius: 8px; display: flex; align-items: center; gap: 9px; font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,.5); animation: fadeIn .2s ease; }
+.notif-ok  { background: #081A10; border: 1px solid rgba(34,197,94,.35); }
+.notif-err { background: #160808; border: 1px solid rgba(239,68,68,.35); }
+.notif svg { width: 15px; height: 15px; flex-shrink: 0; }
+.notif-ok svg  { color: #22C55E; }
+.notif-err svg { color: #EF4444; }
+
+/* Empty state */
+.empty { text-align: center; padding: 56px 32px; }
+.empty svg { width: 44px; height: 44px; color: #1A2A50; margin-bottom: 16px; }
+.empty h3 { font-size: 16px; font-weight: 600; color: #4B6080; margin-bottom: 8px; }
+.empty p { font-size: 13px; color: #2E4070; }
+.code-block { background: #040711; border: 1px solid #0F1830; border-radius: 8px; padding: 14px 20px; display: inline-block; font-family: monospace; font-size: 13px; color: #4ADE80; text-align: left; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const { createApp, ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue
+
+/* ── API ─────────────────────────────────────────────────────────────────── */
+const api = {
+  async get(p) { const r = await fetch('/api'+p); return r.json() },
+  async post(p, b={}) {
+    const r = await fetch('/api'+p, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b) })
+    return r.json()
+  }
+}
+
+/* ── Notifications ───────────────────────────────────────────────────────── */
+const notifs = ref([])
+let _nid = 0
+function notify(msg, type='ok') {
+  const id = ++_nid
+  notifs.value.push({ id, msg, type })
+  setTimeout(() => { notifs.value = notifs.value.filter(n=>n.id!==id) }, 4500)
+}
+
+/* ── Icons SVG strings ───────────────────────────────────────────────────── */
+const I = {
+  rocket:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>`,
+  dashboard:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+  containers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+  modules:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`,
+  instances:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>`,
+  services:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14M15.54 8.46a5 5 0 010 7.07M8.46 8.46a5 5 0 000 7.07"/></svg>`,
+  refresh:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>`,
+  play:       `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
+  stop:       `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
+  restart:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>`,
+  logs:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  ext:        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
+  deploy:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>`,
+  mail:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
+  globe:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>`,
+  check:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
+  x:          `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  warn:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+  spin:       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>`,
+  build:      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>`,
+}
+
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
+function cstatus(s) {
+  const v = (s||'').toLowerCase()
+  if (v.includes('running')||v.includes(' up')) return 'running'
+  if (v.includes('exited')||v.includes('stopped')) return 'stopped'
+  if (v.includes('paused')) return 'paused'
+  return 'unknown'
+}
+function dotClass(s) {
+  const m = {running:'dot-green', stopped:'dot-red', paused:'dot-yellow'}
+  return m[cstatus(s)] || 'dot-gray'
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LOG VIEWER COMPONENT
+══════════════════════════════════════════════════════════════════════════ */
+const LogViewer = {
+  props: { name: String },
+  setup(props) {
+    const lines = ref([])
+    const live = ref(false)
+    const el = ref(null)
+    let ws = null
+
+    function lineClass(l) {
+      const lc = l.toLowerCase()
+      if (/error|traceback|exception|critical/.test(lc)) return 'log-err'
+      if (/warn/.test(lc)) return 'log-warn'
+      return ''
+    }
+
+    function connect() {
+      if (ws) ws.close()
+      lines.value = []
+      live.value = true
+      const proto = location.protocol==='https:'?'wss':'ws'
+      ws = new WebSocket(`${proto}://${location.host}/ws/logs/${props.name}`)
+      ws.onmessage = e => {
+        lines.value.push(e.data)
+        if (lines.value.length > 1500) lines.value.splice(0, 200)
+        nextTick(() => { if (el.value) el.value.scrollTop = el.value.scrollHeight })
+      }
+      ws.onclose = () => { live.value = false }
+      ws.onerror = () => { live.value = false; lines.value.push('[connection error]') }
+    }
+    function stop() { if (ws) ws.close(); live.value = false }
+
+    onMounted(connect)
+    onUnmounted(stop)
+    watch(() => props.name, connect)
+
+    return { lines, live, el, connect, stop, lineClass, I }
+  },
+  template: `
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:600;color:#DDE4F0;">{{ name }}</span>
+        <span v-if="live" style="display:flex;align-items:center;gap:5px;font-size:11px;color:#22C55E;">
+          <span class="dot dot-green" style="width:6px;height:6px;"></span> Live
+        </span>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button @click="live?stop():connect()" class="btn btn-ghost btn-sm" v-html="(live?I.stop:I.play)+' '+(live?'Stop':'Connect')"></button>
+          <button @click="lines=[]" class="btn btn-ghost btn-sm">Clear</button>
+        </div>
+      </div>
+      <div ref="el" class="log-term">
+        <div v-if="!lines.length" style="color:#1A3050;font-style:italic;">Waiting for output…</div>
+        <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
+      </div>
+    </div>
+  `
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DASHBOARD
+══════════════════════════════════════════════════════════════════════════ */
+const Dashboard = {
+  components: { LogViewer },
+  setup() {
+    const proj = ref(null)
+    const ctrs = ref([])
+    const busy = ref(true)
+    const act  = ref('')
+    const logOf = ref(null)
+
+    async function load() {
+      busy.value = true
+      try {
+        const [p, c] = await Promise.all([api.get('/project'), api.get('/project/containers')])
+        proj.value = p; ctrs.value = c.containers||[]
+      } catch(e) { notify('Load failed: '+e.message, 'err') }
+      finally { busy.value = false }
+    }
+
+    async function docker(cmd) {
+      act.value = cmd
+      try {
+        const r = await api.post('/docker/'+cmd)
+        if (r.ok) { notify(cmd+' completed'); setTimeout(load, 1800) }
+        else notify(r.stderr||'Failed', 'err')
+      } catch(e) { notify(e.message,'err') }
+      finally { act.value = '' }
+    }
+
+    const running = computed(() => ctrs.value.filter(c=>cstatus(c.State||c.Status)==='running').length)
+
+    onMounted(load)
+    return { proj, ctrs, busy, act, logOf, running, load, docker, dotClass, cstatus, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Dashboard</div><div class="page-sub">Project overview and quick controls</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <!-- Stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Containers</div>
+          <div class="stat-value" :style="{color: running>0?'#22C55E':'#4B5563'}">
+            {{ running }}<span style="font-size:16px;color:#2E4070;"> / {{ ctrs.length }}</span>
+          </div>
+          <div class="stat-note">{{ running }} running</div>
+        </div>
+        <div class="stat-card" v-if="proj?.exists">
+          <div class="stat-label">Odoo Version</div>
+          <div class="stat-value">{{ proj.odoo_version||'—' }}</div>
+          <div class="stat-note" style="margin-top:7px;">
+            <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-blue'">{{ proj.odoo_edition }}</span>
+          </div>
+        </div>
+        <div class="stat-card" v-if="proj?.exists">
+          <div class="stat-label">PostgreSQL</div>
+          <div class="stat-value">{{ proj.db_version||'—' }}</div>
+          <div class="stat-note">Database</div>
+        </div>
+        <div class="stat-card" v-if="proj?.exists">
+          <div class="stat-label">Web Port</div>
+          <div class="stat-value">{{ proj.odoo_port||'—' }}</div>
+          <div class="stat-note" style="margin-top:7px;">
+            <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank"
+               style="color:#1A3DCC;text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
+              Open Odoo <span v-html="I.ext" style="width:10px;height:10px;"></span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- No project -->
+      <div v-if="!proj?.exists" class="card empty" style="border-style:dashed;">
+        <div v-html="I.rocket"></div>
+        <h3>No project found in this directory</h3>
+        <p>Initialize a Rocketdoo project to get started</p>
+        <div class="code-block"><div style="color:#2E5080;">## Create a new project</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
+      </div>
+
+      <!-- Project card -->
+      <div v-if="proj?.exists" style="margin-bottom:24px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:12px;">Project</div>
+        <div class="card" style="border-color:rgba(26,61,204,0.3);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span v-html="I.rocket" style="width:18px;height:18px;color:#1A3DCC;flex-shrink:0;"></span>
+                <span style="font-size:17px;font-weight:700;color:#DDE4F0;">{{ proj.project_name||'Unnamed Project' }}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                <span class="badge badge-blue">Odoo {{ proj.odoo_version }}</span>
+                <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-gray'">{{ proj.odoo_edition }}</span>
+                <span class="badge badge-gray" v-if="proj.db_version">PG {{ proj.db_version }}</span>
+                <span class="badge badge-yellow" v-if="proj.use_private_repos">SSH Key</span>
+                <span class="badge badge-blue" v-if="proj.use_third_party_repos">Gitman</span>
+              </div>
+            </div>
+            <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank" class="btn btn-primary" style="text-decoration:none;flex-shrink:0;">
+              <span v-html="I.ext"></span> Open Odoo
+            </a>
+          </div>
+
+          <!-- Containers -->
+          <div style="border-top:1px solid #151E45;padding-top:14px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:10px;">Containers</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+              <div v-for="c in ctrs" :key="c.Name||c.Service"
+                   @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
+                   :style="{background:'#090D22',border:'1px solid '+(logOf===(c.Name||c.Service)?'#1A3DCC':'#151E45'),borderRadius:'8px',padding:'10px 14px',cursor:'pointer',minWidth:'150px',transition:'all .15s'}">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
+                  <span class="dot" :class="dotClass(c.State||c.Status)"></span>
+                  <span style="font-size:13px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</span>
+                </div>
+                <div style="font-size:11px;color:#4B6080;font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
+                <div v-if="c.Ports" style="font-size:10px;color:#2E4070;margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
+              </div>
+              <div v-if="!ctrs.length" style="color:#2E4070;font-size:13px;padding:8px 0;">No containers running</div>
+            </div>
+          </div>
+
+          <!-- Inline logs -->
+          <div v-if="logOf" style="margin-top:14px;border-top:1px solid #151E45;padding-top:14px;">
+            <LogViewer :name="logOf" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div v-if="proj?.exists">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#2E4070;margin-bottom:12px;">Quick Actions</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <button @click="docker('up')" class="btn btn-primary" :disabled="act!==''">
+            <span v-html="act==='up'?I.spin:I.play" :class="act==='up'?'spin':''"></span> Start All
+          </button>
+          <button @click="docker('restart')" class="btn btn-ghost" :disabled="act!==''">
+            <span v-html="act==='restart'?I.spin:I.restart" :class="act==='restart'?'spin':''"></span> Restart
+          </button>
+          <button @click="docker('stop')" class="btn btn-ghost" :disabled="act!==''">
+            <span v-html="act==='stop'?I.spin:I.stop" :class="act==='stop'?'spin':''"></span> Stop
+          </button>
+          <button @click="docker('build')" class="btn btn-ghost" :disabled="act!==''">
+            <span v-html="act==='build'?I.spin:I.build" :class="act==='build'?'spin':''"></span> Build
+          </button>
+          <button @click="docker('down')" class="btn btn-danger" :disabled="act!==''">
+            <span v-html="act==='down'?I.spin:I.x" :class="act==='down'?'spin':''"></span> Down
+          </button>
+        </div>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CONTAINERS
+══════════════════════════════════════════════════════════════════════════ */
+const Containers = {
+  components: { LogViewer },
+  setup() {
+    const ctrs = ref([])
+    const busy = ref(true)
+    const acts = ref({})
+    const logOf = ref(null)
+
+    async function load() {
+      busy.value = true
+      try { const r = await api.get('/project/containers'); ctrs.value = r.containers||[] }
+      catch(e) { notify('Load failed','err') }
+      finally { busy.value = false }
+    }
+
+    async function action(svc, cmd) {
+      const key = svc+cmd; acts.value[key] = true
+      try {
+        const r = await api.post('/docker/service/'+cmd, { service: svc })
+        if (r.ok) { notify(svc+': '+cmd); setTimeout(load, 1500) }
+        else notify(r.stderr||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { delete acts.value[key] }
+    }
+
+    onMounted(load)
+    return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Containers</div><div class="page-sub">Manage Docker services for this project</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <div v-if="!ctrs.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.containers"></div>
+        <h3>No containers found</h3>
+        <p>Make sure you are in a Rocketdoo project directory and run <code style="color:#6D9CFF;">rkd up</code></p>
+      </div>
+
+      <div v-else class="card-flat">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Status</th><th>Service</th><th>Image</th><th>Ports</th><th style="text-align:right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="c in ctrs" :key="c.Name||c.Service">
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:7px;">
+                    <span class="dot" :class="dotClass(c.State||c.Status)"></span>
+                    <span style="font-size:12px;color:#6B82A8;text-transform:capitalize;">{{ cstatus(c.State||c.Status) }}</span>
+                  </div>
+                </td>
+                <td>
+                  <div style="font-size:14px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</div>
+                  <div style="font-size:11px;color:#2E4070;font-family:monospace;">{{ c.Name }}</div>
+                </td>
+                <td style="font-family:monospace;font-size:12px;color:#6B82A8;">{{ c.Image||'—' }}</td>
+                <td style="font-family:monospace;font-size:11px;color:#6B82A8;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
+                <td style="text-align:right;">
+                  <div style="display:flex;gap:5px;justify-content:flex-end;">
+                    <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" title="Start" :disabled="acts[(c.Service||c.Name)+'start']">
+                      <span v-html="acts[(c.Service||c.Name)+'start']?I.spin:I.play" :class="acts[(c.Service||c.Name)+'start']?'spin':''"></span>
+                    </button>
+                    <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" title="Stop" :disabled="acts[(c.Service||c.Name)+'stop']">
+                      <span v-html="acts[(c.Service||c.Name)+'stop']?I.spin:I.stop" :class="acts[(c.Service||c.Name)+'stop']?'spin':''"></span>
+                    </button>
+                    <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" title="Restart" :disabled="acts[(c.Service||c.Name)+'restart']">
+                      <span v-html="acts[(c.Service||c.Name)+'restart']?I.spin:I.restart" :class="acts[(c.Service||c.Name)+'restart']?'spin':''"></span>
+                    </button>
+                    <button @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
+                            class="btn btn-ghost btn-sm" title="Logs"
+                            :style="logOf===(c.Name||c.Service)?'color:#1A3DCC;border-color:#1A3DCC;':''">
+                      <span v-html="I.logs"></span>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="logOf===(c.Name||c.Service)" :key="(c.Name||c.Service)+'-log'">
+                <td colspan="5" style="background:#040711;padding:14px 18px;">
+                  <LogViewer :name="c.Name||c.Service" />
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MODULES
+══════════════════════════════════════════════════════════════════════════ */
+const Modules = {
+  setup() {
+    const mods = ref([])
+    const busy = ref(true)
+    const all  = ref(false)
+    const q    = ref('')
+    const filtered = computed(() => mods.value.filter(m => !q.value || m.name.toLowerCase().includes(q.value.toLowerCase())))
+
+    async function load() {
+      busy.value = true
+      try { const r = await api.get('/modules?include_all='+all.value); mods.value = r.modules||[] }
+      catch(e) { notify('Scan failed','err') }
+      finally { busy.value = false }
+    }
+
+    watch(all, load)
+    onMounted(load)
+    return { mods, busy, all, q, filtered, load, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Modules</div><div class="page-sub">Odoo addons detected in the project</div></div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
+          <input type="checkbox" v-model="all" style="accent-color:#1A3DCC;"> Show all
+        </label>
+        <button class="btn btn-ghost" @click="load" :disabled="busy">
+          <span v-html="I.refresh" :class="busy?'spin':''"></span> Scan
+        </button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <input v-model="q" class="input" placeholder="Search modules…" style="max-width:340px;" />
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <div v-if="!filtered.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.modules"></div>
+        <h3>{{ mods.length ? 'No matches' : 'No modules found' }}</h3>
+        <p>{{ mods.length ? 'Try a different search term' : 'Add Odoo modules to the addons/ directory' }}</p>
+      </div>
+
+      <div v-else class="card-flat">
+        <div class="card-header">
+          <span style="font-size:13px;color:#6B82A8;">{{ filtered.length }} module{{ filtered.length!==1?'s':'' }}</span>
+        </div>
+        <table class="table">
+          <thead>
+            <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>Depends</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in filtered" :key="m.name">
+              <td>
+                <div style="font-family:monospace;font-size:13px;font-weight:600;color:#DDE4F0;">{{ m.name }}</div>
+                <div v-if="m.has_invalid_name" style="font-size:11px;color:#FCD34D;margin-top:2px;">⚠ Invalid name</div>
+              </td>
+              <td style="font-family:monospace;font-size:11px;color:#4B6080;">{{ m.path }}</td>
+              <td style="font-size:12px;color:#6B82A8;">{{ m.version||'—' }}</td>
+              <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?'Installable':'Disabled' }}</span></td>
+              <td style="font-size:11px;color:#2E4070;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   INSTANCES
+══════════════════════════════════════════════════════════════════════════ */
+const Instances = {
+  setup() {
+    const inst  = ref([])
+    const busy  = ref(true)
+    const dep   = ref({})
+    const dry   = ref({})
+
+    async function load() {
+      busy.value = true
+      try { const r = await api.get('/instances'); inst.value = r.instances||[] }
+      catch(e) { notify('Load failed','err') }
+      finally { busy.value = false }
+    }
+
+    async function deploy(env) {
+      dep.value[env] = true
+      try {
+        const r = await api.post('/instances/deploy', { env, dry_run: !!dry.value[env] })
+        if (r.ok) notify(env+' deploy '+(dry.value[env]?'(dry-run) ':'')+'completed')
+        else notify(r.error||'Deploy failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { dep.value[env] = false }
+    }
+
+    onMounted(load)
+    return { inst, busy, dep, dry, load, deploy, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Instances</div><div class="page-sub">Deploy Odoo to remote VPS environments</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <template v-else>
+      <div v-if="!inst.length" class="card empty" style="border-style:dashed;">
+        <div v-html="I.instances"></div>
+        <h3>No instances configured</h3>
+        <p>Configure deployment targets with:</p>
+        <div class="code-block">$ rkd instance init</div>
+      </div>
+
+      <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:18px;">
+        <div v-for="i in inst" :key="i.env" class="card" :style="{borderColor:i.env==='prod'?'rgba(239,68,68,0.25)':'rgba(26,61,204,0.3)'}">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <div style="display:flex;align-items:center;gap:9px;">
+              <span v-html="I.instances" style="width:18px;height:18px;color:#1A3DCC;"></span>
+              <span style="font-size:16px;font-weight:700;color:#DDE4F0;text-transform:capitalize;">{{ i.env }}</span>
+            </div>
+            <span class="badge" :class="i.env==='prod'?'badge-red':'badge-blue'">{{ i.env==='prod'?'Production':'Staging' }}</span>
+          </div>
+
+          <div style="display:grid;gap:7px;margin-bottom:18px;font-size:12px;">
+            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ i.host||'—' }}</span></div>
+            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Domain</span>
+              <a :href="'https://'+i.domain" target="_blank" style="color:#1A3DCC;text-decoration:none;font-family:monospace;display:flex;align-items:center;gap:4px;">
+                {{ i.domain }} <span v-html="I.ext" style="width:10px;height:10px;"></span>
+              </a>
+            </div>
+            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Odoo</span><span style="color:#DDE4F0;">{{ i.odoo_version||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Type</span><span class="badge badge-gray">{{ i.type }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Path</span><span style="color:#6B82A8;font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
+          </div>
+
+          <div style="border-top:1px solid #151E45;padding-top:14px;display:flex;align-items:center;gap:10px;">
+            <button @click="deploy(i.env)" class="btn btn-primary" :disabled="dep[i.env]">
+              <span v-html="dep[i.env]?I.spin:I.deploy" :class="dep[i.env]?'spin':''"></span>
+              {{ dep[i.env]?'Deploying…':'Deploy' }}
+            </button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6B82A8;cursor:pointer;">
+              <input type="checkbox" v-model="dry[i.env]" style="accent-color:#1A3DCC;"> Dry run
+            </label>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SERVICES
+══════════════════════════════════════════════════════════════════════════ */
+const Services = {
+  setup() {
+    const mail = ref({ enabled:false, running:false })
+    const traefik = ref({ enabled:false, mode:null, domain:null, override_exists:false })
+    const busy = ref(true)
+    const mailBusy = ref(false)
+    const traefikBusy = ref(false)
+
+    async function load() {
+      busy.value = true
+      try {
+        const [m,t] = await Promise.all([api.get('/mail/status'), api.get('/traefik/status')])
+        mail.value = m; traefik.value = t
+      } catch(e) { notify('Load failed','err') }
+      finally { busy.value = false }
+    }
+
+    async function toggleMail() {
+      mailBusy.value = true
+      try {
+        const r = await api.post(mail.value.enabled ? '/mail/off' : '/mail/on')
+        if (r.ok) { notify('Mailpit '+(mail.value.enabled?'disabled':'enabled')); await load() }
+        else notify(r.error||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { mailBusy.value = false }
+    }
+
+    async function traefikOff() {
+      traefikBusy.value = true
+      try {
+        const r = await api.post('/traefik/off')
+        if (r.ok) { notify('Traefik disabled'); await load() }
+        else notify(r.error||'Failed','err')
+      } catch(e) { notify(e.message,'err') }
+      finally { traefikBusy.value = false }
+    }
+
+    onMounted(load)
+    return { mail, traefik, busy, mailBusy, traefikBusy, load, toggleMail, traefikOff, I }
+  },
+  template: `
+  <div class="page fade-in">
+    <div class="page-header">
+      <div><div class="page-title">Services</div><div class="page-sub">Optional services for local development</div></div>
+      <button class="btn btn-ghost" @click="load" :disabled="busy">
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+      </button>
+    </div>
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:#4B6080;">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px;">
+
+      <!-- Mailpit -->
+      <div class="card" :style="{borderColor:mail.enabled?'rgba(34,197,94,0.3)':''}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:38px;height:38px;background:rgba(26,61,204,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span v-html="I.mail" style="width:18px;height:18px;color:#1A3DCC;"></span>
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Mailpit</div>
+              <div style="font-size:12px;color:#4B6080;">Local SMTP testing</div>
+            </div>
+          </div>
+          <label class="toggle" :style="mailBusy?'opacity:.5;pointer-events:none':''">
+            <input type="checkbox" :checked="mail.enabled" @change="toggleMail">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+
+        <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Service</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?'Enabled':'Disabled' }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Container</span>
+            <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:#6B82A8;">{{ mail.running?'Running':'Stopped' }}</span></div>
+          </div>
+          <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">SMTP</span><span style="color:#DDE4F0;font-family:monospace;">:1025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Web UI</span><span style="color:#DDE4F0;font-family:monospace;">:8025</span></div>
+        </div>
+
+        <div style="border-top:1px solid #151E45;padding-top:12px;">
+          <a href="http://localhost:8025" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
+            <span v-html="I.ext"></span> Open Mailpit
+          </a>
+        </div>
+      </div>
+
+      <!-- Traefik -->
+      <div class="card" :style="{borderColor:traefik.enabled?'rgba(26,61,204,0.35)':''}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:38px;height:38px;background:rgba(26,61,204,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span v-html="I.globe" style="width:18px;height:18px;color:#1A3DCC;"></span>
+            </div>
+            <div>
+              <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Traefik</div>
+              <div style="font-size:12px;color:#4B6080;">Reverse proxy / HTTPS</div>
+            </div>
+          </div>
+          <span class="badge" :class="traefik.enabled?'badge-green':'badge-gray'">{{ traefik.enabled?'Active':'Inactive' }}</span>
+        </div>
+
+        <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Mode</span>
+            <span v-if="traefik.mode" class="badge" :class="traefik.mode==='production'?'badge-purple':'badge-blue'">{{ traefik.mode }}</span>
+            <span v-else style="color:#2E4070;">Not configured</span>
+          </div>
+          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:#2E4070;min-width:72px;">Domain</span><span style="color:#DDE4F0;font-family:monospace;">{{ traefik.domain }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#2E4070;min-width:72px;">Override</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?'Present':'Not found' }}</span></div>
+        </div>
+
+        <div style="border-top:1px solid #151E45;padding-top:12px;">
+          <button v-if="traefik.enabled" @click="traefikOff" class="btn btn-danger" :disabled="traefikBusy">
+            <span v-html="traefikBusy?I.spin:I.x" :class="traefikBusy?'spin':''"></span> Disable Traefik
+          </button>
+          <div v-else style="font-size:12px;color:#2E4070;">
+            Run <code style="background:#090D22;padding:2px 6px;border-radius:4px;color:#6B82A8;font-size:11px;">rkd traefik on</code> in terminal to configure
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   ROOT APP
+══════════════════════════════════════════════════════════════════════════ */
+const App = {
+  components: { Dashboard, Containers, Modules, Instances, Services },
+  setup() {
+    const view = ref('dashboard')
+    const nav = [
+      { id:'dashboard',  label:'Dashboard',  icon: I.dashboard  },
+      { id:'containers', label:'Containers', icon: I.containers },
+      { id:'modules',    label:'Modules',    icon: I.modules    },
+      { id:'instances',  label:'Instances',  icon: I.instances  },
+      { id:'services',   label:'Services',   icon: I.services   },
+    ]
+    return { view, nav, notifs, I }
+  },
+  template: `
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo-area">
+        <div class="logo-icon">
+          <span v-html="I.rocket" style="width:18px;height:18px;color:white;"></span>
+        </div>
+        <div>
+          <div class="logo-text">RKD <span class="v3-badge">v3</span></div>
+          <div class="logo-sub">Rocketdoo</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <div v-for="n in nav" :key="n.id"
+             class="nav-item" :class="{ active: view===n.id }"
+             @click="view=n.id">
+          <span v-html="n.icon"></span>
+          {{ n.label }}
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div>Rocketdoo GUI</div>
+        <div>Version 3.0.0</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <keep-alive>
+        <component :is="view==='dashboard'?'Dashboard':view==='containers'?'Containers':view==='modules'?'Modules':view==='instances'?'Instances':'Services'"></component>
+      </keep-alive>
+    </main>
+
+    <!-- Notifications -->
+    <div class="notif-wrap">
+      <div v-for="n in notifs" :key="n.id" class="notif" :class="n.type==='err'?'notif-err':'notif-ok'">
+        <span v-html="n.type==='err'?I.warn:I.check"></span>
+        {{ n.msg }}
+      </div>
+    </div>
+  </div>`
+}
+
+createApp(App).mount('#app')
+</script>
+</body>
+</html>

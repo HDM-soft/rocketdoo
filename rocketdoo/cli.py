@@ -24,6 +24,7 @@ from rocketdoo.unpack_environment import unpack_environment
 from rocketdoo.mail_cli import mail
 from rocketdoo.traefik_cli import traefik
 from rocketdoo.instance_cli import instance
+from rocketdoo.gui_cli import gui_command
 
 # Detect the command name used to invoke the CLI
 PROG_NAME = "rkd" if "rkd" in sys.argv[0] else "rocketdoo"
@@ -463,6 +464,11 @@ main.add_command(list_modules, name="deploy-list")
 main.add_command(deploy_run, name="deploy-run")
 main.add_command(deploy_config, name="deploy-config")
 main.add_command(validate_modules, name="deploy-validate")
+
+# ============================================================
+# 🖥️  Register GUI command
+# ============================================================
+main.add_command(gui_command, name="gui")
 
 if __name__ == "__main__":
     main()

@@ -15,7 +15,9 @@ dependencies = [
     "pyyaml>=6.0",
     "rich>=13.0",
     "pyfiglet>=1.0",
-    "questionary>=1.10.0"
+    "questionary>=1.10.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
 ]
 
 [project.scripts]
@@ -41,6 +43,8 @@ rocketdoo = [
     "templates/deploy/*",
     "templates/**/.*",
     "templates/**/**/.*",
+    "gui/static/*",
+    "gui/static/**/*",
 ]
 
 [tool.setuptools]
