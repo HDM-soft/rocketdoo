@@ -10,6 +10,7 @@ from .scaffold import scaffold_project
 from .init_project import init_project
 from .project_info import get_project_info, project_exists
 from rocketdoo import __version__
+import questionary
 from rocketdoo.docker_cli import docker, up, down, status, stop, pause, logs, build, restart
 from rocketdoo.deploy_cli import (
     deploy, 
@@ -413,6 +414,110 @@ def info():
         box=box.ROUNDED
     ))
     console.print()
+
+# ============================================================
+# 📚 Gitman command group
+# ============================================================
+
+@main.group()
+def gitman():
+    """Manage external repositories via gitman.yaml."""
+    pass
+
+
+@gitman.command(name="init")
+@click.option('--force', '-f', is_flag=True, help='Overwrite existing gitman.yaml')
+def gitman_init(force):
+    """Create gitman.yaml for third-party Odoo repositories."""
+    from rocketdoo.core.gitman_config import (
+        generate_gitman_yaml,
+        update_odoo_conf_with_gitman,
+        extract_repo_name_from_url,
+        detect_repo_type,
+    )
+
+    if not project_exists():
+        console.print("[yellow]⚠  No Rocketdoo project detected in this directory.[/yellow]")
+        console.print("[dim]Run 'rkd init' first.[/dim]")
+        return
+
+    gitman_path = Path.cwd() / "gitman.yaml"
+
+    if gitman_path.exists() and not force:
+        console.print("[yellow]⚠  gitman.yaml already exists.[/yellow]")
+        console.print("[dim]Use --force to overwrite it, or edit it directly.[/dim]")
+        return
+
+    console.print(Panel(
+        "[bold cyan]📚 Gitman Init[/bold cyan]\n\n"
+        "Creates [green]gitman.yaml[/green] to manage external Odoo repositories\n"
+        "and updates [green]config/odoo.conf[/green] with the new addons paths.",
+        border_style="cyan",
+        box=box.ROUNDED,
+    ))
+
+    # Detect Odoo version from the project to use as default branch
+    project_info = get_project_info()
+    odoo_version = project_info.get("odoo_version", "17.0") or "17.0"
+
+    gitman_sources = []
+
+    add_now = questionary.confirm(
+        "Would you like to add repositories now?",
+        default=True,
+    ).ask()
+
+    if add_now:
+        while True:
+            console.print("\n" + "─" * 50)
+            repo_url = click.prompt(
+                "Repository URL (press Enter with no text to finish)",
+                default="",
+                show_default=False,
+            )
+
+            if not repo_url.strip():
+                if not gitman_sources:
+                    console.print("[dim]No repositories added. An empty gitman.yaml will be created.[/dim]")
+                break
+
+            try:
+                repo_name = extract_repo_name_from_url(repo_url)
+            except Exception:
+                repo_name = "custom-repo"
+
+            repo_name = click.prompt("Name for this repo", default=repo_name)
+            repo_rev = click.prompt("Branch / revision", default=odoo_version)
+            repo_type = detect_repo_type(repo_url)
+
+            gitman_sources.append({
+                "repo": repo_url,
+                "name": repo_name,
+                "rev": repo_rev,
+                "type": repo_type,
+            })
+
+            console.print(f"  [green]✓[/green] [bold]{repo_name}[/bold] added  ([dim]{repo_url}[/dim] @ {repo_rev})")
+
+            if not questionary.confirm("Add another repository?", default=False).ask():
+                break
+
+    # Write gitman.yaml
+    generate_gitman_yaml(sources=gitman_sources, output_path=gitman_path)
+    console.print(f"\n[green]✓[/green] [bold]gitman.yaml[/bold] created ({len(gitman_sources)} repo(s))")
+
+    # Update odoo.conf if it exists and there are sources
+    odoo_conf_path = Path.cwd() / "config" / "odoo.conf"
+    if gitman_sources and odoo_conf_path.exists():
+        update_odoo_conf_with_gitman(odoo_conf_path, gitman_sources)
+        console.print("[green]✓[/green] [bold]config/odoo.conf[/bold] updated with new addons paths")
+    elif gitman_sources and not odoo_conf_path.exists():
+        console.print("[yellow]⚠  config/odoo.conf not found — update addons_path manually.[/yellow]")
+
+    if gitman_sources:
+        console.print("\n[dim]Next step: rebuild the Docker image so gitman installs the repos:[/dim]")
+        console.print("  [bold cyan]rkd build --rebuild[/bold cyan]")
+
 
 # ============================================================
 # 🚀 Register Docker commands as Rocketdoo subcommands

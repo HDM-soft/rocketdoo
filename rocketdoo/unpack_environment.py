@@ -66,8 +66,8 @@ def _check_ports(meta: dict) -> tuple[int, int, bool]:
     Verifies whether the environment's ports are available.
     Returns (final_odoo_port, final_vsc_port, had_changes).
     """
-    odoo_port = int(meta.get("odoo_port", 8069))
-    vsc_port = int(meta.get("vsc_port", 8888))
+    odoo_port = int(meta.get("odoo_port") or 8069)
+    vsc_port = int(meta.get("vsc_port") or 8888)
     changed = False
 
     console.print("[bold]🔍 Checking port availability...[/bold]")
