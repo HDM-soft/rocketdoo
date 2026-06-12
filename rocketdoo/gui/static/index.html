@@ -709,6 +709,7 @@ const Modules = {
     // ── Gitman repos ──────────────────────────────────────────────────────
     const gitSources  = ref([])
     const gitOriginal = ref([])
+    const gitExists   = ref(false)
     const gitBusy     = ref(false)
     const gitSaving   = ref(false)
     const rebuildBusy = ref(false)
@@ -721,10 +722,24 @@ const Modules = {
       gitBusy.value = true
       try {
         const r = await api.get('/gitman')
+        gitExists.value   = r.exists || false
         gitSources.value  = r.sources || []
         gitOriginal.value = JSON.parse(JSON.stringify(r.sources || []))
       } catch {}
       finally { gitBusy.value = false }
+    }
+
+    async function initGitman() {
+      gitSaving.value = true
+      try {
+        const r = await api.post('/gitman', { sources: [] })
+        if (r.ok) {
+          gitExists.value   = true
+          gitOriginal.value = []
+          notify('gitman.yaml created')
+        } else notify(r.error || 'Could not create gitman.yaml', 'err')
+      } catch(e) { notify(e.message, 'err') }
+      finally { gitSaving.value = false }
     }
 
     function addGitRepo() {
@@ -774,9 +789,9 @@ const Modules = {
     onActivated(load)
     return {
       mods, busy, all, q, filtered, load,
-      gitSources, gitBusy, gitSaving, rebuildBusy, gitForm, gitDirty,
+      gitSources, gitExists, gitBusy, gitSaving, rebuildBusy, gitForm, gitDirty,
       addGitRepo, editGitRepo, deleteGitRepo, autoName, confirmGitForm,
-      saveGitman, rebuildDocker, I
+      saveGitman, rebuildDocker, initGitman, I
     }
   },
   template: `
@@ -841,15 +856,15 @@ const Modules = {
           <div style="font-size:12px;color:#6B82A8;margin-top:3px;">Managed via <code style="color:#6D9CFF;">gitman.yaml</code> → <code style="color:#6D9CFF;">external_addons/</code></div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
-          <button v-if="gitDirty" @click="saveGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
+          <button v-if="gitDirty && gitExists" @click="saveGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
             <span v-html="gitSaving?I.spin:I.check" :class="gitSaving?'spin':''"></span>
             {{ gitSaving ? 'Saving…' : 'Save Changes' }}
           </button>
-          <button @click="rebuildDocker" class="btn btn-ghost btn-sm" :disabled="rebuildBusy" title="Rebuild Docker image after gitman changes">
+          <button v-if="gitExists" @click="rebuildDocker" class="btn btn-ghost btn-sm" :disabled="rebuildBusy" title="Rebuild Docker image after gitman changes">
             <span v-html="rebuildBusy?I.spin:I.build" :class="rebuildBusy?'spin':''"></span>
             {{ rebuildBusy ? 'Building…' : 'Rebuild' }}
           </button>
-          <button @click="addGitRepo" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">
+          <button v-if="gitExists" @click="addGitRepo" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">
             <span v-html="I.plus"></span> Add Repo
           </button>
         </div>
@@ -894,7 +909,21 @@ const Modules = {
       </div>
 
       <template v-else>
-        <div v-if="!gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
+        <!-- gitman.yaml does not exist yet -->
+        <div v-if="!gitExists && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:32px 20px;">
+          <div v-html="I.link" style="width:32px;height:32px;color:#1A3D80;margin:0 auto 12px;"></div>
+          <div style="font-size:15px;font-weight:700;color:#DDE4F0;margin-bottom:6px;">gitman.yaml not found</div>
+          <div style="font-size:12px;color:#5577A2;margin-bottom:18px;">
+            This project has no <code style="color:#6D9CFF;">gitman.yaml</code>.<br>
+            Create it to manage external Odoo repositories (community modules, OCA, etc.)
+          </div>
+          <button @click="initGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
+            <span v-html="gitSaving ? I.spin : I.plus" :class="gitSaving ? 'spin' : ''"></span>
+            {{ gitSaving ? 'Creating…' : 'Initialize gitman.yaml' }}
+          </button>
+        </div>
+        <!-- gitman.yaml exists but has no repos yet -->
+        <div v-else-if="gitExists && !gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
           <div v-html="I.link" style="width:30px;height:30px;color:#1A2A50;margin:0 auto 10px;"></div>
           <div style="font-size:14px;font-weight:600;color:#6B82A8;margin-bottom:5px;">No external repos configured</div>
           <div style="font-size:12px;color:#5577A2;">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
