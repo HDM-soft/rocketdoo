@@ -61,10 +61,11 @@ def _find_backup_files(project_dir: Path) -> tuple[Path | None, Path | None]:
     return (dumps[0] if dumps else None), (filestores[0] if filestores else None)
 
 
-def _check_ports(meta: dict) -> tuple[int, int, bool]:
+def _check_ports(meta: dict, auto_accept: bool = False) -> tuple[int, int, bool]:
     """
     Verifies whether the environment's ports are available.
     Returns (final_odoo_port, final_vsc_port, had_changes).
+    When auto_accept=True, silently picks the suggested port without prompting.
     """
     odoo_port = int(meta.get("odoo_port") or 8069)
     vsc_port = int(meta.get("vsc_port") or 8888)
@@ -75,11 +76,15 @@ def _check_ports(meta: dict) -> tuple[int, int, bool]:
     if is_port_in_use(odoo_port):
         suggested = find_available_port(odoo_port + 1)
         console.print(f"  [yellow]⚠[/yellow]  Odoo port [cyan]{odoo_port}[/cyan] is already in use.")
-        console.print(f"  [dim]Suggested port: [green]{suggested}[/green][/dim]")
-        use_suggested = questionary.confirm(
-            f"Use port {suggested} for Odoo instead of {odoo_port}?", default=True
-        ).ask()
-        odoo_port = suggested if use_suggested else click.prompt("Enter Odoo port to use", type=int, default=suggested)
+        if auto_accept:
+            console.print(f"  [dim]Auto-selecting port [green]{suggested}[/green][/dim]")
+            odoo_port = suggested
+        else:
+            console.print(f"  [dim]Suggested port: [green]{suggested}[/green][/dim]")
+            use_suggested = questionary.confirm(
+                f"Use port {suggested} for Odoo instead of {odoo_port}?", default=True
+            ).ask()
+            odoo_port = suggested if use_suggested else click.prompt("Enter Odoo port to use", type=int, default=suggested)
         changed = True
     else:
         console.print(f"  [green]✓[/green] Odoo port [cyan]{odoo_port}[/cyan] is available.")
@@ -87,11 +92,15 @@ def _check_ports(meta: dict) -> tuple[int, int, bool]:
     if is_port_in_use(vsc_port):
         suggested_vsc = find_available_port(vsc_port + 1)
         console.print(f"  [yellow]⚠[/yellow]  VSCode port [cyan]{vsc_port}[/cyan] is already in use.")
-        console.print(f"  [dim]Suggested port: [green]{suggested_vsc}[/green][/dim]")
-        use_suggested_vsc = questionary.confirm(
-            f"Use port {suggested_vsc} for VSCode instead of {vsc_port}?", default=True
-        ).ask()
-        vsc_port = suggested_vsc if use_suggested_vsc else click.prompt("Enter VSCode port to use", type=int, default=suggested_vsc)
+        if auto_accept:
+            console.print(f"  [dim]Auto-selecting port [green]{suggested_vsc}[/green][/dim]")
+            vsc_port = suggested_vsc
+        else:
+            console.print(f"  [dim]Suggested port: [green]{suggested_vsc}[/green][/dim]")
+            use_suggested_vsc = questionary.confirm(
+                f"Use port {suggested_vsc} for VSCode instead of {vsc_port}?", default=True
+            ).ask()
+            vsc_port = suggested_vsc if use_suggested_vsc else click.prompt("Enter VSCode port to use", type=int, default=suggested_vsc)
         changed = True
     else:
         console.print(f"  [green]✓[/green] VSCode port [cyan]{vsc_port}[/cyan] is available.")
@@ -117,13 +126,27 @@ def _update_ports_in_compose(project_dir: Path, new_odoo_port: int, new_vsc_port
     console.print(f"  [green]✓[/green] docker-compose.yaml updated with new ports.")
 
 
-def _configure_ssh(project_dir: Path, meta: dict) -> bool:
+def _configure_ssh(project_dir: Path, meta: dict, key_name: str | None = None) -> bool:
     """
     Guides the recipient through configuring their own SSH key for the environment.
+    If key_name is provided, uses it directly without interactive prompts.
     Returns True if configured successfully, False if skipped or failed.
     """
     console.print()
     console.print("[bold]🔐 SSH configuration for private repositories:[/bold]")
+
+    if key_name:
+        console.print(f"  [dim]Using key: [cyan]{key_name}[/cyan][/dim]")
+        try:
+            dockerfile_path = project_dir / "Dockerfile"
+            copy_key_to_build_context(key_name, project_dir)
+            if dockerfile_path.exists():
+                inject_ssh_into_dockerfile(dockerfile_path, key_name)
+                console.print(f"  [green]✓[/green] Dockerfile configured with key [cyan]{key_name}[/cyan]")
+            return True
+        except Exception as e:
+            console.print(f"  [red]✗ Error configuring SSH:[/red] {e}")
+            return False
 
     original_key = meta.get("ssh_key_name")
     if original_key:
@@ -425,7 +448,13 @@ def _init_odoo_volume(web_container: str) -> bool:
               help="Skip automatic database restoration.")
 @click.option("--build", is_flag=True, default=False,
               help="Rebuild the Docker image before starting (recommended on first run).")
-def unpack_environment(no_restore, build):
+@click.option("--ssh-key", "ssh_key", default=None,
+              help="SSH key name from ~/.ssh/ to use (skips interactive selection).")
+@click.option("--no-ssh", "no_ssh", is_flag=True, default=False,
+              help="Skip SSH configuration entirely (for environments without private repos).")
+@click.option("--yes", "-y", is_flag=True, default=False,
+              help="Auto-accept port conflict suggestions without prompting.")
+def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
     """
     📥 Start a development environment shared by another developer.
 
@@ -487,7 +516,7 @@ def unpack_environment(no_restore, build):
 
     # ── 2. Check and adjust ports ──
     console.print()
-    new_odoo_port, new_vsc_port, ports_changed = _check_ports(meta)
+    new_odoo_port, new_vsc_port, ports_changed = _check_ports(meta, auto_accept=yes)
 
     if ports_changed:
         console.print()
@@ -497,7 +526,12 @@ def unpack_environment(no_restore, build):
     # ── 3. Configure SSH if the environment used private repos ──
     uses_private_repos = meta.get("uses_private_repos", False)
 
-    if uses_private_repos:
+    if no_ssh:
+        console.print("[dim]  SSH configuration skipped (--no-ssh).[/dim]")
+    elif ssh_key:
+        console.print()
+        _configure_ssh(project_dir, meta, key_name=ssh_key)
+    elif uses_private_repos:
         console.print()
         console.print(Panel(
             "This environment was set up with [bold]private repositories[/bold].\n"
@@ -508,12 +542,10 @@ def unpack_environment(no_restore, build):
         wants_ssh = questionary.confirm(
             "Do you use private repositories and want to configure your SSH key?", default=True
         ).ask()
-
         if wants_ssh:
             ssh_ok = _configure_ssh(project_dir, meta)
             if not ssh_ok:
                 console.print("[yellow]⚠[/yellow]  SSH not configured. Private repos may not work.")
-
     elif not meta:
         wants_ssh = questionary.confirm(
             "Does this environment use private repositories? (requires SSH key)", default=False
