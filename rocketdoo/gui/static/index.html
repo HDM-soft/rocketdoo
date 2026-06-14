@@ -1528,12 +1528,16 @@ const Deploy = {
 ══════════════════════════════════════════════════════════════════════════ */
 const Pack = {
   setup() {
-    const status     = ref({ project_exists: false, shared_json_found: false })
-    const packForm   = ref({ include_db: true, output_path: '', db_name: '' })
-    const packBusy   = ref(false)
-    const unpackBusy = ref(false)
-    const output     = ref('')
-    const busy       = ref(true)
+    const status       = ref({ project_exists: false, shared_json_found: false })
+    const packForm     = ref({ include_db: true, output_path: '', db_name: '' })
+    const packBusy     = ref(false)
+    const unpackBusy   = ref(false)
+    const output       = ref('')
+    const busy         = ref(true)
+    const showUnpackWizard = ref(false)
+    const unpackInfo   = ref({ meta: {}, ssh_keys: [], shared_json_found: false })
+    const unpackForm   = ref({ use_ssh: false, ssh_key: '' })
+    const loadingInfo  = ref(false)
 
     async function load() {
       busy.value = true
@@ -1552,16 +1556,33 @@ const Pack = {
         if (r.ok) await load()
       } finally { packBusy.value = false }
     }
-    async function unpack() {
+    async function openUnpackWizard() {
+      loadingInfo.value = true; showUnpackWizard.value = true; output.value = ''
+      try {
+        const r = await api.get('/pack/unpack-info')
+        unpackInfo.value = r
+        unpackForm.value.use_ssh = !!(r.meta && r.meta.uses_private_repos)
+        unpackForm.value.ssh_key = (r.ssh_keys && r.ssh_keys.length) ? r.ssh_keys[0] : ''
+      } catch { notify('Could not load unpack info','err') }
+      finally { loadingInfo.value = false }
+    }
+    async function runUnpack() {
       unpackBusy.value = true; output.value = ''
       try {
-        const r = await api.post('/pack/unpack')
+        const body = {
+          use_ssh: unpackForm.value.use_ssh,
+          ssh_key: (unpackForm.value.use_ssh && unpackForm.value.ssh_key) ? unpackForm.value.ssh_key : null,
+        }
+        const r = await api.post('/pack/unpack', body)
         output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
         r.ok ? notify('Unpack completed') : notify(r.stderr||'Unpack failed','err')
+        if (r.ok) { showUnpackWizard.value = false; await load() }
       } finally { unpackBusy.value = false }
     }
     onActivated(load)
-    return { status, packForm, packBusy, unpackBusy, output, busy, pack, unpack, I }
+    return { status, packForm, packBusy, unpackBusy, output, busy,
+             showUnpackWizard, unpackInfo, unpackForm, loadingInfo,
+             pack, openUnpackWizard, runUnpack, I }
   },
   template: `
   <div class="page fade-in">
@@ -1585,6 +1606,8 @@ const Pack = {
           </div>
         </div>
       </div>
+
+      <!-- Pack card -->
       <div class="card">
         <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
           <span v-html="I.pack" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Pack Environment
@@ -1608,6 +1631,8 @@ const Pack = {
           {{ packBusy ? 'Packing…' : 'Pack (rkd pack)' }}
         </button>
       </div>
+
+      <!-- Unpack card -->
       <div class="card">
         <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
           <span v-html="I.pack" style="width:16px;height:16px;color:#7553C8;flex-shrink:0;"></span> Unpack Environment
@@ -1616,11 +1641,63 @@ const Pack = {
           Restore a previously packed environment in the current directory.
           Requires <code style="background:#090D22;padding:1px 5px;border-radius:4px;color:#6D9CFF;font-size:11px;">rkd-shared.json</code> to be present.
         </div>
-        <button @click="unpack" class="btn btn-ghost" :disabled="unpackBusy||!status.shared_json_found">
-          <span v-html="unpackBusy?I.spin:I.play" :class="unpackBusy?'spin':''"></span>
-          {{ unpackBusy ? 'Unpacking…' : 'Unpack (rkd unpack)' }}
+
+        <!-- Wizard panel (shown after clicking Configure) -->
+        <div v-if="showUnpackWizard" style="border:1px solid #1A2A50;border-radius:8px;padding:16px;margin-bottom:14px;background:#090D22;">
+          <div v-if="loadingInfo" style="color:#6B82A8;font-size:13px;">Loading environment info…</div>
+          <template v-else>
+            <!-- Environment metadata -->
+            <div v-if="unpackInfo.meta && unpackInfo.meta.project_name" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #151E45;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5577A2;margin-bottom:7px;">Environment detected</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div style="font-size:12px;color:#6B82A8;">Project: <span style="color:#DDE4F0;">{{ unpackInfo.meta.project_name }}</span></div>
+                <div style="font-size:12px;color:#6B82A8;">Odoo: <span style="color:#DDE4F0;">{{ unpackInfo.meta.odoo_version }}</span></div>
+                <div style="font-size:12px;color:#6B82A8;">Edition: <span style="color:#DDE4F0;">{{ unpackInfo.meta.odoo_edition||'Community' }}</span></div>
+                <div style="font-size:12px;color:#6B82A8;">DB backup: <span :style="{color: unpackInfo.meta.has_db_backup?'#4ADE80':'#9CA3AF'}">{{ unpackInfo.meta.has_db_backup?'Included':'Not included' }}</span></div>
+              </div>
+            </div>
+
+            <!-- SSH Configuration -->
+            <div style="margin-bottom:14px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5577A2;margin-bottom:10px;">🔐 Repository configuration</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#DDE4F0;cursor:pointer;margin-bottom:10px;">
+                <input type="checkbox" v-model="unpackForm.use_ssh" style="accent-color:#1A3DCC;">
+                Uses private repositories (SSH key required)
+                <span v-if="unpackInfo.meta && unpackInfo.meta.uses_private_repos" class="badge badge-yellow" style="font-size:9px;">recommended by sender</span>
+              </label>
+              <div v-if="unpackForm.use_ssh">
+                <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">SSH key from ~/.ssh/</label>
+                <select v-model="unpackForm.ssh_key" class="input">
+                  <option value="">— select a key —</option>
+                  <option v-for="k in unpackInfo.ssh_keys" :key="k" :value="k">{{ k }}</option>
+                </select>
+                <div v-if="!unpackInfo.ssh_keys.length" style="font-size:11px;color:#F87171;margin-top:5px;">
+                  No SSH keys found in ~/.ssh/ — generate one with <code style="color:#6D9CFF;">ssh-keygen -t ed25519</code>
+                </div>
+                <div v-if="unpackInfo.meta && unpackInfo.meta.ssh_key_name" style="font-size:11px;color:#6B82A8;margin-top:5px;">
+                  Sender used key: <span style="color:#FCD34D;">{{ unpackInfo.meta.ssh_key_name }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div style="display:flex;gap:8px;">
+              <button @click="runUnpack" class="btn btn-primary"
+                :disabled="unpackBusy || (unpackForm.use_ssh && !unpackForm.ssh_key)">
+                <span v-html="unpackBusy?I.spin:I.play" :class="unpackBusy?'spin':''"></span>
+                {{ unpackBusy ? 'Unpacking…' : 'Start Unpack' }}
+              </button>
+              <button @click="showUnpackWizard=false" class="btn btn-ghost" :disabled="unpackBusy">Cancel</button>
+            </div>
+          </template>
+        </div>
+
+        <button v-if="!showUnpackWizard" @click="openUnpackWizard" class="btn btn-ghost" :disabled="!status.shared_json_found">
+          <span v-html="I.play" style="width:13px;height:13px;"></span>
+          Configure &amp; Unpack
         </button>
       </div>
+
       <div v-if="output" class="card-flat">
         <div class="log-term" style="height:auto;min-height:80px;max-height:280px;overflow-y:auto;white-space:pre-wrap;">{{ output }}</div>
       </div>
