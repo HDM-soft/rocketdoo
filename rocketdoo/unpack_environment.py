@@ -351,7 +351,8 @@ def _restore_filestore(odoo_container: str, filestore_tar: Path, db_name: str) -
             capture_output=True, text=True
         )
 
-        if extract_result.returncode != 0:
+        # tar exits 1 on non-fatal warnings (extended headers, etc.) — treat as success
+        if extract_result.returncode > 1:
             console.print(f"  [yellow]⚠[/yellow]  Error extracting filestore: {extract_result.stderr}")
             return False
 
@@ -393,6 +394,28 @@ def _launch_db_only():
     return result.returncode == 0
 
 
+def _init_odoo_volume(web_container: str) -> bool:
+    """
+    Starts the web container briefly so Docker creates the named volume,
+    then stops it immediately so Odoo never runs while we restore the filestore.
+    """
+    console.print("[dim]  Starting web container to initialize volume...[/dim]")
+    subprocess.run(["docker", "compose", "up", "-d", "web"], capture_output=True)
+    time.sleep(3)
+    ready = False
+    for _ in range(30):
+        result = subprocess.run(
+            ["docker", "exec", web_container, "test", "-d", "/var/lib/odoo"],
+            capture_output=True
+        )
+        if result.returncode == 0:
+            ready = True
+            break
+        time.sleep(1)
+    subprocess.run(["docker", "compose", "stop", "web"], capture_output=True)
+    return ready
+
+
 # ─────────────────────────────────────────────────────────────
 # Main command
 # ─────────────────────────────────────────────────────────────
@@ -423,7 +446,8 @@ def unpack_environment(no_restore, build):
         "  [green]✓[/green] Detect and validate the shared environment\n"
         "  [green]✓[/green] Check port availability\n"
         "  [green]✓[/green] Configure your SSH key if using private repos\n"
-        "  [green]✓[/green] Start the environment and restore the database",
+        "  [green]✓[/green] Start the environment and restore the database\n"
+        "  [green]✓[/green] Restore the filestore (Odoo stopped to avoid conflicts)",
         border_style="cyan",
         box=box.ROUNDED
     ))
@@ -524,13 +548,18 @@ def unpack_environment(no_restore, build):
                 if restored_db and filestore_tar:
                     console.print()
                     console.print("[bold]🗂️  Restoring filestore:[/bold]")
-                    console.print("[dim]  Starting web service to restore filestore...[/dim]")
-                    subprocess.run(["docker", "compose", "up", "-d", "web"], capture_output=True)
 
                     odoo_container = _get_odoo_container_name(project_dir)
-                    if odoo_container:
-                        volume_ready = _wait_for_odoo_volume(odoo_container)
+                    if not odoo_container:
+                        console.print(
+                            "[yellow]⚠[/yellow]  Cannot determine Odoo container name "
+                            "— filestore restore skipped.\n"
+                            "[dim]  Check that docker-compose.yaml has container_name set on the web service.[/dim]"
+                        )
+                    else:
+                        volume_ready = _init_odoo_volume(odoo_container)
                         if volume_ready:
+                            console.print(f"  [green]✓[/green] Volume ready. Restoring filestore (Odoo is stopped)...")
                             _restore_filestore(odoo_container, filestore_tar, restored_db)
                         else:
                             console.print(
