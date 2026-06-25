@@ -1,0 +1,40 @@
+FROM odoo:{{odoo_version}}
+
+COPY ./config/odoo.conf /etc/odoo/
+{% if use_third_party_repos %}
+COPY ./gitman.yaml /usr/lib/python3/dist-packages/odoo/
+{% else %}
+#COPY ./gitman.yaml /usr/lib/python3/dist-packages/odoo/
+{% endif %}
+COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
+
+USER root
+
+# Deshabilitar la restricción de externally-managed-environment
+RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED
+
+# O alternativamente, configurar pip
+RUN pip config set global.break-system-packages true
+
+RUN apt update && \
+    apt install -y libssl-dev swig python3-dev gcc && \
+    apt install -y python3-m2crypto && \
+    apt install -y git pipx && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    python3 -m pip install debugpy gitman --break-system-packages
+
+#RUN mkdir -p /root/.ssh
+#COPY ./.ssh/rsa /root/.ssh/id_rsa
+#RUN chmod 700 /root/.ssh/id_rsa
+#RUN echo "StrictHostKeyChecking no" >> /root/.ssh/config
+
+RUN git config --global http.postBuffer 104857600
+#RUN git config --global http.retry 5
+{% if use_third_party_repos %}
+RUN gitman install -r /usr/lib/python3/dist-packages/odoo/
+{% else %}
+#RUN gitman install -r /usr/lib/python3/dist-packages/odoo/
+{% endif %}
+
+CMD python3 -m debugpy --listen 0.0.0.0:{{vsc_port}} /usr/bin/odoo -c /etc/odoo/odoo.conf

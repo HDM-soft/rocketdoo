@@ -1,0 +1,109 @@
+name: {{ project_name }}-{{ environment }}
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile.{{ environment }}
+    image: {{ project_name }}-{{ environment }}
+    container_name: {{ project_name }}-{{ environment }}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8069"
+      - "8072"
+    environment:
+      HOST: db
+      PORT: 5432
+      USER: {{ db_user }}
+      PASSWORD_FILE: /run/secrets/postgresql_password
+    volumes:
+      - {{ project_name }}-{{ environment }}-data:/var/lib/odoo
+      - ../extra-addons:/mnt/extra-addons
+{% if use_enterprise %}
+      - /opt/odoo/enterprise:/mnt/enterprise
+{% endif %}
+      - ./config/odoo.conf:/etc/odoo/odoo.conf
+    secrets:
+      - postgresql_password
+    networks:
+      - traefik-public
+      - {{ environment }}-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.{{ slug }}-http.rule=Host(`{{ domain }}`)"
+      - "traefik.http.routers.{{ slug }}-http.entrypoints=web"
+      - "traefik.http.routers.{{ slug }}-http.middlewares=redirect-https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.{{ slug }}.rule=Host(`{{ domain }}`)"
+      - "traefik.http.routers.{{ slug }}.entrypoints=websecure"
+      - "traefik.http.routers.{{ slug }}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.{{ slug }}.service={{ slug }}-svc"
+      - "traefik.http.services.{{ slug }}-svc.loadbalancer.server.port=8069"
+      - "traefik.http.routers.{{ slug }}-lp.rule=Host(`{{ domain }}`) && (PathPrefix(`/longpolling`) || PathPrefix(`/websocket`))"
+      - "traefik.http.routers.{{ slug }}-lp.entrypoints=websecure"
+      - "traefik.http.routers.{{ slug }}-lp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.{{ slug }}-lp.service={{ slug }}-lp-svc"
+      - "traefik.http.services.{{ slug }}-lp-svc.loadbalancer.server.port=8072"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8069/web/health"]
+      interval: 30s
+      timeout: 10s
+      retries: {{ 10 if environment == 'prod' else 5 }}
+      start_period: 60s
+    stop_grace_period: 1m
+
+  db:
+    image: postgres:{{ db_version }}
+    container_name: {{ project_name }}-{{ environment }}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: {{ db_user }}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgresql_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: >
+      postgres
+      -c shared_buffers={{ pg.shared_buffers }}
+      -c effective_cache_size={{ pg.effective_cache }}
+      -c work_mem={{ pg.work_mem }}
+      -c maintenance_work_mem={{ pg.maintenance_work_mem }}
+      -c max_connections={{ pg.max_connections }}
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c wal_buffers={{ pg.wal_buffers }}
+      -c checkpoint_completion_target=0.9
+      -c max_wal_size={{ pg.max_wal_size }}
+{% if environment == 'prod' %}
+      -c min_wal_size=1GB
+      -c default_statistics_target=100
+      -c cpu_tuple_cost=0.03
+{% endif %}
+    volumes:
+      - {{ project_name }}-{{ environment }}-db:/var/lib/postgresql/data/pgdata
+    secrets:
+      - postgresql_password
+    networks:
+      - {{ environment }}-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ db_user }}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  {{ project_name }}-{{ environment }}-data:
+  {{ project_name }}-{{ environment }}-db:
+
+secrets:
+  postgresql_password:
+    file: ./odoo_pg_pass
+
+networks:
+  traefik-public:
+    external: true
+  {{ environment }}-internal:
+    driver: bridge

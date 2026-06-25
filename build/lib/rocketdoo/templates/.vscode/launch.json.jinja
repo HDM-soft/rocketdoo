@@ -1,0 +1,50 @@
+{
+  // Use IntelliSense para saber los atributos posibles.
+  // Mantenga el puntero para ver las descripciones de los existentes atributos.
+  // Para más información, visite: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+
+    {
+      "name": "Odoo: Debug-Breakpoints",
+      "type": "python",
+      "request": "launch",
+      "program": "/usr/bin/odoo",
+      "gevent": false,
+      "args": [
+        "-c",
+        "/etc/odoo/odoo.conf",
+        //"-u",
+        //"your-module",
+        //"--dev=all",
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        // "PYTHONUNBUFFERED": "1",
+        // "GEVENT_SUPPORT": "True"
+      }
+    },
+
+    {
+      "name": "Debug POS JavaScript en Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:{{odoo_port}}",
+      "webRoot": "${workspaceFolder}",
+      "sourceMaps": true,
+      "trace": true,
+      "sourceMapPathOverrides": {
+        "*/point_of_sale/static/src/js/*": "${workspaceFolder}/**"
+      },
+      "skipFiles": ["<node_internals>/**"]
+    },
+
+  ],
+  "compounds": [
+    {
+      "name": "Odoo Full Debug (Python + JS)",
+      "configurations": ["Odoo: Debug-Breakpoints", "Debug POS JavaScript en Chrome"]
+    }
+  ]
+}
