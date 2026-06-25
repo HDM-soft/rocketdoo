@@ -1,0 +1,26 @@
+[options]
+addons_path = /mnt/extra-addons{% if use_enterprise %},/mnt/enterprise{% endif %}
+
+data_dir = /var/lib/odoo
+admin_passwd = {{ admin_passwd }}
+
+db_host = db
+db_port = 5432
+db_user = {{ db_user }}
+db_password = False
+db_maxconn = 64
+
+log_level = {{ log_level }}
+logfile = /var/log/odoo/odoo-server.log
+
+workers = {{ workers }}
+gevent_port = 8072
+
+limit_memory_hard = {{ limit_memory_hard }}
+limit_memory_soft = {{ limit_memory_soft }}
+limit_request = 8192
+limit_time_cpu = 60
+limit_time_real = 120
+
+proxy_mode = True
+list_db = False
