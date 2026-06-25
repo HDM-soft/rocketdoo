@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.7
+FROM odoo:{{ odoo_tag }}
+
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    gcc \
+    g++ \
+    build-essential \
+    python3-dev \
+    python3-venv \
+    libssl-dev \
+    swig \
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+{% if use_gitman %}
+# Isolated virtualenv for gitman (avoids system package conflicts on Odoo base image)
+RUN python3 -m venv /opt/odoo/gitman-venv && \
+    /opt/odoo/gitman-venv/bin/pip install --upgrade pip setuptools wheel && \
+    /opt/odoo/gitman-venv/bin/pip install "Cython<3" && \
+    /opt/odoo/gitman-venv/bin/pip install "PyYAML==5.4.1" --no-build-isolation && \
+    /opt/odoo/gitman-venv/bin/pip install \
+        simplejson parse requests schema colorama YORM==1.6.2 gitman==1.4.0 \
+        --no-deps
+
+ENV GITMAN_CACHE=0
+{% endif %}
+
+RUN mkdir -p /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %} /root/.ssh
+RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
+
+{% if use_gitman %}
+COPY {{ gitman_config_file }} /opt/odoo/gitman/gitman.yml
+WORKDIR /opt/odoo/gitman
+
+# Requires SSH agent forwarding: docker build --ssh default
+RUN --mount=type=ssh \
+    /opt/odoo/gitman-venv/bin/gitman install{% if environment == 'stage' %} --force{% endif %} && \
+    echo "gitman install OK"
+{% endif %}
+
+COPY extra-addons /mnt/extra-addons
+
+RUN chown -R odoo:odoo /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %} /etc/odoo
+
+USER odoo
+
+CMD ["odoo"]
