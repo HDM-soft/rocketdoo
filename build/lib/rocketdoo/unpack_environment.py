@@ -190,6 +190,20 @@ def _configure_ssh(project_dir: Path, meta: dict, key_name: str | None = None) -
         return False
 
 
+def _is_container_running(container_name: str) -> bool:
+    """Checks whether a Docker container is currently running."""
+    if not container_name:
+        return False
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
+            capture_output=True, text=True
+        )
+        return result.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
 def _get_db_container_name(project_dir: Path) -> str | None:
     """Reads docker-compose and returns the database container name."""
     compose_data = read_docker_compose()
@@ -297,13 +311,32 @@ def _restore_database(db_container: str, dump_path: Path) -> str | None:
             capture_output=True, text=True
         )
 
-        # pg_restore may return warnings (returncode 1) but still succeed
-        if restore_result.returncode not in (0, 1):
-            console.print(f"  [red]✗ Restore error:[/red] {restore_result.stderr[:500]}")
-            return None
+        if restore_result.returncode == 0:
+            console.print(f"  [green]✓[/green] Database [cyan]{db_name}[/cyan] restored successfully.")
+            return db_name
 
-        console.print(f"  [green]✓[/green] Database [cyan]{db_name}[/cyan] restored successfully.")
-        return db_name
+        # returncode 1 = restored, but pg_restore ignored some statements.
+        # These are often benign (missing roles/extensions), but can also hide
+        # real data loss — so we surface them instead of silently succeeding.
+        if restore_result.returncode == 1:
+            stderr = (restore_result.stderr or "").strip()
+            console.print(
+                f"  [yellow]⚠[/yellow]  Database [cyan]{db_name}[/cyan] restored "
+                f"[yellow]with warnings[/yellow] (pg_restore ignored some statements)."
+            )
+            if stderr:
+                console.print("  [dim]pg_restore reported:[/dim]")
+                for line in stderr.splitlines()[-15:]:
+                    console.print(f"    [dim]{line}[/dim]")
+                console.print(
+                    "  [dim]Review the messages above — if core tables (res_users, "
+                    "ir_model_data, …) failed, the restore is incomplete.[/dim]"
+                )
+            return db_name
+
+        # returncode > 1 = fatal failure
+        console.print(f"  [red]✗ Restore error:[/red] {restore_result.stderr[:500]}")
+        return None
 
     except Exception as e:
         console.print(f"  [red]✗ Exception during restore:[/red] {e}")
@@ -409,6 +442,33 @@ def _restore_filestore(odoo_container: str, filestore_tar: Path, db_name: str, f
     except Exception as e:
         console.print(f"  [yellow]⚠[/yellow]  Exception while restoring filestore: {e}")
         return False
+
+
+def _clear_generated_assets(db_container: str, db_name: str) -> None:
+    """
+    Removes generated web asset bundles (ir_attachment rows whose URL starts
+    with /web/assets/) from the restored database.
+
+    After a restore, the asset bundles registered in the database point to
+    filestore files that no longer match the recipient's code (different addons,
+    enterprise version, etc.) or were replaced by the filestore restore. Odoo
+    regenerates these bundles on demand, so deleting the stale records forces a
+    clean rebuild and prevents the 500 errors on /web/assets/... that render the
+    login page non-functional ("can't log in").
+    """
+    console.print("  [dim]Clearing stale web asset bundles...[/dim]")
+    result = subprocess.run(
+        ["docker", "exec", db_container,
+         "psql", "-U", "root", "-d", db_name, "-c",
+         "DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%';"],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        console.print("  [green]✓[/green] Stale asset bundles cleared (Odoo will regenerate them).")
+    else:
+        console.print(
+            f"  [yellow]⚠[/yellow]  Could not clear asset bundles: {result.stderr.strip()[:200]}"
+        )
 
 
 def _launch_environment(build: bool = False):
@@ -616,21 +676,63 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
                                 "[dim]  Try running the restore manually after the environment is up.[/dim]"
                             )
 
-        _launch_environment(build=build)
-    else:
-        _launch_environment(build=build)
+                # Clear stale generated asset bundles so Odoo rebuilds them
+                # against the recipient's code + restored filestore. Without this,
+                # ir_attachment rows for /web/assets/... point to filestore files
+                # that don't exist here, returning 500 and breaking the login page.
+                if restored_db:
+                    console.print()
+                    console.print("[bold]🎨 Refreshing web assets:[/bold]")
+                    _clear_generated_assets(db_container, restored_db)
 
-    # ── 6. Final summary ──
+        launched = _launch_environment(build=build)
+    else:
+        launched = _launch_environment(build=build)
+
+    # ── 6. Verify the environment actually started ──
+    # docker compose up -d returning 0 does not guarantee Odoo booted: the web
+    # container can crash right after start (missing addons, build issues, etc.).
+    # Give it a moment, then check the web container is really running before
+    # declaring success — otherwise show diagnostics instead of a false "ready".
+    time.sleep(3)
+    odoo_container = _get_odoo_container_name(project_dir)
+    web_running = _is_container_running(odoo_container)
+
     console.print()
-    console.print(Panel(
-        f"[bold green]✅ Environment is ready[/bold green]\n\n"
-        f"[bold]🌐 Odoo:[/bold] [cyan underline]http://localhost:{new_odoo_port}[/cyan underline]\n"
-        f"[bold]🐛 Debug:[/bold] port [cyan]{new_vsc_port}[/cyan]\n\n"
-        f"[dim]Useful commands:\n"
-        f"  [cyan]rkd status[/cyan]   → check container status\n"
-        f"  [cyan]rkd logs[/cyan]     → view logs\n"
-        f"  [cyan]rkd info[/cyan]     → project information[/dim]",
-        border_style="green",
-        box=box.ROUNDED
-    ))
+    if launched and web_running:
+        console.print(Panel(
+            f"[bold green]✅ Environment is ready[/bold green]\n\n"
+            f"[bold]🌐 Odoo:[/bold] [cyan underline]http://localhost:{new_odoo_port}[/cyan underline]\n"
+            f"[bold]🐛 Debug:[/bold] port [cyan]{new_vsc_port}[/cyan]\n\n"
+            f"[dim]Useful commands:\n"
+            f"  [cyan]rkd status[/cyan]   → check container status\n"
+            f"  [cyan]rkd logs[/cyan]     → view logs\n"
+            f"  [cyan]rkd info[/cyan]     → project information[/dim]",
+            border_style="green",
+            box=box.ROUNDED
+        ))
+    else:
+        reason = "docker compose up -d failed" if not launched else \
+            f"the web container ({odoo_container or 'web'}) is not running"
+        console.print(Panel(
+            f"[bold red]⚠️  The environment did not start cleanly[/bold red]\n\n"
+            f"[dim]Reason: {reason}.[/dim]\n\n"
+            f"[bold]Diagnose with:[/bold]\n"
+            f"  [cyan]rkd status[/cyan]                      → container status\n"
+            f"  [cyan]docker logs {odoo_container or '<web>'}[/cyan]   → Odoo startup errors\n"
+            f"  [cyan]rkd unpack --build[/cyan]              → rebuild the image and retry",
+            border_style="red",
+            box=box.ROUNDED
+        ))
+        # Surface recent web container output to speed up debugging.
+        if odoo_container:
+            logs = subprocess.run(
+                ["docker", "logs", "--tail", "30", odoo_container],
+                capture_output=True, text=True
+            )
+            output = ((logs.stdout or "") + (logs.stderr or "")).strip()
+            if output:
+                console.print()
+                console.print("[dim]── Last lines of web container output ──[/dim]")
+                console.print(f"[dim]{output[-2000:]}[/dim]")
     console.print()
