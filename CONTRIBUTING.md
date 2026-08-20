@@ -13,6 +13,7 @@ Thank you for your interest in contributing to **Rocketdoo**! This guide covers 
 - [Step-by-step workflow](#step-by-step-workflow)
 - [Code conventions](#code-conventions)
 - [How to open a Pull Request](#how-to-open-a-pull-request)
+- [Versioning and releases](#versioning-and-releases)
 - [Reporting bugs or suggesting improvements](#reporting-bugs-or-suggesting-improvements)
 
 ---
@@ -22,14 +23,19 @@ Thank you for your interest in contributing to **Rocketdoo**! This guide covers 
 Rocketdoo follows this branching model:
 
 ```
-main              ← stable version, published on PyPI
-  └── dev/v2      ← active development for the next version
-        └── feature/feature-name   ← your contribution
-        └── fix/bug-name
-        └── chore/maintenance-task
+main              ← stable version · merging a PR here publishes to PyPI (CI)
+  └── test/v3     ← QA gate: the package is installed from this branch and smoke-tested
+        └── dev/v3      ← active development for the next version
+              └── fix/123-bug-slug       ← your contribution (123 = issue number)
+              └── feat/124-feature-slug
+              └── mig/125-migration-slug
+              └── chore/126-task-slug
 ```
 
-> **Golden rule:** never work directly on `main` or `dev/v2`. Always create a new branch from `dev/v2`.
+> **Golden rule:** never work directly on `main`, `test/v3` or `dev/v3`. Always open an issue first, then create a branch from `dev/v3` named `<type>/<issue-number>-<slug>`.
+
+Promotion path of every change: `<type>/N-slug` → `dev/v3` → `test/v3` → `main` → PyPI.
+`dev/v2` is the previous, stabilized line and only receives back-ports.
 
 ---
 
@@ -37,7 +43,7 @@ main              ← stable version, published on PyPI
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher (matches `requires-python` in `pyproject.toml`)
 - Git
 - Up-to-date `pip` (`pip install --upgrade pip`)
 
@@ -55,14 +61,14 @@ cd rocketdoo
 ### 3. Add the original repository as a remote
 
 ```bash
-git remote add upstream https://github.com/OWNER/rocketdoo.git
+git remote add upstream https://github.com/HDM-soft/rocketdoo.git
 ```
 
 This lets you sync with changes from the original repo whenever needed:
 
 ```bash
 git fetch upstream
-git merge upstream/dev/v2
+git merge upstream/dev/v3
 ```
 
 ---
@@ -91,7 +97,7 @@ source venv-dev/bin/activate
 Once `venv-dev` is active, install the specific branch directly from GitHub:
 
 ```bash
-pip install git+https://github.com/OWNER/rocketdoo.git@feature/my-feature
+pip install git+https://github.com/HDM-soft/rocketdoo.git@feature/my-feature
 ```
 
 ### Test the commands in an empty directory
@@ -120,7 +126,7 @@ The recommended approach is to install the branch directly from GitHub into a **
 
 ```bash
 # Install the test branch with a suffix to tell them apart
-pipx install git+https://github.com/OWNER/rocketdoo.git@feature/my-feature --suffix=-test
+pipx install git+https://github.com/HDM-soft/rocketdoo.git@feature/my-feature --suffix=-test
 ```
 
 This gives you two commands available in parallel:
@@ -158,13 +164,13 @@ source venv-test/bin/activate   # Linux / macOS
 # .\venv-test\Scripts\activate  # Windows
 
 # Install the specific branch
-pip install git+https://github.com/OWNER/rocketdoo.git@feature/my-feature
+pip install git+https://github.com/HDM-soft/rocketdoo.git@feature/my-feature
 ```
 
 To update after pushing changes:
 
 ```bash
-pip install --force-reinstall git+https://github.com/OWNER/rocketdoo.git@feature/my-feature
+pip install --force-reinstall git+https://github.com/HDM-soft/rocketdoo.git@feature/my-feature
 ```
 
 ---
@@ -174,7 +180,7 @@ pip install --force-reinstall git+https://github.com/OWNER/rocketdoo.git@feature
 If the repository is private, you'll need a GitHub personal access token:
 
 ```bash
-pip install git+https://YOUR_TOKEN@github.com/OWNER/rocketdoo.git@feature/my-feature
+pip install git+https://YOUR_TOKEN@github.com/HDM-soft/rocketdoo.git@feature/my-feature
 ```
 
 ---
@@ -190,22 +196,27 @@ pip install git+https://YOUR_TOKEN@github.com/OWNER/rocketdoo.git@feature/my-fea
 
 ## Step-by-step workflow
 
-### 1. Sync with the latest version of `dev/v2`
+### 1. Open an issue and sync with the latest `dev/v3`
+
+Every contribution starts from an issue: it gives the branch its number and lets maintainers
+track the change. Then sync:
 
 ```bash
-git checkout dev/v2
-git pull upstream dev/v2
+git checkout dev/v3
+git pull upstream dev/v3
 ```
 
 ### 2. Create your working branch
 
 ```bash
-git checkout -b feature/descriptive-name
+git checkout -b <type>/<issue-number>-<slug>
 # Examples:
-# git checkout -b feature/multi-model-support
-# git checkout -b fix/parser-encoding-error
-# git checkout -b chore/update-dependencies
+# git checkout -b feat/124-multi-model-support
+# git checkout -b fix/123-parser-encoding-error
+# git checkout -b chore/126-update-dependencies
 ```
+
+Types: `fix`, `feat`, `mig`, `chore`, `docs`, `refactor` (and `hotfix`, branched off `main`).
 
 ### 3. Develop and test
 
@@ -249,7 +260,9 @@ git push origin feature/descriptive-name
 
 ### 6. Open the Pull Request
 
-Open the PR from your fork targeting `dev/v2` on the original repository (not `main`).
+Open the PR from your fork targeting `dev/v3` on the original repository (never `main`).
+Reference the issue with `Refs #123` — do **not** use `Closes #123` here, since GitHub only
+auto-closes issues when a PR is merged into the default branch (`main`).
 
 ---
 
@@ -272,7 +285,41 @@ When opening a PR, please include:
 3. **How to test** the changes: commands, test cases, etc.
 4. If applicable, **screenshots** or output examples.
 
-The PR must target `dev/v2`, not `main`. Maintainers will review the code, may request changes, and will merge it once approved.
+The PR must target `dev/v3`, not `main`. Maintainers will review the code, may request changes, and will merge it once approved. Promotion to `test/v3` and the release PR to `main` are done by maintainers.
+
+---
+
+## Versioning and releases
+
+**Contributors must not touch the version.** `pyproject.toml` is bumped once per release by a
+maintainer, on `dev/v3`, in a dedicated `UPG: version X.Y.Z` commit — this avoids conflicts
+between concurrent branches.
+
+The version lives in **one** place: the `version` field of `pyproject.toml`.
+`rocketdoo/__init__.py` reads it at runtime through `importlib.metadata`, so it never needs editing.
+
+Semantic versioning:
+
+| Change | Bump | Example |
+|--------|------|---------|
+| Bug fix, internal adjustment, docs | patch | 3.1.4 → 3.1.5 |
+| New command or option, backwards-compatible feature | minor | 3.1.5 → 3.2.0 |
+| Breaking change (CLI, config format, generated layout) | major | 3.2.0 → 4.0.0 |
+
+Release flow (maintainers):
+
+1. Bump `pyproject.toml` on `dev/v3` and validate the build locally
+   (`python -m build` + `twine check dist/*` + install the wheel with `pipx`).
+2. PR `dev/v3` → `test/v3`; after merging, install from that branch and run the smoke checklist:
+   `pipx install "git+https://github.com/HDM-soft/rocketdoo.git@test/v3" --suffix=-test`.
+3. PR `test/v3` → `main` with `Closes #...` for every issue in the release.
+   Merging it triggers `.github/workflows/publish-rkd.yml`, which builds and publishes to PyPI
+   via Trusted Publishing.
+4. After publication: tag the merge commit (`git tag -a vX.Y.Z origin/main`), create the GitHub
+   Release, and back-merge `main` into `test/v3` and `dev/v3`.
+
+> Never run `twine upload` against production PyPI by hand: PyPI versions are immutable, and a
+> manual upload leaves the CI publishing the same version afterwards. Use TestPyPI to rehearse.
 
 ---
 
@@ -291,7 +338,7 @@ Before opening an issue, check if a similar one already exists. If not, open a n
 
 ## Questions?
 
-Open a [GitHub Discussion](https://github.com/OWNER/rocketdoo/discussions) or reach out to the project maintainers. Every contribution, no matter how small, is welcome!
+Open a [GitHub Discussion](https://github.com/HDM-soft/rocketdoo/discussions) or reach out to the project maintainers. Every contribution, no matter how small, is welcome!
 
 ---
 
