@@ -22,7 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        # Alineado con requires-python = ">=3.10" de pyproject.toml
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     
     steps:
       - uses: actions/checkout@v4
@@ -116,3 +117,7 @@ jobs:
       
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Evita CI rojo si la versión de pyproject.toml ya existe en PyPI
+          # (p. ej. re-merge a main sin bump, o publicación manual previa)
+          skip-existing: true
