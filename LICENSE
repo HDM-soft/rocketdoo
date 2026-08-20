@@ -1,6 +1,6 @@
 GNU LESSER GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
-                       Copyright (C) 2024 Horacio Montaño
+                       Copyright (C) 2024-2026 Horacio Montaño
 
 
 Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
@@ -54,10 +54,10 @@ Each version is given a distinguishing version number. If the Library specifies 
 
 If the Library as you received it specifies that a proxy can decide whether future versions of the GNU Lesser General Public License shall apply, that proxy's public statement of acceptance of any version is permanent authorization for you to choose that version for the Library.
 
-<div RKD as ROCKETDOO V2=""></div>
+<div RKD as ROCKETDOO V3=""></div>
 
 Licencia: LGPL-3.0+
-Versión: "3.1.4"
+Versión: "3.1.5"
 Autor: Horacio Montaño
-Fecha: 16/10/2024
+Fecha: 19/08/2026
 Descripción: Framework to development Odoo

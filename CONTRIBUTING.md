@@ -241,16 +241,22 @@ git commit -m "docs: update README with new usage example"
 git commit -m "chore: bump httpx to 0.27"
 ```
 
-**Commit types:**
-| Type | When to use it |
-|------|---------------|
-| `feat` | New feature |
-| `fix` | Bug fix |
-| `docs` | Documentation changes |
-| `chore` | Maintenance tasks (deps, CI, etc.) |
-| `refactor` | Refactoring without behavior change |
-| `test` | Adding or fixing tests |
-| `style` | Formatting changes (no logic) |
+**Commit types.** The `dev/v3` history uses uppercase prefixes; lowercase
+[Conventional Commits](https://www.conventionalcommits.org/) are also accepted:
+
+| Prefix | When to use it |
+|--------|---------------|
+| `FIX:` | Bug fix |
+| `FEAT:` | New feature or command |
+| `UPD:` | General update (CI, config, docs bundled with code) |
+| `UPG:` | **Version bump only** (`UPG: version 3.1.5`) |
+| `REF:` | Refactoring without behavior change |
+| `DOC:` | Documentation changes |
+| `TEST:` | Adding or fixing tests |
+| `DEL:` | Removing code or artifacts |
+
+Reference the issue in the commit body: `Refs #123` (or `Closes #123` on the commit that
+finishes the work).
 
 ### 5. Push your branch to your fork
 
@@ -295,8 +301,24 @@ The PR must target `dev/v3`, not `main`. Maintainers will review the code, may r
 maintainer, on `dev/v3`, in a dedicated `UPG: version X.Y.Z` commit — this avoids conflicts
 between concurrent branches.
 
-The version lives in **one** place: the `version` field of `pyproject.toml`.
-`rocketdoo/__init__.py` reads it at runtime through `importlib.metadata`, so it never needs editing.
+The version string lives in **three** files and they must move together in the same commit:
+
+| File | Field |
+|------|-------|
+| `pyproject.toml` | `version = "X.Y.Z"` — the packaging source of truth (what PyPI publishes) |
+| `README.md` | the `## Version:` block |
+| `LICENSE` | the `Versión:` line of the header (bump `Fecha:` too) |
+
+`rocketdoo/__init__.py` never needs editing: it reads the installed version at runtime through
+`importlib.metadata`, and the `__version__ = "dev"` there is only the fallback for a source
+checkout. Do **not** hardcode a version into it.
+
+```bash
+NEW=3.1.5
+sed -i "s/^version = \".*\"/version = \"$NEW\"/" pyproject.toml
+grep -n "3\.1\." README.md LICENSE          # check the two doc references before editing
+grep -m1 '^version' pyproject.toml
+```
 
 Semantic versioning:
 
