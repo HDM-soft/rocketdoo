@@ -5,3 +5,4 @@ dist/**
 venv/*
 CLAUDE.md
 .claude/
+build/
