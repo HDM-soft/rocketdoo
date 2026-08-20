@@ -1,6 +1,6 @@
 [project]
 name = "rocketdoo"
-version = "3.1.4"
+version = "3.1.5"
 description = "Framework for creating Odoo development environments with Docker and custom templates."
 authors = [
     { name = "Horacio Montaño", email = "horaciomontano@hdmsoft.com.ar" }
