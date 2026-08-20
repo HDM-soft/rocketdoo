@@ -5,7 +5,12 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 import questionary
 from rocketdoo.welcome import show_welcome
-from rocketdoo.core.port_validation import validate_port, find_available_port
+from rocketdoo.core.port_validation import (
+    validate_port,
+    find_available_port,
+    get_port_reservation,
+    collect_declared_ports,
+)
 from rocketdoo.core.edition_setup import setup_enterprise_edition
 from rocketdoo.core.ssh_manager import (
     list_private_keys,
@@ -60,19 +65,31 @@ def prompt_port(label, default_port):
 
 
 def validate_ports(odoo_port, vsc_port):
-    """Validate both ports and return True if both are free"""
+    """Validate both ports and return True if both can be used.
+
+    A port declared in another project's docker-compose is only a warning: that
+    project is not running, so the port is free right now.
+    """
     errors = []
-    try:
-        validate_port(odoo_port, "Odoo Port")
-    except RuntimeError as e:
-        errors.append(str(e))
-    try:
-        validate_port(vsc_port, "VSC Debug Port")
-    except RuntimeError as e:
-        errors.append(str(e))
+    warnings = []
+
+    for value, label in ((odoo_port, "Odoo Port"), (vsc_port, "VSC Debug Port")):
+        try:
+            validate_port(value, label)
+        except RuntimeError as e:
+            errors.append(str(e))
+            continue
+        reservation = get_port_reservation(value)
+        if reservation:
+            warnings.append(reservation)
+
+    if warnings:
+        click.echo("\n⚠️  Heads up:")
+        for warning in warnings:
+            click.echo(f"  • {warning}")
 
     if errors:
-        click.echo("\n⚠️  The following issues were found:")
+        click.echo("\n❌ The following ports are not available:")
         for error in errors:
             click.echo(f"  • {error}")
         return False
@@ -93,8 +110,10 @@ def prompt_ports_until_valid(default_odoo=8069, default_vsc=8888):
 
         # If there are errors, offer suggestions
         click.echo("\n💡 Suggested available ports:")
-        suggested_odoo = find_available_port(odoo_port + 1)
-        suggested_vsc = find_available_port(vsc_port + 1)
+        # Un solo barrido de los compose vecinos para ambas sugerencias
+        declared = collect_declared_ports()
+        suggested_odoo = find_available_port(odoo_port + 1, declared=declared)
+        suggested_vsc = find_available_port(vsc_port + 1, declared=declared)
         click.echo(f"  • Odoo: {suggested_odoo}")
         click.echo(f"  • VSC:  {suggested_vsc}")
 
