@@ -87,17 +87,32 @@ def extract_odoo_version_from_dockerfile() -> Optional[str]:
 
 
 def detect_ssh_key_usage() -> Optional[str]:
-    """Detects if an SSH key is being used in Dockerfile"""
+    """Detects if an SSH key is being used in Dockerfile.
+
+    Sólo cuentan las instrucciones activas: la plantilla deja el bloque SSH
+    comentado, y un '#COPY ./.ssh/rsa /root/.ssh/id_rsa' se reportaba como clave
+    en uso porque la comparación era por substring sobre la línea completa.
+    """
     dockerfile = read_dockerfile()
-    if dockerfile:
-        # Search for lines mentioning SSH keys
-        for line in dockerfile.split('\n'):
-            if 'COPY' in line and ('.ssh' in line or 'id_' in line):
-                # Extract file name
-                parts = line.split()
-                if len(parts) >= 3:
-                    ssh_file = parts[1]
-                    return os.path.basename(ssh_file)
+    if not dockerfile:
+        return None
+
+    for raw_line in dockerfile.split('\n'):
+        line = raw_line.strip()
+        if not line or line.startswith('#'):
+            continue
+
+        parts = line.split()
+        # COPY tiene que ser la instrucción, no aparecer en cualquier parte
+        if len(parts) < 3 or parts[0].upper() != 'COPY':
+            continue
+
+        source, dest = parts[1], parts[2]
+        if ('.ssh' in source or '.ssh' in dest
+                or 'id_' in os.path.basename(source)
+                or 'id_' in os.path.basename(dest)):
+            return os.path.basename(source)
+
     return None
 
 
@@ -109,13 +124,10 @@ def detect_enterprise_edition() -> bool:
         if web_service:
             volumes = web_service.get('volumes', [])
             for volume in volumes:
-                if isinstance(volume, str):
-                    # Check if enterprise volume exists and is NOT commented
-                    volume_stripped = volume.strip()
-                    if 'enterprise' in volume_stripped.lower():
-                        # If line doesn't start with #, it's uncommented (Enterprise)
-                        if not volume_stripped.startswith('#'):
-                            return True
+                # yaml.safe_load ya descartó los volúmenes comentados: todo lo
+                # que llega acá es una línea activa del compose
+                if isinstance(volume, str) and 'enterprise' in volume.lower():
+                    return True
     
     # Also check in Dockerfile for enterprise references
     dockerfile = read_dockerfile()
