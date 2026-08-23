@@ -17,6 +17,7 @@ from pathlib import Path
 from rich.console import Console
 
 from .config_manager import LOG_LEVEL_BY_ENV, MEMORY_BY_ENV, WORKERS_BY_ENV
+from .secrets_store import ADMIN_PASSWD, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
 
 console = Console()
@@ -110,9 +111,29 @@ class NativeInstanceDeployer:
     def _install_odoo(self) -> bool:
         return self._ssh('sudo apt-get install -y odoo')
 
+    def _resolve_admin_passwd(self) -> str:
+        """
+        Return the Odoo master password, generating one only on first deploy.
+
+        Reused from the local secret store so it stays stable across deploys
+        and remains recoverable (it used to default to the literal 'admin').
+        """
+        configured = self.cfg.get('admin_passwd')
+        if configured:
+            return configured
+
+        stored = load(self.project_path, self.env).get(ADMIN_PASSWD)
+        if stored:
+            return stored
+
+        generated = random_password()
+        path = save(self.project_path, self.env, {ADMIN_PASSWD: generated})
+        console.print(f'[green]✔[/green] Generated admin_passwd, stored in {path}')
+        return generated
+
     def _configure_odoo(self) -> bool:
         db_user = self.cfg.get('db_user', f'odoo_{self.env}')
-        admin_passwd = self.cfg.get('admin_passwd', 'admin')
+        admin_passwd = self._resolve_admin_passwd()
         workers = WORKERS_BY_ENV.get(self.env, 2)
         log_level = LOG_LEVEL_BY_ENV.get(self.env, 'info')
         mem = MEMORY_BY_ENV[self.env]
