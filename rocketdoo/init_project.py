@@ -12,6 +12,7 @@ from rocketdoo.core.port_validation import (
     collect_declared_ports,
 )
 from rocketdoo.core.edition_setup import setup_enterprise_edition
+from rocketdoo.core.gitignore_manager import ensure_gitignore
 from rocketdoo.core.ssh_manager import (
     list_private_keys,
     copy_key_to_build_context,
@@ -288,6 +289,14 @@ def init_project():
     }
 
     # === Generate files ===
+    # First, so the files rendered below (odoo.conf carries admin_passwd) are
+    # never exposed to a `git add .` in between
+    action, entries = ensure_gitignore(Path(os.getcwd()))
+    if action == "created":
+        click.echo("🔒 .gitignore created (keeps secrets out of git)")
+    elif action == "appended":
+        click.echo(f"🔒 .gitignore updated with {len(entries)} secret rule(s)")
+
     render_template(TEMPLATES_DIR, "Dockerfile.jinja", "Dockerfile", **context)
     render_template(TEMPLATES_DIR, "docker-compose.yaml.jinja", "docker-compose.yaml", **context)
 

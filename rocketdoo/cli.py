@@ -9,6 +9,7 @@ from rich import box
 from .scaffold import scaffold_project
 from .init_project import init_project
 from .project_info import get_project_info, project_exists
+from rocketdoo.core.gitignore_manager import missing_entries
 from rocketdoo import __version__
 import questionary
 from rocketdoo.docker_cli import docker, up, down, status, stop, pause, logs, build, restart
@@ -396,6 +397,21 @@ def info():
             padding=(1, 1)
         ))
     
+    # Warn if secrets in this project could be committed
+    missing = missing_entries(Path.cwd())
+    if missing:
+        warn = Text()
+        warn.append("⚠️  These files hold credentials and are not ignored by git:\n\n", style="bold yellow")
+        for pattern, why in missing:
+            warn.append(f"   {pattern}", style="bold")
+            warn.append(f" — {why}\n", style="dim")
+        warn.append("\n💡 Fix it with: ", style="dim")
+        warn.append("rkd scaffold", style="bold cyan")
+        warn.append(" (keeps your existing rules)", style="dim")
+        console.print()
+        console.print(Panel(warn, title="[bold yellow]Secrets at risk[/bold yellow]",
+                            border_style="yellow", box=box.ROUNDED, padding=(1, 1)))
+
     # Footer with framework information
     console.print()
     footer_text = Text()

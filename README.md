@@ -473,6 +473,31 @@ Additional interface features:
 
 ---
 
+### Keeping secrets out of git
+
+A Rocketdoo project keeps credentials on disk: the SSH private key copied into
+the build context, the PostgreSQL secret, and the Odoo master password written
+into config files. `rkd scaffold` and `rkd init` therefore always write a
+`.gitignore` covering them:
+
+| Path | Why it must not be committed |
+|------|------------------------------|
+| `.ssh/` | SSH private key copied into the Docker build context |
+| `.rkd/secrets/` | VPS passwords for `rkd deploy` and `rkd instance` |
+| `odoo_pg_pass` | PostgreSQL password (Docker secret) |
+| `.rkd/instance.yaml` | Deployment config, holds `admin_passwd` in clear text |
+| `config/odoo.conf` | Odoo config, holds `admin_passwd` in clear text |
+
+An existing `.gitignore` is never overwritten — your own rules are kept and only
+the missing entries are appended. `rkd info` warns when a project is missing
+coverage; run `rkd scaffold` in it to fix it.
+
+> `config/odoo.conf` is ignored because `rkd init` regenerates it and it carries
+> the master password. If your team needs to version it, commit a sanitized copy
+> as `config/odoo.conf.example`.
+
+---
+
 ### Instance secrets and re-deploys
 
 `rkd instance deploy` needs its passwords to stay the same across deploys.
