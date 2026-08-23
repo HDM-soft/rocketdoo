@@ -36,6 +36,7 @@ include = ["rocketdoo*"]
 # 🚀 Include templates in the package
 [tool.setuptools.package-data]
 rocketdoo = [
+    "templates/.gitignore.jinja",
     "templates/**/*",
     "templates/**/**/*",
     "templates/**/.vscode/*",
