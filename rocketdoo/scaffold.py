@@ -3,6 +3,11 @@ import shutil
 import click
 from pathlib import Path
 
+from rocketdoo.core.gitignore_manager import ensure_gitignore
+
+# Rendered into .gitignore instead of being copied verbatim
+GITIGNORE_TEMPLATE = ".gitignore.jinja"
+
 def scaffold_project(template="basic", force=False, verbose=False):
     """
     Create the project structure by copying the templates included in Rocketdoo
@@ -28,7 +33,11 @@ def scaffold_project(template="basic", force=False, verbose=False):
         for item in templates_dir.iterdir():
             src = templates_dir / item.name
             dest = target_dir / item.name
-            
+
+            if item.name == GITIGNORE_TEMPLATE:
+                # Handled after the loop so credentials are covered from the start
+                continue
+
             if src.is_dir():
                 # Copy entire directory (including hidden files)
                 if dest.exists():
@@ -53,7 +62,15 @@ def scaffold_project(template="basic", force=False, verbose=False):
                 if verbose:
                     click.echo(f"✅ Copied file: {dest}")
 
+        action, entries = ensure_gitignore(target_dir)
+        if action == "created":
+            click.echo("🔒 .gitignore created (keeps secrets out of git)")
+        elif action == "appended":
+            click.echo(f"🔒 .gitignore updated with {len(entries)} secret rule(s)")
+        elif verbose:
+            click.echo("🔒 .gitignore already covers Rocketdoo secrets")
+
         click.echo("🎉 Project scaffold created successfully.")
-        
+
     except Exception as e:
         click.echo(f"❌ Error during scaffolding: {e}")
