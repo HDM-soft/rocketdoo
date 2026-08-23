@@ -473,6 +473,37 @@ Additional interface features:
 
 ---
 
+### Instance secrets and re-deploys
+
+`rkd instance deploy` needs its passwords to stay the same across deploys.
+PostgreSQL only applies the password while initialising its data directory and
+ignores it afterwards, so a fresh password on a later deploy would leave Odoo
+unable to authenticate against its own database.
+
+Both the PostgreSQL password and the Odoo master password are therefore
+generated **once** and stored in `.rkd/secrets/instance_<env>_db.env` (mode
+`600`, git-ignored). Later deploys reuse them, so re-deploying is safe and the
+passwords stay recoverable:
+
+```bash
+cat .rkd/secrets/instance_stage_db.env
+```
+
+If an environment was first deployed with Rocketdoo ≤ 3.1.6, the password
+already on the VPS is adopted automatically and stored locally on the next
+deploy — no manual step needed.
+
+> Recovering an environment already broken by the old behaviour: the database
+> keeps the password from its **first** deploy, which was not saved anywhere. Reset
+> the role on the VPS and let the next deploy take over:
+>
+> ```bash
+> # on the VPS, inside <remote_path>/<env>/
+> docker compose exec db psql -U <db_user> -c "ALTER ROLE <db_user> PASSWORD '$(cat odoo_pg_pass)';"
+> ```
+
+---
+
 ### Technical Support
 
 - If you have any questions or issues with our development environment, you can contact us and submit your inquiry or support ticket by clicking on the link below.
