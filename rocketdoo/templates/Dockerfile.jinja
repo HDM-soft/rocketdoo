@@ -10,19 +10,24 @@ COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
 
 USER root
 
-# Deshabilitar la restricción de externally-managed-environment
+# Permite instalar con pip en la imagen base.
+# No usar --break-system-packages: llegó en pip 23 y las imágenes base viejas
+# no lo soportan (odoo:15.0/16.0 = Debian bullseye, pip 20.3; odoo:17.0 =
+# Ubuntu jammy, pip 22.0). Borrar EXTERNALLY-MANAGED sirve en todas: donde el
+# archivo no existe, el rm -f no falla.
 RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED
 
-# O alternativamente, configurar pip
-RUN pip config set global.break-system-packages true
-
+# pipx no está en los repos de Debian bullseye (odoo:15.0/16.0). Es una
+# conveniencia para trabajar dentro del contenedor, no un requisito del build,
+# así que su ausencia no debe abortar la imagen.
 RUN apt update && \
     apt install -y libssl-dev swig python3-dev gcc && \
     apt install -y python3-m2crypto && \
-    apt install -y git pipx && \
+    apt install -y git && \
+    { apt install -y pipx || echo "pipx no disponible en esta imagen base, se omite"; } && \
     apt clean && \
     rm -rf /var/lib/apt/lists/* && \
-    python3 -m pip install debugpy gitman --break-system-packages
+    python3 -m pip install debugpy gitman
 
 #RUN mkdir -p /root/.ssh
 #COPY ./.ssh/rsa /root/.ssh/id_rsa

@@ -10,10 +10,9 @@ if [ -f "$file_to_check" ]; then
         # Detectar la versión de pip para decidir si usar --break-system-packages
         pip_version=$(pip --version | awk '{print $2}')
         pip_major=$(echo "$pip_version" | cut -d. -f1)
-        pip_minor=$(echo "$pip_version" | cut -d. -f2)
-        
-        # Usar --break-system-packages solo si pip >= 22.1
-        if [ "$pip_major" -gt 22 ] || ([ "$pip_major" -eq 22 ] && [ "$pip_minor" -ge 1 ]); then
+
+        # El flag existe desde pip 23.0; odoo:15.0-17.0 traen pip 22 y fallan con él
+        if [ "$pip_major" -ge 23 ]; then
             output=$(pip install --break-system-packages -r "$file_to_check" 2>&1)
         else
             # Para versiones antiguas de pip, usar sin la opción
