@@ -8,9 +8,7 @@ Build flow (requires SSH agent for gitman private repos):
   VPS   → docker compose up -d
 """
 import os
-import secrets
 import shutil
-import string
 import subprocess
 import tempfile
 from pathlib import Path
@@ -24,15 +22,12 @@ from .config_manager import (
     PG_PROFILES,
     WORKERS_BY_ENV,
 )
+from .secrets_store import ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
 
 console = Console()
 
 _TEMPLATES_DIR = Path(__file__).parent.parent.parent / 'templates' / 'instance'
-
-
-def _random_password(n: int = 20) -> str:
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(n))
 
 
 class DockerInstanceDeployer:
@@ -76,7 +71,7 @@ class DockerInstanceDeployer:
             tmp_path = Path(tmp)
 
             console.print('[dim]Step 1/5 — Rendering configuration files...[/dim]')
-            self._render_templates(tmp_path)
+            self._render_templates(tmp_path, allow_remote_lookup=not dry_run)
             console.print('[green]✓[/green] Configuration files rendered')
 
             if dry_run:
@@ -106,9 +101,58 @@ class DockerInstanceDeployer:
 
         return True
 
+    # ─── secrets ─────────────────────────────────────────────────────────────
+
+    def _resolve_secrets(self, allow_remote_lookup: bool = True) -> dict[str, str]:
+        """
+        Resolve this environment's passwords, reusing any that already exist.
+
+        PostgreSQL sets the role password when it initialises the cluster and
+        ignores POSTGRES_PASSWORD_FILE afterwards, so a regenerated password on
+        a second deploy would lock Odoo out of the database.
+
+        Precedence: local secret store → password already on the VPS → new one.
+        """
+        stored = load(self.project_path, self.env)
+        pg_pass = stored.get(PG_PASS)
+        admin_passwd = self.cfg.get('admin_passwd') or stored.get(ADMIN_PASSWD)
+
+        if not pg_pass and allow_remote_lookup:
+            pg_pass = self._read_remote_pg_pass()
+            if pg_pass:
+                console.print('[dim]  Reusing odoo_pg_pass already deployed on the VPS[/dim]')
+
+        generated = []
+        if not pg_pass:
+            pg_pass = random_password(32)
+            generated.append('odoo_pg_pass')
+        if not admin_passwd:
+            admin_passwd = random_password()
+            generated.append('admin_passwd')
+
+        path = save(self.project_path, self.env, {PG_PASS: pg_pass, ADMIN_PASSWD: admin_passwd})
+        if generated:
+            console.print(f'[green]✔[/green] Generated {" and ".join(generated)}')
+        console.print(f'[dim]  Secrets stored in {path}[/dim]')
+
+        return {'pg_pass': pg_pass, 'admin_passwd': admin_passwd}
+
+    def _read_remote_pg_pass(self) -> str | None:
+        """Return odoo_pg_pass from a previous deploy, or None if unavailable."""
+        remote_file = f'{self.remote_path}/{self.env}/odoo_pg_pass'
+        cmd = build_ssh_cmd(
+            self.auth, self.port, self.user, self.host,
+            f'cat {remote_file} 2>/dev/null',
+        )
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        except (subprocess.SubprocessError, OSError):
+            return None
+        return result.stdout.strip() or None
+
     # ─── template rendering ───────────────────────────────────────────────────
 
-    def _render_templates(self, tmp: Path):
+    def _render_templates(self, tmp: Path, allow_remote_lookup: bool = True):
         """Render all Jinja2 templates into a temporary directory."""
         jinja_env = Environment(
             loader=FileSystemLoader(str(_TEMPLATES_DIR)),
@@ -116,11 +160,13 @@ class DockerInstanceDeployer:
             lstrip_blocks=True,
         )
 
+        creds = self._resolve_secrets(allow_remote_lookup=allow_remote_lookup)
+
         db_user = self.cfg.get('db_user', f'odoo_{self.env}')
         use_enterprise = self.cfg.get('use_enterprise', False)
         use_gitman = self.cfg.get('use_gitman', False)
         gitman_config = self.cfg.get('gitman_config', 'gitman.yml')
-        admin_passwd = self.cfg.get('admin_passwd', _random_password())
+        admin_passwd = creds['admin_passwd']
 
         ctx = {
             'environment': self.env,
@@ -159,9 +205,8 @@ class DockerInstanceDeployer:
         odoo_conf = jinja_env.get_template('odoo.conf.jinja').render(**ctx)
         (config_dir / 'odoo.conf').write_text(odoo_conf)
 
-        # {env}/odoo_pg_pass
-        pg_pass = _random_password(32)
-        (env_dir / 'odoo_pg_pass').write_text(pg_pass)
+        # {env}/odoo_pg_pass — reused across deploys, never regenerated
+        (env_dir / 'odoo_pg_pass').write_text(creds['pg_pass'])
 
         # gitman config (if enabled and local file exists)
         if use_gitman and gitman_config:
