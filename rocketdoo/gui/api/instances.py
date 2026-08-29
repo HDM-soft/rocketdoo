@@ -1,6 +1,6 @@
-import yaml
 from pathlib import Path
-from typing import Optional
+
+import yaml
 from fastapi import APIRouter
 from pydantic import BaseModel
 

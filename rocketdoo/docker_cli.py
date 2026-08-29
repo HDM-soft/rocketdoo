@@ -1,7 +1,9 @@
-import click
-import subprocess
 import shutil
+import subprocess
 import sys
+
+import click
+
 
 def ensure_docker_installed():
     """Verify that Docker is installed before running commands."""
@@ -31,7 +33,7 @@ def up(detached, extra_args):
     if extra_args:
         cmd.extend(extra_args)
     subprocess.run(cmd)
-    
+
 # ==============================
 # 🔄 RESTART
 # ==============================
@@ -115,7 +117,7 @@ def logs(container, follow):
         return
     subprocess.run(cmd)
 
-    
+
 # ==============================
 # 🔨 BUILD
 # ==============================
@@ -141,22 +143,22 @@ def build(tag, rebuild):
     rkd build --rebuild
     """
     ensure_docker_installed()
-    
+
     if rebuild:
         # Execute docker compose up -d --build
         command = ["docker", "compose", "up", "-d", "--build"]
-        click.echo(f"🔄 Rebuilding and restarting containers...")
+        click.echo("🔄 Rebuilding and restarting containers...")
         click.echo(f"🚀 Executing: {' '.join(command)}")
         subprocess.run(command, check=True)
     else:
         # Standard docker build
         command = ["docker", "build"]
-        
+
         if tag:
             command.extend(["-t", tag])
-        
+
         command.append(".")
-        
-        click.echo(f"🔨 Building Docker image...")
+
+        click.echo("🔨 Building Docker image...")
         click.echo(f"🚀 Executing: {' '.join(command)}")
         subprocess.run(command, check=True)

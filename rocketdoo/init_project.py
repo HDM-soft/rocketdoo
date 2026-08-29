@@ -1,29 +1,27 @@
-import click
 import os
-from rich.console import Console
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
+
+import click
 import questionary
-from rocketdoo.welcome import show_welcome
-from rocketdoo.core.port_validation import (
-    validate_port,
-    find_available_port,
-    get_port_reservation,
-    collect_declared_ports,
-)
+from jinja2 import Environment, FileSystemLoader
+from rich.console import Console
+
 from rocketdoo.core.edition_setup import setup_enterprise_edition
 from rocketdoo.core.gitignore_manager import ensure_gitignore
-from rocketdoo.core.ssh_manager import (
-    list_private_keys,
-    copy_key_to_build_context,
-    inject_ssh_into_dockerfile
-)
 from rocketdoo.core.gitman_config import (
+    detect_repo_type,
+    extract_repo_name_from_url,
     generate_gitman_yaml,
     update_odoo_conf_with_gitman,
-    extract_repo_name_from_url,
-    detect_repo_type
 )
+from rocketdoo.core.port_validation import (
+    collect_declared_ports,
+    find_available_port,
+    get_port_reservation,
+    validate_port,
+)
+from rocketdoo.core.ssh_manager import copy_key_to_build_context, inject_ssh_into_dockerfile, list_private_keys
+from rocketdoo.welcome import show_welcome
 
 console = Console()
 
@@ -43,7 +41,7 @@ def render_template(template_dir, template_name, output_name, **context):
     """Render a Jinja2 template in the current or output directory"""
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template(template_name)
-    
+
     output_path = os.path.join(os.getcwd(), output_name)
     output_dir = os.path.dirname(output_path)
     if output_dir:
@@ -130,27 +128,27 @@ def prompt_ports_until_valid(default_odoo=8069, default_vsc=8888):
 
 def init_project():
     """Initial configuration assistant for Rocketdoo"""
-    
+
     show_welcome()
-    
-    
+
+
     current_dir = os.path.basename(os.getcwd())
     project_name = click.prompt("Project Name", default=current_dir)
-    
+
     # Convert to lowercase and warn if it was changed
     original_name = project_name
     project_name = project_name.lower()
-    
+
     if original_name != project_name:
-        console.print(f"\n[yellow]⚠️  Project names must be in lowercase![/yellow]")
+        console.print("\n[yellow]⚠️  Project names must be in lowercase![/yellow]")
         console.print(f"[dim]Converting: '{original_name}' → '{project_name}'[/dim]")
-        
+
         if not click.confirm(f"\nUse '{project_name}' as project name?", default=True):
             project_name = click.prompt("Enter a new project name (lowercase)", type=str).lower()
 
-        console.print(f"[dim]💡 Docker project names must be in lowercase[/dim]\n")
-        
-        
+        console.print("[dim]💡 Docker project names must be in lowercase[/dim]\n")
+
+
     # Version selection with interactive menu
     odoo_versions = ["15.0", "16.0", "17.0", "18.0", "19.0"]
     click.echo("\n📦 Select Odoo version (use ↑↓ and ENTER):")
@@ -172,11 +170,11 @@ def init_project():
         "Use private repositories?",
         default=False
     ).ask()
-    
+
     selected_ssh_key = None
     if use_private_repos:
         available_keys = list_private_keys()
-        
+
         if not available_keys:
             click.echo("\n⚠️  No SSH keys found in ~/.ssh/")
             click.echo("💡 Generate an SSH key first with: ssh-keygen -t rsa -b 4096")
@@ -194,12 +192,12 @@ def init_project():
         "Use third-party repositories?",
         default=False
     ).ask()
-    
+
     gitman_sources = []
     if use_third_party_repos:
         click.echo("\n📝 Configuring third-party repositories with Gitman")
         click.echo("💡 You can add more repositories later by editing gitman.yaml.")
-        
+
         # Ask if you want to add repositories now
         add_repos_now = questionary.confirm(
             "Would you like to add repositories now?",
@@ -214,7 +212,7 @@ def init_project():
                     default="",
                     show_default=False
                 )
-                
+
                 # If the user presses Enter without text, exit the loop.
                 if not repo_url.strip():
                     if gitman_sources:
@@ -222,19 +220,19 @@ def init_project():
                     else:
                         click.echo("ℹ️  No repositories were added")
                     break
-                
+
                 # Automatically extract the name using the gitman_config function
                 try:
                     repo_name = extract_repo_name_from_url(repo_url)
                 except Exception:
                     repo_name = "custom-repo"
-                
+
                 # The rev is automatically the selected Odoo version.
                 repo_rev = odoo_version
-                
+
                 # Determine the type using the gitman_config function
                 repo_type = detect_repo_type(repo_url)
-                
+
                 # CORRECT ORDER for gitman.yaml: repo, name, rev, type
                 gitman_sources.append({
                     "repo": repo_url,
@@ -242,11 +240,11 @@ def init_project():
                     "rev": repo_rev,
                     "type": repo_type,
                 })
-                
+
                 click.echo(f"✅ Repository '{repo_name}' added")
                 click.echo(f"   URL: {repo_url}")
                 click.echo(f"   Branch: {repo_rev}")
-                
+
                 if not questionary.confirm("Would you like to add another repository?", default=False).ask():
                     break
 
@@ -260,13 +258,13 @@ def init_project():
     admin_passwd = click.prompt(
         "Odoo master password", default="admin", hide_input=False
     )
-    
+
     restart_policy = questionary.select(
         "\n♻️  How would you like to restart the environment?",
         choices=["no", "always", "unless-stopped"],
         default="unless-stopped"
     ).ask()
-    
+
     # Ports validations
     odoo_port, vsc_port = prompt_ports_until_valid()
 
@@ -308,7 +306,7 @@ def init_project():
     conf_template = "odoo.conf.jinja"
     conf_output = os.path.join("config", "odoo.conf")
     render_template(CONFIG_TEMPLATE_DIR, conf_template, conf_output, **context)
-    
+
     vscode_template = "launch.json.jinja"
     vscode_output = os.path.join(".vscode", "launch.json")
     render_template(VSCODE_TEMPLATE_DIR, vscode_template, vscode_output, **context)
@@ -329,11 +327,11 @@ def init_project():
         try:
             project_root = Path(os.getcwd())
             dockerfile_path = project_root / "Dockerfile"
-            
+
             # Copy the SSH key to the build context
             click.echo(f"📋 Copying SSH key: {selected_ssh_key}")
             copy_key_to_build_context(selected_ssh_key, project_root)
-            
+
             # Modify the Dockerfile to use the SSH key
             if dockerfile_path.exists():
                 click.echo("📝 Updating Dockerfile...")
@@ -342,7 +340,7 @@ def init_project():
                 click.echo("💡 Remember: Add your public key to GitHub/GitLab/Bitbucket")
             else:
                 click.echo("⚠️  The Dockerfile was not found.")
-                
+
         except Exception as e:
             click.echo(f"\n⚠️  Warning: SSH could not be fully configured: {e}")
             click.echo("You can configure it manually later.")
@@ -354,12 +352,12 @@ def init_project():
             project_root = Path(os.getcwd())
             gitman_path = project_root / "gitman.yaml"
             odoo_conf_path = project_root / "config" / "odoo.conf"
-            
+
             click.echo(f"📝 Generating {gitman_path.name}...")
             # Pass the necessary parameters to the function
             generate_gitman_yaml(sources=gitman_sources, output_path=gitman_path)
             click.echo(f"✅ Filed {gitman_path.name} created")
-            
+
             # Update odoo.conf if there are configured repositories
             if gitman_sources and odoo_conf_path.exists():
                 click.echo("📝 Updating odoo.conf with external_addons paths...")
@@ -373,7 +371,7 @@ def init_project():
             click.echo("   2. To install the repositories run: gitman install")
             if use_private_repos and selected_ssh_key:
                 click.echo("   3. Verify that your SSH key is added to GitHub/GitLab")
-            
+
         except Exception as e:
             click.echo(f"\n⚠️  Warning: Gitman could not be fully configured: {e}")
             click.echo("You can configure it manually later.")
@@ -385,14 +383,14 @@ def init_project():
     click.echo(f"\n📦 Odoo {odoo_version} ({odoo_edition}) + PostgreSQL {db_version}")
     click.echo(f"🌐 Odoo Port: {odoo_port}")
     click.echo(f"🐛 VSC Debug Port: {vsc_port}")
-    
+
     if use_private_repos and selected_ssh_key:
         click.echo(f"\n🔐 SSH configured with key: {selected_ssh_key}")
         click.echo("   ⚠️  Remember to add your public key to your Git provider.")
-    
+
     if odoo_edition == "Enterprise":
         click.echo("\n🏢 Enterprise Edition available")
-    
+
     if use_third_party_repos:
         if gitman_sources:
             click.echo(f"\n📚 Gitman configured with {len(gitman_sources)} repository(ies):")
@@ -401,7 +399,7 @@ def init_project():
         else:
             click.echo("\n📚 Gitman configured (without initial repositories)")
             click.echo("   💡 Edit gitman.yaml to add repositories")
-    
+
     click.echo("\n✨ Ready to Start")
     click.echo("   Run: rocketdoo up -d")
 

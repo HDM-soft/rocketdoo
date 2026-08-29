@@ -12,8 +12,8 @@ Steps:
   7. Restores the original Dockerfile after compression.
 """
 
-import re
 import json
+import re
 import subprocess
 import zipfile
 from datetime import datetime
@@ -21,9 +21,9 @@ from pathlib import Path
 
 import click
 import questionary
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich import box
 
 from rocketdoo.project_info import get_project_info, project_exists, read_docker_compose
 
@@ -114,7 +114,7 @@ def _backup_filestore(odoo_container: str, db_name: str, output_path: Path) -> t
       - /var/lib/odoo/.local/share/Odoo/filestore/<db_name>
       - /var/lib/odoo/filestore/<db_name>
     """
-    console.print(f"  [dim]Copying filestore from container...[/dim]")
+    console.print("  [dim]Copying filestore from container...[/dim]")
 
     POSSIBLE_PATHS = [
         f"/var/lib/odoo/.local/share/Odoo/filestore/{db_name}",

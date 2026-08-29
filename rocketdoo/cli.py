@@ -1,32 +1,28 @@
-import click
 import sys
 from pathlib import Path
+
+import click
+import questionary
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich import box
-from .scaffold import scaffold_project
+
+from rocketdoo import __version__
+from rocketdoo.core.gitignore_manager import missing_entries
+from rocketdoo.deploy_cli import deploy, deploy_config, deploy_init, deploy_run, list_modules, validate_modules
+from rocketdoo.docker_cli import build, docker, down, logs, pause, restart, status, stop, up
+from rocketdoo.gui_cli import gui_command
+from rocketdoo.instance_cli import instance
+from rocketdoo.mail_cli import mail
+from rocketdoo.pack_environment import pack_environment
+from rocketdoo.traefik_cli import traefik
+from rocketdoo.unpack_environment import unpack_environment
+
 from .init_project import init_project
 from .project_info import get_project_info, project_exists
-from rocketdoo.core.gitignore_manager import missing_entries
-from rocketdoo import __version__
-import questionary
-from rocketdoo.docker_cli import docker, up, down, status, stop, pause, logs, build, restart
-from rocketdoo.deploy_cli import (
-    deploy, 
-    deploy_init, 
-    list_modules, 
-    deploy_config, 
-    deploy_run, 
-    validate_modules
-)
-from rocketdoo.pack_environment import pack_environment
-from rocketdoo.unpack_environment import unpack_environment
-from rocketdoo.mail_cli import mail
-from rocketdoo.traefik_cli import traefik
-from rocketdoo.instance_cli import instance
-from rocketdoo.gui_cli import gui_command
+from .scaffold import scaffold_project
 
 # Detect the command name used to invoke the CLI
 PROG_NAME = "rkd" if "rkd" in sys.argv[0] else "rocketdoo"
@@ -46,39 +42,39 @@ def find_and_delete_identifiers(root_dir, dry_run=False, verbose=True):
         tuple: (deleted_files_count, errors)
     """
     root_path = Path(root_dir).resolve()
-    
+
     if not root_path.exists():
         console.print(f"[red]✗[/red] Directory '{root_dir}' does not exist")
         return 0, []
-    
+
     if not root_path.is_dir():
         console.print(f"[red]✗[/red] '{root_dir}' is not a directory")
         return 0, []
-    
+
     deleted_count = 0
     errors = []
-    
+
     # Recursively search for all .Identifier files
     for identifier_file in root_path.rglob('*.Identifier'):
         try:
             relative_path = identifier_file.relative_to(root_path)
-            
+
             if not dry_run:
                 identifier_file.unlink()
-            
+
             deleted_count += 1
-            
+
             if verbose:
                 icon = "🔍" if dry_run else "✓"
                 color = "yellow" if dry_run else "green"
                 action = "Found" if dry_run else "Deleted"
                 console.print(f"[{color}]{icon}[/{color}] {action}: {relative_path}")
-                
+
         except Exception as e:
             error_msg = f"Error processing {identifier_file}: {e}"
             errors.append(error_msg)
             console.print(f"[red]✗[/red] {error_msg}")
-    
+
     return deleted_count, errors
 
 
@@ -129,12 +125,12 @@ def delete_command(ctx, delete_identifier, dry_run, path, quiet):
     rocketdoo del -i -q
     """
     verbose = ctx.obj.get('verbose', False) or not quiet
-    
+
     if not delete_identifier:
         console.print("[yellow]⚠[/yellow]  You must specify what to delete. Use [cyan]-i[/cyan] for .Identifier files")
         console.print("\n[dim]Example:[/dim] [cyan bold]rocketdoo del -i[/cyan bold]")
         return
-    
+
     # Banner
     console.print()
     console.print(Panel(
@@ -143,22 +139,22 @@ def delete_command(ctx, delete_identifier, dry_run, path, quiet):
         border_style="cyan",
         box=box.ROUNDED
     ))
-    
+
     if dry_run:
         console.print("[yellow]⚠  DRY-RUN MODE - No files will be deleted[/yellow]\n")
     else:
         console.print()
-    
+
     # Execute cleanup
     deleted_count, errors = find_and_delete_identifiers(
-        path, 
-        dry_run=dry_run, 
+        path,
+        dry_run=dry_run,
         verbose=verbose
     )
-    
+
     # Summary
     console.print("\n" + "─" * 60)
-    
+
     if dry_run:
         if deleted_count > 0:
             console.print(f"[yellow]🔍 Found {deleted_count} .Identifier file(s)[/yellow]")
@@ -170,10 +166,10 @@ def delete_command(ctx, delete_identifier, dry_run, path, quiet):
             console.print(f"[green]✨ Total deleted: {deleted_count} file(s)[/green]")
         else:
             console.print("[green]✓[/green] No .Identifier files found to delete")
-    
+
     if errors:
         console.print(f"[red]⚠  Errors found: {len(errors)}[/red]")
-    
+
     console.print("─" * 60 + "\n")
 
 @click.group()
@@ -199,10 +195,10 @@ def scaffold(ctx, template, force):
     """Generate base project structure and configuration files."""
     verbose = ctx.obj.get('verbose', False)
     if verbose:
-        click.echo(f"🔍 Verbose mode enabled")
+        click.echo("🔍 Verbose mode enabled")
         click.echo(f"📋 Using template: {template}")
         click.echo(f"💪 Force overwrite: {force}")
-    
+
     scaffold_project(template=template, force=force, verbose=verbose)
 
 
@@ -213,9 +209,9 @@ def scaffold(ctx, template, force):
 @click.pass_context
 def init(ctx, docker_compose, odoo_version):
     """Initialize interactive environment configuration setup."""
-    verbose = ctx.obj.get('verbose', False)
-    config_file = ctx.obj.get('config')
-    
+    # NOTE: --docker-compose and --odoo-version are accepted but ignored;
+    # init_project() runs the full interactive wizard regardless. Wiring
+    # them up means giving `rkd init` a real non-interactive mode.
     init_project()
 
 
@@ -241,12 +237,12 @@ def help(command_name):
 @main.command()
 def info():
     """Display detailed information about the current project and framework."""
-    
+
     # Check if a project exists
     if not project_exists():
         console.print("\n[yellow]⚠️  No Rocketdoo project detected in this directory[/yellow]")
         console.print("[dim]💡 Run 'rocketdoo init' to create a new project[/dim]\n")
-        
+
         # Show only basic framework information
         console.print(Panel(
             f"[bold cyan]🚀 Rocketdoo {__version__}[/bold cyan]\n\n"
@@ -258,10 +254,10 @@ def info():
             box=box.ROUNDED
         ))
         return
-    
+
     # Get project information
     project_info = get_project_info()
-    
+
     # Create main configuration table
     table = Table(
         show_header=False,
@@ -271,39 +267,39 @@ def info():
     )
     table.add_column("Property", style="cyan bold", width=25)
     table.add_column("Value", style="green")
-    
+
     # Project name
     if project_info['project_name']:
         table.add_row("📦 Project Name", project_info['project_name'])
-    
+
     # Odoo version and edition - ALWAYS show if we have the info
     if project_info['odoo_version']:
         table.add_row("🐳 Odoo Version", project_info['odoo_version'])
-    
+
     # Always show edition (default is Community)
     table.add_row("📦 Odoo Edition", project_info['odoo_edition'])
-    
+
     # PostgreSQL version
     if project_info['db_version']:
         table.add_row("🗄️  PostgreSQL Version", project_info['db_version'])
-    
+
     # Containers
     if project_info['odoo_container']:
         table.add_row("📦 Web Container", project_info['odoo_container'])
-    
+
     if project_info['db_container']:
         table.add_row("📦 DB Container", project_info['db_container'])
-    
+
     # Ports
     if project_info['odoo_port']:
         table.add_row("🌐 Odoo Port", project_info['odoo_port'])
-    
+
     if project_info['vsc_port']:
         table.add_row("🐛 VSCode Port", project_info['vsc_port'])
-    
+
     if project_info['db_port']:
         table.add_row("🗄️  PostgreSQL Port", project_info['db_port'])
-    
+
     # Restart policy
     if project_info['restart_policy']:
         restart_emoji = {
@@ -313,20 +309,20 @@ def info():
             'on-failure': '⚠️'
         }.get(project_info['restart_policy'], '♻️')
         table.add_row(f"{restart_emoji} Restart Policy", project_info['restart_policy'])
-    
+
     # Master password (partially hidden)
     if project_info['admin_passwd']:
         passwd = project_info['admin_passwd']
         # Hide password except first 3 characters
         masked_passwd = passwd[:3] + '*' * (len(passwd) - 3) if len(passwd) > 3 else '****'
         table.add_row("🔑 Master Password", masked_passwd)
-    
+
     # SSH / Private repositories
     if project_info['use_private_repos'] and project_info['ssh_key']:
         table.add_row("🔐 Private Repositories", f"✅ (key: {project_info['ssh_key']})")
     else:
         table.add_row("🔐 Private Repositories", "❌")
-    
+
     # Show main panel
     console.print()
     console.print(Panel(
@@ -340,7 +336,7 @@ def info():
     # 🚀 ===== QUICK ACCESS PANEL ===== 🚀
     if project_info.get('odoo_port'):
         console.print()
-        
+
         # Build panel content
         access_content = Text()
         access_content.append("🌐 ", style="bold green")
@@ -352,10 +348,10 @@ def info():
         #     access_content.append("🔑 ", style="bold yellow")
         #     access_content.append("Master Password: ", style="bold yellow")
         #     access_content.append(f"{project_info['admin_passwd']}\n\n", style="yellow")
-        
+
         access_content.append("💡 ", style="dim")
         access_content.append("Click the link or copy it to your browser", style="dim")
-        
+
         console.print(Panel(
             access_content,
             title="[bold yellow]🚀 Quick Access[/bold yellow]",
@@ -363,7 +359,7 @@ def info():
             box=box.DOUBLE,
             padding=(1, 2)
         ))
-    
+
     # Third-party repositories (Gitman)
     if project_info['use_third_party_repos'] and project_info['third_party_repos']:
         repos_table = Table(
@@ -375,19 +371,19 @@ def info():
         repos_table.add_column("📚 Name", style="yellow bold", no_wrap=True)
         repos_table.add_column("🔗 Repository", style="blue", overflow="fold")
         repos_table.add_column("🏷️  Branch", style="green", justify="center")
-        
+
         for repo in project_info['third_party_repos']:
             # Shorten URL if too long
             repo_url = repo['repo']
             if len(repo_url) > 60:
                 repo_url = repo_url[:57] + "..."
-            
+
             repos_table.add_row(
                 repo['name'],
                 repo_url,
                 repo['rev']
             )
-        
+
         console.print()
         console.print(Panel(
             repos_table,
@@ -396,7 +392,7 @@ def info():
             box=box.ROUNDED,
             padding=(1, 1)
         ))
-    
+
     # Warn if secrets in this project could be committed
     missing = missing_entries(Path.cwd())
     if missing:
@@ -423,7 +419,7 @@ def info():
     footer_text.append(" | ", style="dim")
     footer_text.append("🌐 ", style="bold")
     footer_text.append("https://rkd-docs.readthedocs.io", style="dim blue underline")
-    
+
     console.print(Panel(
         footer_text,
         border_style="dim",
@@ -446,10 +442,10 @@ def gitman():
 def gitman_init(force):
     """Create gitman.yaml for third-party Odoo repositories."""
     from rocketdoo.core.gitman_config import (
+        detect_repo_type,
+        extract_repo_name_from_url,
         generate_gitman_yaml,
         update_odoo_conf_with_gitman,
-        extract_repo_name_from_url,
-        detect_repo_type,
     )
 
     if not project_exists():

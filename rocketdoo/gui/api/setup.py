@@ -3,9 +3,9 @@ GUI API — Project setup (scaffold + init without interactive wizard).
 Replicates the logic of init_project.py accepting a JSON body instead of
 questionary prompts, so the frontend can drive the full wizard.
 """
-import os
 from pathlib import Path
 from typing import Optional
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 

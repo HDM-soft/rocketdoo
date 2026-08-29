@@ -2,9 +2,10 @@
 Módulo para leer y extraer información de configuración del proyecto Rocketdoo
 """
 import os
-import yaml
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Dict, Optional
+
+import yaml
 
 
 def read_docker_compose() -> Optional[Dict]:
@@ -12,7 +13,7 @@ def read_docker_compose() -> Optional[Dict]:
     compose_path = Path.cwd() / "docker-compose.yaml"
     if not compose_path.exists():
         compose_path = Path.cwd() / "docker-compose.yml"
-    
+
     if compose_path.exists():
         try:
             with open(compose_path, 'r') as f:
@@ -128,7 +129,7 @@ def detect_enterprise_edition() -> bool:
                 # que llega acá es una línea activa del compose
                 if isinstance(volume, str) and 'enterprise' in volume.lower():
                     return True
-    
+
     # Also check in Dockerfile for enterprise references
     dockerfile = read_dockerfile()
     if dockerfile:
@@ -139,7 +140,7 @@ def detect_enterprise_edition() -> bool:
                 # Common patterns: COPY enterprise, RUN ... enterprise, etc.
                 if any(keyword in line_stripped.upper() for keyword in ['COPY', 'ADD', 'RUN']):
                     return True
-    
+
     return False
 
 
@@ -162,39 +163,39 @@ def get_project_info() -> Dict:
         "db_port": None,
         "admin_passwd": None
     }
-    
+
     # 1. READ ODOO VERSION FROM DOCKERFILE (priority)
     dockerfile_version = extract_odoo_version_from_dockerfile()
     if dockerfile_version:
         info['odoo_version'] = dockerfile_version
-    
+
     # 2. DETECT ENTERPRISE EDITION
     if detect_enterprise_edition():
         info['odoo_edition'] = 'Enterprise'
-    
+
     # 3. READ docker-compose.yaml
     compose_data = read_docker_compose()
     if compose_data:
         # Project name - from "name" key in docker-compose
         if 'name' in compose_data:
             info['project_name'] = compose_data['name']
-        
+
         # Services
         if 'services' in compose_data:
             services = compose_data['services']
-            
+
             # Find "web" (Odoo) and "db" (PostgreSQL) services
             web_service = services.get('web')
             db_service = services.get('db')
-            
+
             # === WEB SERVICE (ODOO) INFO ===
             if web_service:
                 # Container name
                 info['odoo_container'] = web_service.get('container_name', 'odoo-unknown')
-                
+
                 # Restart policy
                 info['restart_policy'] = web_service.get('restart', 'no')
-                
+
                 # Ports - format "8069:8069" or "8888:8888"
                 ports = web_service.get('ports', [])
                 port_list = []
@@ -204,13 +205,13 @@ def get_project_info() -> Dict:
                         # Extract first port (before colon)
                         host_port = port_str.split(':')[0].strip()
                         port_list.append(host_port)
-                
+
                 # First port is Odoo, second is VSCode debug
                 if len(port_list) >= 1:
                     info['odoo_port'] = port_list[0]
                 if len(port_list) >= 2:
                     info['vsc_port'] = port_list[1]
-                
+
                 # Odoo version - from "image" field (fallback if not in Dockerfile)
                 if not info['odoo_version']:
                     image = web_service.get('image', '')
@@ -221,19 +222,19 @@ def get_project_info() -> Dict:
                             # Only use if it looks like a version (contains numbers and dots)
                             if any(char.isdigit() for char in version_part):
                                 info['odoo_version'] = version_part
-            
+
             # === DB SERVICE (POSTGRESQL) INFO ===
             if db_service:
                 # Container name
                 info['db_container'] = db_service.get('container_name', 'db-unknown')
-                
+
                 # PostgreSQL version - from "image" field
                 image = db_service.get('image', '')
                 if 'postgres:' in image:
                     # Format: "postgres:14" -> extract "14"
                     version = image.split('postgres:')[1].split('-')[0].strip()
                     info['db_version'] = version
-                
+
                 # PostgreSQL port (if exposed)
                 ports = db_service.get('ports', [])
                 if ports:
@@ -243,18 +244,18 @@ def get_project_info() -> Dict:
                             host_port = port_str.split(':')[0].strip()
                             info['db_port'] = host_port
                             break
-    
+
     # 4. READ odoo.conf to get admin_passwd
     odoo_conf = read_odoo_conf()
     if odoo_conf:
         info['admin_passwd'] = odoo_conf.get('admin_passwd', None)
-    
+
     # 5. DETECT SSH USAGE
     ssh_key = detect_ssh_key_usage()
     if ssh_key:
         info['use_private_repos'] = True
         info['ssh_key'] = ssh_key
-    
+
     # 6. READ gitman.yaml
     gitman_data = read_gitman()
     if gitman_data and 'sources' in gitman_data:
@@ -269,7 +270,7 @@ def get_project_info() -> Dict:
                 }
                 for src in sources
             ]
-    
+
     return info
 
 

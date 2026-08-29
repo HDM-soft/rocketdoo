@@ -195,7 +195,7 @@ def instance_deploy(env, dry_run, yes):
         ))
     else:
         console.print(Panel(
-            f'[bold red]Deployment failed[/bold red]\n\n'
+            '[bold red]Deployment failed[/bold red]\n\n'
             '[dim]Review the output above for details.[/dim]\n'
             '[dim]Run with [/dim][cyan]rkd -v instance deploy[/cyan][dim] for verbose output.[/dim]',
             border_style='red', box=box.ROUNDED

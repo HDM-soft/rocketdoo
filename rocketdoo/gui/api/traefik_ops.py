@@ -1,6 +1,7 @@
-import yaml
 from pathlib import Path
 from typing import Optional
+
+import yaml
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -42,13 +43,13 @@ async def traefik_on(body: TraefikOnRequest):
     """Enable Traefik reverse proxy (equivalent to rkd traefik on)."""
     try:
         from rocketdoo.traefik_cli import (
+            _create_network,
+            _gen_override,
             _gen_traefik_compose,
             _gen_traefik_yml,
-            _gen_override,
-            _create_network,
             _network_exists,
-            _save_config,
             _project_name,
+            _save_config,
         )
         cwd = Path.cwd()
         traefik_dir = cwd / "traefik"

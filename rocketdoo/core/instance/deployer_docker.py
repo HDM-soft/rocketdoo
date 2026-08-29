@@ -7,7 +7,6 @@ Build flow (requires SSH agent for gitman private repos):
   VPS   → DOCKER_BUILDKIT=1 docker compose build --ssh default
   VPS   → docker compose up -d
 """
-import os
 import shutil
 import subprocess
 import tempfile
@@ -249,8 +248,6 @@ class DockerInstanceDeployer:
         return self._ssh(f'mkdir -p {" ".join(dirs)}')
 
     def _transfer(self, tmp: Path) -> bool:
-        remote = f'{self.remote_path}/'
-
         # Dockerfile.{env}
         dockerfile = tmp / f'Dockerfile.{self.env}'
         if not self._rsync(str(dockerfile), f'{self.remote_path}/Dockerfile.{self.env}'):

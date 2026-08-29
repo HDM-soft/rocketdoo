@@ -1,7 +1,9 @@
 
-from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
+
 import click
+from jinja2 import Environment, FileSystemLoader
+
 
 def render_template(template_name: str, output_path: str, context: dict):
     """

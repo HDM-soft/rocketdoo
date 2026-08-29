@@ -1,6 +1,8 @@
 # rocketdoo/core/config_loader.py
-import yaml
 from pathlib import Path
+
+import yaml
+
 
 def get_config_path(base_dir: Path = None) -> Path:
     if base_dir is None:

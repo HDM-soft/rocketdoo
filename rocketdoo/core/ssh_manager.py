@@ -1,9 +1,11 @@
 # rocketdoo/core/ssh_manager.py
+import shutil
 from pathlib import Path
-import shutil, os
+
 
 def list_private_keys(ssh_dir: Path = Path.home() / ".ssh"):
-    if not ssh_dir.exists(): return []
+    if not ssh_dir.exists():
+        return []
     return [p.name for p in ssh_dir.iterdir() if p.is_file() and not p.name.endswith('.pub')]
 
 def copy_key_to_build_context(key_name: str, dockerfile_dir: Path):

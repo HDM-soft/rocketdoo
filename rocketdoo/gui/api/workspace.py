@@ -2,11 +2,10 @@
 GUI API — Workspace management.
 Discover Rocketdoo projects on the host, navigate between them, and create new ones.
 """
-import os
 import json
+import os
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel

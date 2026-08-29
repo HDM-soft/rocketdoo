@@ -1,12 +1,14 @@
 # rocketdoo/core/port_validation.py
+import os
+import platform
 import re
 import socket
 import subprocess
-import platform
 import sys
-import os
-import yaml
 from pathlib import Path
+
+import yaml
+
 
 def is_port_in_use(port: int) -> bool:
     """
@@ -16,10 +18,10 @@ def is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         if s.connect_ex(('localhost', port)) == 0:
             return True
-    
+
     # Si socket no detectó nada, usa comandos del SO para verificar LISTEN
     system = platform.system()
-    
+
     try:
         if system == "Windows":
             return _check_port_windows(port)
@@ -28,7 +30,7 @@ def is_port_in_use(port: int) -> bool:
     except Exception as e:
         print(f"⚠️  Advertencia al verificar puerto {port}: {e}", file=sys.stderr)
         return True
-    
+
     return False
 
 

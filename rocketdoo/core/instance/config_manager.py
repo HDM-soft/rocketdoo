@@ -5,7 +5,6 @@ Manages .rkd/instance.yaml for stage/prod deployments
 import secrets
 import string
 from pathlib import Path
-from typing import Optional
 
 import questionary
 import yaml

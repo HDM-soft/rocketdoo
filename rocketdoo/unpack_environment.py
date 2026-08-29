@@ -19,13 +19,13 @@ from pathlib import Path
 
 import click
 import questionary
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich import box
 
-from rocketdoo.core.port_validation import is_port_in_use, find_available_port
-from rocketdoo.core.ssh_manager import list_private_keys, copy_key_to_build_context, inject_ssh_into_dockerfile
+from rocketdoo.core.port_validation import find_available_port, is_port_in_use
+from rocketdoo.core.ssh_manager import copy_key_to_build_context, inject_ssh_into_dockerfile, list_private_keys
 from rocketdoo.project_info import project_exists, read_docker_compose
 
 console = Console()
@@ -123,7 +123,7 @@ def _update_ports_in_compose(project_dir: Path, new_odoo_port: int, new_vsc_port
     content = re.sub(r'"\d+:8069"', f'"{new_odoo_port}:8069"', content)
     content = re.sub(r'"\d+:8888"', f'"{new_vsc_port}:8888"', content)
     compose_path.write_text(content)
-    console.print(f"  [green]✓[/green] docker-compose.yaml updated with new ports.")
+    console.print("  [green]✓[/green] docker-compose.yaml updated with new ports.")
 
 
 def _configure_ssh(project_dir: Path, meta: dict, key_name: str | None = None) -> bool:
@@ -235,7 +235,7 @@ def _wait_for_postgres(db_container: str, max_wait: int = 60) -> bool:
             capture_output=True
         )
         if result.returncode == 0:
-            console.print(f"  [green]✓[/green] PostgreSQL is ready.")
+            console.print("  [green]✓[/green] PostgreSQL is ready.")
             return True
         time.sleep(1)
         if i % 10 == 9:
@@ -258,7 +258,7 @@ def _wait_for_odoo_volume(odoo_container: str, max_wait: int = 90) -> bool:
             capture_output=True
         )
         if result.returncode == 0:
-            console.print(f"  [green]✓[/green] Odoo volume is ready.")
+            console.print("  [green]✓[/green] Odoo volume is ready.")
             return True
         time.sleep(1)
         if i % 15 == 14:
@@ -436,7 +436,7 @@ def _restore_filestore(odoo_container: str, filestore_tar: Path, db_name: str, f
             capture_output=True
         )
 
-        console.print(f"  [green]✓[/green] Filestore restored successfully.")
+        console.print("  [green]✓[/green] Filestore restored successfully.")
         return True
 
     except Exception as e:
@@ -666,7 +666,7 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
                     else:
                         volume_ready = _init_odoo_volume(odoo_container)
                         if volume_ready:
-                            console.print(f"  [green]✓[/green] Volume ready. Restoring filestore (Odoo is stopped)...")
+                            console.print("  [green]✓[/green] Volume ready. Restoring filestore (Odoo is stopped)...")
                             filestore_base_from_meta = meta.get("filestore_base") if meta else None
                             _restore_filestore(odoo_container, filestore_tar, restored_db, filestore_base_from_meta)
                         else:

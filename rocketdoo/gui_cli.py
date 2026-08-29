@@ -1,7 +1,7 @@
 import click
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich import box
 
 console = Console()
 
@@ -26,6 +26,7 @@ def gui_command(port, host, auto_open, cwd):
         os.chdir(cwd)
 
     import uvicorn
+
     from rocketdoo.gui.server import create_app
 
     url = f"http://{host}:{port}"

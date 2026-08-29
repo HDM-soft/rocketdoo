@@ -1,6 +1,7 @@
+from pyfiglet import Figlet
 from rich.console import Console
 from rich.panel import Panel
-from pyfiglet import Figlet
+
 from rocketdoo import __version__
 
 console = Console()

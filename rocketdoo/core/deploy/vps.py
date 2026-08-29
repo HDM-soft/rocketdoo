@@ -4,14 +4,15 @@ Deploys Odoo modules to VPS servers (Docker or Native)
 """
 
 import os
-import subprocess
 import shutil
+import stat
+import subprocess
 from getpass import getpass
 from pathlib import Path
-import stat
-from typing import List, Dict, Optional
+from typing import Dict, List
+
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from .base import BaseDeployer, DeploymentResult
 from .module_packager import ModulePackager
@@ -27,14 +28,14 @@ class VPSDeployer(BaseDeployer):
     Uses SSH/SCP for file transfer and remote command execution
     Supports both SSH key and password authentication
     """
-    
+
     def _check_sshpass(self) -> bool:
         """
         Check if sshpass is available in system
         """
         return shutil.which("sshpass") is not None
-    
-    
+
+
     def __init__(self, target_name: str, config: Dict, project_path: Path):
         """
         Initialize VPS deployer
@@ -45,13 +46,13 @@ class VPSDeployer(BaseDeployer):
             project_path: Root path of the project
         """
         super().__init__(target_name, config, project_path)
-        
+
         # Extract connection config
         self.connection = config.get('connection', {})
         self.host = self.connection.get('host')
         self.port = self.connection.get('port', 22)
         self.user = self.connection.get('user')
-        
+
         # Authentication credentials
         self.ssh_key = self.connection.get('ssh_key')
         self.password = self.connection.get('password')
@@ -67,17 +68,17 @@ class VPSDeployer(BaseDeployer):
         else:
             self.auth_method = None
 
-        
+
         # Resolve environment variables in password
         if self.password and self.password.startswith('${') and self.password.endswith('}'):
             env_var = self.password[2:-1]
             self.password = os.environ.get(env_var)
             if not self.password:
                 console.print(f"[yellow]Warning: Environment variable {env_var} not set[/yellow]")
-        
+
         # Deployment type (docker or native)
         self.deployment_type = config.get('deployment_type', 'docker')
-        
+
         # Type-specific config
         if self.deployment_type == 'docker':
             self.docker_config = config.get('docker', {})
@@ -89,14 +90,14 @@ class VPSDeployer(BaseDeployer):
             self.odoo_path = self.native_config.get('odoo_path', '/opt/odoo')
             self.remote_addons_path = self.native_config.get('addons_path', '/opt/odoo/custom_addons')
             self.service_name = self.native_config.get('service_name', 'odoo')
-        
+
         # Post-deploy config
         self.post_deploy_config = config.get('post_deploy', {})
-        
+
         # Module packager
         exclude_patterns = config.get('modules', {}).get('exclude_patterns', [])
         self.packager = ModulePackager(project_path, exclude_patterns)
-        
+
         # Ask for password interactively if required and not set
         if self.auth_method == 'password' and not self.password:
             console.print("[yellow]🔐 VPS password not found. Please enter it below.[/yellow]")
@@ -118,7 +119,7 @@ class VPSDeployer(BaseDeployer):
                 f"[green]✔ Password stored securely at {secret_file}[/green]"
             )
 
-    
+
     def validate_config(self) -> List[str]:
         """
         Validate VPS configuration
@@ -127,18 +128,18 @@ class VPSDeployer(BaseDeployer):
             List of configuration errors
         """
         errors = []
-        
+
         # Validate connection
         if not self.host:
             errors.append("Missing 'connection.host'")
         if not self.user:
             errors.append("Missing 'connection.user'")
-        
+
         # Validate authentication method
         if not self.auth_method:
             errors.append("No authentication method defined (ssh_key or password required)")
 
-        
+
         # Validate authentication credentials
         if self.auth_method == 'ssh_key':
             if not self.ssh_key:
@@ -156,7 +157,7 @@ class VPSDeployer(BaseDeployer):
                     "Install it with: sudo apt install sshpass"
                 )
 
-        
+
         # Validate type-specific config
         if self.deployment_type == 'docker':
             if not self.container_name:
@@ -168,9 +169,9 @@ class VPSDeployer(BaseDeployer):
                 errors.append("Missing 'native.addons_path'")
         else:
             errors.append(f"Invalid deployment_type: {self.deployment_type}")
-        
+
         return errors
-    
+
     def pre_deploy_check(self) -> bool:
         """
         Pre-deployment checks
@@ -188,21 +189,21 @@ class VPSDeployer(BaseDeployer):
             # Test SSH connection
             self.log("Testing SSH connection...", "info")
             result = self._run_ssh_command("echo 'Connection successful'")
-            
+
             if result.returncode != 0:
                 self.log(f"SSH connection failed: {result.stderr}", "error")
                 return False
-            
+
             self.log("✓ SSH connection established", "success")
-            
+
             # Check sudo permissions if using native deployment with restart enabled
-            if (self.deployment_type == 'native' and 
+            if (self.deployment_type == 'native' and
                 self.post_deploy_config.get('restart_service', False)):
                 self.log("Checking sudo permissions...", "info")
-                
+
                 # Test sudo without password (passwordless sudo)
                 result = self._run_ssh_command("sudo -n true 2>&1")
-                
+
                 if result.returncode != 0:
                     if self.auth_method == 'password':
                         self.log("✓ Sudo requires password (will use authentication password)", "info")
@@ -217,15 +218,15 @@ class VPSDeployer(BaseDeployer):
                         # Don't fail, just warn
                 else:
                     self.log("✓ Passwordless sudo available", "success")
-            
+
             # Check if remote path exists
             if self.deployment_type == 'docker':
                 remote_path = f"{self.compose_path}"
             else:
                 remote_path = self.remote_addons_path
-            
+
             result = self._run_ssh_command(f"test -d {remote_path} && echo 'exists'")
-            
+
             if "exists" not in result.stdout:
                 self.log(f"Warning: Remote path {remote_path} does not exist", "warning")
                 # Try to create it
@@ -234,7 +235,7 @@ class VPSDeployer(BaseDeployer):
                 if create_result.returncode != 0:
                     self.log(f"Failed to create remote path: {create_result.stderr}", "error")
                     return False
-            
+
             # Check Docker if needed
             if self.deployment_type == 'docker':
                 result = self._run_ssh_command("docker --version")
@@ -242,18 +243,18 @@ class VPSDeployer(BaseDeployer):
                     self.log("Docker not found on remote server", "error")
                     return False
                 self.log("✓ Docker available", "success")
-                
+
                 # Check if container exists
                 result = self._run_ssh_command(f"docker ps -a --filter name={self.container_name} --format '{{{{.Names}}}}'")
                 if self.container_name not in result.stdout:
                     self.log(f"Warning: Container '{self.container_name}' not found", "warning")
-            
+
             return True
-            
+
         except Exception as e:
             self.log(f"Pre-deploy check failed: {e}", "error")
             return False
-    
+
     def deploy_modules(self, modules: List[Dict]) -> DeploymentResult:
         """
         Deploy modules to VPS
@@ -268,16 +269,16 @@ class VPSDeployer(BaseDeployer):
             # Prepare modules
             self.log(f"Preparing {len(modules)} modules...", "info")
             temp_dir = self.packager.prepare_modules(modules)
-            
+
             # Determine target path on remote server
             if self.deployment_type == 'docker':
                 target_path = self.addons_mount
             else:
                 target_path = self.remote_addons_path
-            
+
             # Transfer modules
             self.log(f"Transferring modules to {self.host}:{target_path}...", "info")
-            
+
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -286,45 +287,45 @@ class VPSDeployer(BaseDeployer):
                 console=console
             ) as progress:
                 task = progress.add_task("[cyan]Uploading modules...", total=len(modules))
-                
+
                 for module in modules:
                     module_name = module['name']
                     local_path = temp_dir / module_name
                     remote_module_path = f"{target_path}/{module_name}"
-                    
+
                     # Upload module
                     success = self._upload_directory(local_path, remote_module_path)
-                    
+
                     if not success:
                         return DeploymentResult(
                             success=False,
                             message=f"Failed to upload module: {module_name}"
                         )
-                    
+
                     # Mark as managed by RocketDoo
                     self._run_ssh_command(f"touch {remote_module_path}/.rkd_managed")
-                    
+
                     progress.update(task, advance=1)
-            
+
             # Clean up temp directory
             import shutil
             shutil.rmtree(temp_dir)
-            
-            self.log(f"✓ All modules transferred successfully", "success")
-            
+
+            self.log("✓ All modules transferred successfully", "success")
+
             return DeploymentResult(
                 success=True,
                 message="Modules deployed successfully",
                 details={'modules': [m['name'] for m in modules]}
             )
-            
+
         except Exception as e:
             self.log(f"Deployment failed: {e}", "error")
             return DeploymentResult(
                 success=False,
                 message=f"Deployment error: {e}"
             )
-    
+
     def post_deploy_actions(self) -> DeploymentResult:
         """
         Execute post-deployment actions
@@ -341,13 +342,13 @@ class VPSDeployer(BaseDeployer):
             # Restart service
             if self.post_deploy_config.get('restart_service', False):
                 self.log("Restarting Odoo service...", "info")
-                
+
                 if self.deployment_type == 'docker':
                     # Restart Docker container
                     result = self._run_ssh_command(
                         f"cd {self.compose_path} && docker-compose restart {self.container_name}"
                     )
-                    
+
                     if result.returncode != 0:
                         self.log(f"Failed to restart container: {result.stderr}", "error")
                         return DeploymentResult(
@@ -360,20 +361,20 @@ class VPSDeployer(BaseDeployer):
                         f"systemctl restart {self.service_name}",
                         use_sudo=True
                     )
-                    
+
                     if result.returncode != 0:
                         self.log(f"Failed to restart service: {result.stderr}", "error")
                         return DeploymentResult(
                             success=False,
                             message="Failed to restart Odoo service"
                         )
-                
+
                 self.log("✓ Service restarted", "success")
-            
+
             # Update modules
             if self.post_deploy_config.get('update_modules', False):
                 self.log("Updating modules in Odoo...", "info")
-                
+
                 if self.deployment_type == 'docker':
                     # Update via Docker exec
                     update_cmd = (
@@ -387,40 +388,40 @@ class VPSDeployer(BaseDeployer):
                         f"{python_env} {self.odoo_path}/odoo-bin "
                         f"-c {self.odoo_path}/odoo.conf -u all --stop-after-init"
                     )
-                
+
                 result = self._run_ssh_command(update_cmd)
-                
+
                 if result.returncode != 0:
                     self.log(f"Warning: Module update had issues: {result.stderr}", "warning")
                 else:
                     self.log("✓ Modules updated", "success")
-            
+
             # Run custom commands
             custom_commands = self.post_deploy_config.get('custom_commands', [])
             if custom_commands:
                 self.log(f"Running {len(custom_commands)} custom commands...", "info")
-                
+
                 for cmd in custom_commands:
                     self.log(f"Executing: {cmd}", "info")
                     result = self._run_ssh_command(cmd)
-                    
+
                     if result.returncode != 0:
                         self.log(f"Command failed: {result.stderr}", "warning")
                     else:
-                        self.log(f"✓ Command completed", "success")
-            
+                        self.log("✓ Command completed", "success")
+
             return DeploymentResult(
                 success=True,
                 message="Post-deploy actions completed"
             )
-            
+
         except Exception as e:
             self.log(f"Post-deploy actions failed: {e}", "error")
             return DeploymentResult(
                 success=False,
                 message=f"Post-deploy error: {e}"
             )
-    
+
     def _run_ssh_command(self, command: str, timeout: int = 300, use_sudo: bool = False) -> subprocess.CompletedProcess:
         """
         Execute command on remote server via SSH
@@ -441,16 +442,16 @@ class VPSDeployer(BaseDeployer):
             else:
                 # Try passwordless sudo or rely on SSH key having sudo access
                 command = f"sudo {command}"
-        
+
         ssh_cmd = ['ssh']
-        
+
         # Add SSH options
         ssh_cmd.extend([
             '-o', 'StrictHostKeyChecking=no',
             '-o', 'UserKnownHostsFile=/dev/null',
             '-p', str(self.port)
         ])
-        
+
         # Add authentication based on method
         if self.auth_method == 'ssh_key' and self.ssh_key:
             key_path = os.path.expanduser(self.ssh_key)
@@ -458,13 +459,13 @@ class VPSDeployer(BaseDeployer):
         elif self.auth_method == 'password' and self.password:
             # Use sshpass for password authentication
             ssh_cmd = ['sshpass', '-p', self.password] + ssh_cmd
-        
+
         # Add user@host
         ssh_cmd.append(f"{self.user}@{self.host}")
-        
+
         # Add command
         ssh_cmd.append(command)
-        
+
         # Execute
         try:
             result = subprocess.run(
@@ -479,7 +480,7 @@ class VPSDeployer(BaseDeployer):
                 self.log("Error: 'sshpass' not found. Install it with: sudo apt install sshpass", "error")
                 raise
             raise
-    
+
     def _upload_directory(self, local_path: Path, remote_path: str) -> bool:
         """
         Upload directory to remote server using rsync
@@ -494,23 +495,23 @@ class VPSDeployer(BaseDeployer):
         try:
             # Build rsync command
             rsync_cmd = ['rsync', '-avz', '--delete']
-            
+
             # Add SSH options based on auth method
             ssh_opts = f"-p {self.port} -o StrictHostKeyChecking=no"
-            
+
             if self.auth_method == 'ssh_key' and self.ssh_key:
                 key_path = os.path.expanduser(self.ssh_key)
                 ssh_opts += f" -i {key_path}"
             elif self.auth_method == 'password' and self.password:
                 # Use sshpass for rsync with password
                 rsync_cmd = ['sshpass', '-p', self.password] + rsync_cmd
-            
+
             rsync_cmd.extend(['-e', f'ssh {ssh_opts}'])
-            
+
             # Add source and destination
             rsync_cmd.append(f"{local_path}/")
             rsync_cmd.append(f"{self.user}@{self.host}:{remote_path}/")
-            
+
             # Execute rsync
             result = subprocess.run(
                 rsync_cmd,
@@ -518,13 +519,13 @@ class VPSDeployer(BaseDeployer):
                 text=True,
                 timeout=600
             )
-            
+
             if result.returncode != 0:
                 self.log(f"rsync failed: {result.stderr}", "error")
                 return False
-            
+
             return True
-            
+
         except subprocess.TimeoutExpired:
             self.log("Upload timeout exceeded", "error")
             return False
@@ -537,7 +538,7 @@ class VPSDeployer(BaseDeployer):
         except Exception as e:
             self.log(f"Upload error: {e}", "error")
             return False
-    
+
     def _upload_file_scp(self, local_path: Path, remote_path: str) -> bool:
         """
         Upload single file using SCP (fallback if rsync not available)
@@ -551,13 +552,13 @@ class VPSDeployer(BaseDeployer):
         """
         try:
             scp_cmd = ['scp']
-            
+
             # Add SSH options
             scp_cmd.extend([
                 '-o', 'StrictHostKeyChecking=no',
                 '-P', str(self.port)
             ])
-            
+
             # Add authentication based on method
             if self.auth_method == 'ssh_key' and self.ssh_key:
                 key_path = os.path.expanduser(self.ssh_key)
@@ -565,11 +566,11 @@ class VPSDeployer(BaseDeployer):
             elif self.auth_method == 'password' and self.password:
                 # Use sshpass for password authentication
                 scp_cmd = ['sshpass', '-p', self.password] + scp_cmd
-            
+
             # Add source and destination
             scp_cmd.append(str(local_path))
             scp_cmd.append(f"{self.user}@{self.host}:{remote_path}")
-            
+
             # Execute
             result = subprocess.run(
                 scp_cmd,
@@ -577,13 +578,13 @@ class VPSDeployer(BaseDeployer):
                 text=True,
                 timeout=300
             )
-            
+
             return result.returncode == 0
-            
+
         except Exception as e:
             self.log(f"SCP upload error: {e}", "error")
             return False
-    
+
     def rollback(self) -> DeploymentResult:
         """
         Rollback deployment by restoring from backup
@@ -593,39 +594,39 @@ class VPSDeployer(BaseDeployer):
         """
         try:
             self.log("Initiating rollback...", "warning")
-            
+
             # Find latest backup
             backup_config = self.config.get('backup', {})
             backup_path = self.project_path / backup_config.get('path', '.rkd/deploy_backups')
-            
+
             if not backup_path.exists():
                 return DeploymentResult(
                     success=False,
                     message="No backups found for rollback"
                 )
-            
+
             # Get latest backup for this target
             backups = sorted(
                 [d for d in backup_path.iterdir() if d.is_dir() and d.name.startswith(self.target_name)],
                 key=lambda x: x.stat().st_mtime,
                 reverse=True
             )
-            
+
             if not backups:
                 return DeploymentResult(
                     success=False,
                     message="No backups found for this target"
                 )
-            
+
             latest_backup = backups[0]
             self.log(f"Restoring from backup: {latest_backup.name}", "info")
-            
+
             # Upload backup to server
             if self.deployment_type == 'docker':
                 target_path = self.addons_mount
             else:
                 target_path = self.remote_addons_path
-            
+
             # Upload each module from backup
             for module_dir in latest_backup.iterdir():
                 if module_dir.is_dir():
@@ -642,14 +643,14 @@ class VPSDeployer(BaseDeployer):
 
             else:
                 self._run_ssh_command(f"systemctl restart {self.service_name}", use_sudo=True)
-            
+
             self.log("✓ Rollback completed", "success")
-            
+
             return DeploymentResult(
                 success=True,
                 message="Rollback completed successfully"
             )
-            
+
         except Exception as e:
             self.log(f"Rollback failed: {e}", "error")
             return DeploymentResult(

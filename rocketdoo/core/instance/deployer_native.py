@@ -92,7 +92,6 @@ class NativeInstanceDeployer:
         return self._ssh(f'sudo bash -c "{cmd}"')
 
     def _add_odoo_repo(self) -> bool:
-        major = self.odoo_version.split('.')[0]
         key_cmd = (
             f'wget -q -O - {_NIGHTLY_KEY_URL} | '
             'gpg --dearmor -o /usr/share/keyrings/odoo-archive-keyring.gpg'
@@ -163,8 +162,8 @@ class NativeInstanceDeployer:
             'list_db = False\n'
         )
 
-        # Write conf via heredoc on remote
-        escaped = conf.replace("'", "'\"'\"'")
+        # Write conf via heredoc on remote. The heredoc delimiter is quoted
+        # (<< \'ENDCONF\'), so the shell performs no expansion on the body.
         return self._ssh(
             f"sudo bash -c 'cat > {self.odoo_conf_path} << \\'ENDCONF\\'\n{conf}\nENDCONF'"
         )
