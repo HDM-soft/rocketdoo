@@ -9,12 +9,14 @@ def get_config_path(base_dir: Path = None) -> Path:
         base_dir = Path.cwd()
     return base_dir / "rocketdoo.yml"
 
+
 def load_config(base_dir: Path = None) -> dict:
     cfg_path = get_config_path(base_dir)
     if cfg_path.exists():
         with open(cfg_path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     return {}
+
 
 def save_config(config: dict, base_dir: Path = None):
     cfg_path = get_config_path(base_dir)

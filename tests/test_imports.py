@@ -9,6 +9,7 @@ These tests walk the package the way an installer would and resolve every
 intra-package import — including the deferred ones — so that a missing module
 or a renamed function breaks CI instead of a user's browser.
 """
+
 import ast
 import importlib
 import pkgutil
@@ -34,19 +35,14 @@ LEGACY_UNIMPORTABLE = {
 def _package_modules() -> list[str]:
     import rocketdoo
 
-    return sorted(
-        m.name
-        for m in pkgutil.walk_packages(rocketdoo.__path__, "rocketdoo.")
-        if m.name not in LEGACY_UNIMPORTABLE
-    )
+    return sorted(m.name for m in pkgutil.walk_packages(rocketdoo.__path__, "rocketdoo.") if m.name not in LEGACY_UNIMPORTABLE)
 
 
 def _source_files() -> list[Path]:
     return sorted(
         p
         for p in PACKAGE_ROOT.rglob("*.py")
-        if f"rocketdoo.{p.relative_to(PACKAGE_ROOT).with_suffix('').as_posix().replace('/', '.')}"
-        not in LEGACY_UNIMPORTABLE
+        if f"rocketdoo.{p.relative_to(PACKAGE_ROOT).with_suffix('').as_posix().replace('/', '.')}" not in LEGACY_UNIMPORTABLE
     )
 
 

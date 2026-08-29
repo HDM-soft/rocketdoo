@@ -10,6 +10,7 @@ Snapshots live in tests/snapshots/ and are refreshed with:
 
     UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py
 """
+
 import os
 from pathlib import Path
 
@@ -88,9 +89,7 @@ def assert_snapshot(name: str, content: str):
         if not os.environ.get("UPDATE_SNAPSHOTS"):
             pytest.skip(f"recorded new snapshot {name}")
         return
-    assert content == snapshot.read_text(), (
-        f"{name} changed. If intended: UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py"
-    )
+    assert content == snapshot.read_text(), f"{name} changed. If intended: UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py"
 
 
 class TestAllTemplates:
@@ -107,9 +106,7 @@ class TestAllTemplates:
         content = render(rel_path, **_context_for(rel_path))
         assert_snapshot(rel_path.replace("/", "__") + ".txt", content)
 
-    @pytest.mark.parametrize(
-        "rel_path", [p for p in ALL_TEMPLATES if "compose" in p or p.endswith(".yaml.jinja")]
-    )
+    @pytest.mark.parametrize("rel_path", [p for p in ALL_TEMPLATES if "compose" in p or p.endswith(".yaml.jinja")])
     def test_yaml_templates_render_to_valid_yaml(self, rel_path):
         parsed = yaml.safe_load(render(rel_path, **_context_for(rel_path)))
         assert isinstance(parsed, dict)

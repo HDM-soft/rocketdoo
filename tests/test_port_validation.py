@@ -4,6 +4,7 @@ Port handling is where `rkd init` decides whether a project can start, so the
 parsing of docker-compose port entries and the "is this port really taken?"
 distinction are worth pinning down precisely.
 """
+
 import pytest
 
 from rocketdoo.core import port_validation as pv
@@ -30,13 +31,13 @@ class TestHostPort:
     @pytest.mark.parametrize(
         "entry",
         [
-            "8069",                  # container-only: Docker picks a random host port
-            "${ODOO_PORT}:8069",     # unresolved variable
+            "8069",  # container-only: Docker picks a random host port
+            "${ODOO_PORT}:8069",  # unresolved variable
             "not-a-port",
-            {"target": 8069},        # long form without `published`
+            {"target": 8069},  # long form without `published`
             {"published": None},
             None,
-            True,                    # bool is an int subclass: must not read as port 1
+            True,  # bool is an int subclass: must not read as port 1
             [],
         ],
     )
@@ -51,10 +52,8 @@ class TestCollectDeclaredPorts:
     def _project(root, name, ports, filename="docker-compose.yaml"):
         proj = root / name
         proj.mkdir(parents=True, exist_ok=True)
-        body = "\n".join(f"      - \"{p}\"" for p in ports)
-        (proj / filename).write_text(
-            "services:\n  web:\n    image: odoo:16.0\n    ports:\n" + body + "\n"
-        )
+        body = "\n".join(f'      - "{p}"' for p in ports)
+        (proj / filename).write_text("services:\n  web:\n    image: odoo:16.0\n    ports:\n" + body + "\n")
         return proj
 
     @pytest.fixture
@@ -100,11 +99,13 @@ class TestGetPortPublisher:
     def _fake_ps(output):
         def _run(cmd, **kwargs):
             return output
+
         return _run
 
     def test_matches_the_publishing_container(self, monkeypatch):
         monkeypatch.setattr(
-            pv.subprocess, "check_output",
+            pv.subprocess,
+            "check_output",
             self._fake_ps("odoo-web\t0.0.0.0:8069->8069/tcp\ndb\t5432/tcp\n"),
         )
         assert pv.get_port_publisher(8069) == "odoo-web"
@@ -112,7 +113,8 @@ class TestGetPortPublisher:
     def test_does_not_match_a_longer_port_number(self, monkeypatch):
         """8069 must not match 18069 — the digit guard in the regex."""
         monkeypatch.setattr(
-            pv.subprocess, "check_output",
+            pv.subprocess,
+            "check_output",
             self._fake_ps("other\t0.0.0.0:18069->8069/tcp\n"),
         )
         assert pv.get_port_publisher(8069) is None
@@ -120,6 +122,7 @@ class TestGetPortPublisher:
     def test_returns_none_without_docker(self, monkeypatch):
         def _boom(*a, **kw):
             raise FileNotFoundError("docker")
+
         monkeypatch.setattr(pv.subprocess, "check_output", _boom)
         assert pv.get_port_publisher(8069) is None
         assert pv.is_port_used_by_rocketdoo(8069) is False

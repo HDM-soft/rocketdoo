@@ -33,9 +33,9 @@ async def traefik_status():
 
 
 class TraefikOnRequest(BaseModel):
-    mode: str = "local"           # "local" | "production"
+    mode: str = "local"  # "local" | "production"
     domain: str = "myodoo.local"
-    email: Optional[str] = ""     # required for production
+    email: Optional[str] = ""  # required for production
 
 
 @router.post("/on")
@@ -51,6 +51,7 @@ async def traefik_on(body: TraefikOnRequest):
             _project_name,
             _save_config,
         )
+
         cwd = Path.cwd()
         traefik_dir = cwd / "traefik"
         traefik_dir.mkdir(exist_ok=True)
@@ -75,6 +76,7 @@ async def traefik_off():
     """Disable Traefik (equivalent to rkd traefik off)."""
     try:
         from rocketdoo.traefik_cli import _disable_traefik
+
         _disable_traefik()
         return {"ok": True}
     except Exception as e:

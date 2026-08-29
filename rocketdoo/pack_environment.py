@@ -33,6 +33,7 @@ console = Console()
 # Internal helpers
 # ─────────────────────────────────────────────────────────────
 
+
 def _get_db_container(compose_data: dict) -> str | None:
     """Returns the database container name from docker-compose data."""
     try:
@@ -53,8 +54,7 @@ def _is_container_running(container_name: str) -> bool:
     """Checks whether a Docker container is currently running."""
     try:
         result = subprocess.run(
-            ["docker", "inspect", "--format", "{{.State.Running}}", container_name],
-            capture_output=True, text=True
+            ["docker", "inspect", "--format", "{{.State.Running}}", container_name], capture_output=True, text=True
         )
         return result.stdout.strip() == "true"
     except Exception:
@@ -66,12 +66,20 @@ def _list_odoo_databases(db_container: str) -> list[str]:
     try:
         result = subprocess.run(
             [
-                "docker", "exec", db_container,
-                "psql", "-U", "root", "-d", "postgres",
-                "-t", "-c",
-                "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres';"
+                "docker",
+                "exec",
+                db_container,
+                "psql",
+                "-U",
+                "root",
+                "-d",
+                "postgres",
+                "-t",
+                "-c",
+                "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres';",
             ],
-            capture_output=True, text=True
+            capture_output=True,
+            text=True,
         )
         return [line.strip() for line in result.stdout.splitlines() if line.strip()]
     except Exception:
@@ -87,12 +95,9 @@ def _backup_database(db_container: str, db_name: str, output_path: Path) -> bool
     try:
         with open(output_path, "wb") as f:
             result = subprocess.run(
-                [
-                    "docker", "exec", db_container,
-                    "pg_dump", "-U", "root", "--format=custom", db_name
-                ],
+                ["docker", "exec", db_container, "pg_dump", "-U", "root", "--format=custom", db_name],
                 stdout=f,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
         if result.returncode != 0:
             console.print(f"  [red]✗ pg_dump error:[/red] {result.stderr.decode()}")
@@ -127,10 +132,7 @@ def _backup_filestore(odoo_container: str, db_name: str, output_path: Path) -> t
     try:
         # ── Detect filestore path dynamically ──
         for path in POSSIBLE_PATHS:
-            check = subprocess.run(
-                ["docker", "exec", odoo_container, "test", "-d", path],
-                capture_output=True
-            )
+            check = subprocess.run(["docker", "exec", odoo_container, "test", "-d", path], capture_output=True)
             if check.returncode == 0:
                 filestore_path = path
                 filestore_base = str(Path(path).parent)
@@ -148,14 +150,9 @@ def _backup_filestore(odoo_container: str, db_name: str, output_path: Path) -> t
         # ── Compress filestore ──
         with open(output_path, "wb") as f:
             result = subprocess.run(
-                [
-                    "docker", "exec", odoo_container,
-                    "tar", "-czf", "-", "-C",
-                    filestore_base,
-                    db_name
-                ],
+                ["docker", "exec", odoo_container, "tar", "-czf", "-", "-C", filestore_base, db_name],
                 stdout=f,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
 
         if result.returncode != 0:
@@ -163,10 +160,7 @@ def _backup_filestore(odoo_container: str, db_name: str, output_path: Path) -> t
             return False
 
         size_mb = output_path.stat().st_size / (1024 * 1024)
-        console.print(
-            f"  [green]✓[/green] Filestore compressed: "
-            f"[yellow]{output_path.name}[/yellow] ({size_mb:.1f} MB)"
-        )
+        console.print(f"  [green]✓[/green] Filestore compressed: [yellow]{output_path.name}[/yellow] ({size_mb:.1f} MB)")
 
         return True, filestore_base
 
@@ -217,12 +211,14 @@ def _verify_no_ssh_in_zip(zip_path: Path) -> list[str]:
     with zipfile.ZipFile(zip_path, "r") as zf:
         for name in zf.namelist():
             basename = Path(name).name
-            if any([
-                basename.startswith("id_rsa") and not basename.endswith(".pub"),
-                basename.startswith("id_ed25519") and not basename.endswith(".pub"),
-                basename.startswith("id_ecdsa") and not basename.endswith(".pub"),
-                "/.ssh/" in name and not name.endswith(".pub"),
-            ]):
+            if any(
+                [
+                    basename.startswith("id_rsa") and not basename.endswith(".pub"),
+                    basename.startswith("id_ed25519") and not basename.endswith(".pub"),
+                    basename.startswith("id_ecdsa") and not basename.endswith(".pub"),
+                    "/.ssh/" in name and not name.endswith(".pub"),
+                ]
+            ):
                 suspicious.append(name)
     return suspicious
 
@@ -260,13 +256,17 @@ def _create_zip(project_dir: Path, zip_path: Path, backup_dir: Path, exclude_dir
 # Main command
 # ─────────────────────────────────────────────────────────────
 
+
 @click.command(name="pack")
-@click.option("--no-db", is_flag=True, default=False,
-              help="Skip the database and filestore backup (environment files only).")
-@click.option("--output", "-o", default=None, type=click.Path(),
-              help="Output path for the ZIP file (default: parent directory, named after the project).")
-@click.option("--db-name", default=None,
-              help="Name of the database to back up (useful when multiple databases exist).")
+@click.option("--no-db", is_flag=True, default=False, help="Skip the database and filestore backup (environment files only).")
+@click.option(
+    "--output",
+    "-o",
+    default=None,
+    type=click.Path(),
+    help="Output path for the ZIP file (default: parent directory, named after the project).",
+)
+@click.option("--db-name", default=None, help="Name of the database to back up (useful when multiple databases exist).")
 def pack_environment(no_db, output, db_name):
     """
     📦 Package the development environment to share with another developer.
@@ -281,15 +281,17 @@ def pack_environment(no_db, output, db_name):
       rkd pack -o /tmp/my.zip   → specify output path
     """
     console.print()
-    console.print(Panel(
-        "[bold cyan]📦 RKD Pack — Prepare environment for sharing[/bold cyan]\n\n"
-        "[dim]This process will:[/dim]\n"
-        "  [green]✓[/green] Back up the database and filestore\n"
-        "  [green]✓[/green] Sanitize SSH keys from the Dockerfile\n"
-        "  [green]✓[/green] Generate a shareable ZIP file",
-        border_style="cyan",
-        box=box.ROUNDED
-    ))
+    console.print(
+        Panel(
+            "[bold cyan]📦 RKD Pack — Prepare environment for sharing[/bold cyan]\n\n"
+            "[dim]This process will:[/dim]\n"
+            "  [green]✓[/green] Back up the database and filestore\n"
+            "  [green]✓[/green] Sanitize SSH keys from the Dockerfile\n"
+            "  [green]✓[/green] Generate a shareable ZIP file",
+            border_style="cyan",
+            box=box.ROUNDED,
+        )
+    )
     console.print()
 
     # ── 1. Validate project ──
@@ -304,8 +306,9 @@ def pack_environment(no_db, output, db_name):
     compose_data = read_docker_compose()
 
     console.print(f"[bold]Project detected:[/bold] [cyan]{project_name}[/cyan]")
-    console.print(f"[bold]Odoo:[/bold] {project_info.get('odoo_version', 'unknown')} "
-                  f"({project_info.get('odoo_edition', 'Community')})")
+    console.print(
+        f"[bold]Odoo:[/bold] {project_info.get('odoo_version', 'unknown')} ({project_info.get('odoo_edition', 'Community')})"
+    )
     console.print()
 
     # ── 2. Database and filestore backup ──
@@ -339,10 +342,7 @@ def pack_environment(no_db, output, db_name):
                     selected_db = available_dbs[0]
                     console.print(f"  Database detected: [cyan]{selected_db}[/cyan]")
                 else:
-                    selected_db = questionary.select(
-                        "Select the database to back up:",
-                        choices=available_dbs
-                    ).ask()
+                    selected_db = questionary.select("Select the database to back up:", choices=available_dbs).ask()
 
                 backup_dir.mkdir(exist_ok=True)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -359,7 +359,9 @@ def pack_environment(no_db, output, db_name):
                     if not fs_ok:
                         fs_backup_path = None
                 else:
-                    console.print(f"  [yellow]⚠[/yellow]  Odoo container [cyan]{odoo_container}[/cyan] is not running — filestore skipped.")
+                    console.print(
+                        f"  [yellow]⚠[/yellow]  Odoo container [cyan]{odoo_container}[/cyan] is not running — filestore skipped."
+                    )
                     fs_backup_path = None
 
     # ── 3. Detect SSH key usage ──
@@ -415,12 +417,7 @@ def pack_environment(no_db, output, db_name):
         zip_path = project_dir.parent / f"{project_name}_rkd_shared_{timestamp}.zip"
 
     try:
-        file_count = _create_zip(
-            project_dir=project_dir,
-            zip_path=zip_path,
-            backup_dir=backup_dir,
-            exclude_dirs=[".ssh"]
-        )
+        file_count = _create_zip(project_dir=project_dir, zip_path=zip_path, backup_dir=backup_dir, exclude_dirs=[".ssh"])
     except Exception as e:
         console.print(f"[red]✗ Error creating ZIP:[/red] {e}")
         if original_dockerfile:
@@ -449,16 +446,18 @@ def pack_environment(no_db, output, db_name):
     # ── 9. Final summary ──
     zip_size_mb = zip_path.stat().st_size / (1024 * 1024)
     console.print()
-    console.print(Panel(
-        f"[bold green]✅ Environment packaged successfully[/bold green]\n\n"
-        f"[bold]📁 File:[/bold] [cyan]{zip_path}[/cyan]\n"
-        f"[bold]📦 Files included:[/bold] {file_count}\n"
-        f"[bold]💾 Size:[/bold] {zip_size_mb:.1f} MB\n"
-        f"[bold]🔐 SSH Keys:[/bold] {'excluded ✓' if uses_ssh else 'not applicable'}\n"
-        f"[bold]💿 DB Backup:[/bold] {'included ✓' if db_backup_path else ('skipped (--no-db)' if no_db else 'not available')}\n\n"
-        f"[dim]Share the ZIP with the other developer.\n"
-        f"The recipient should run: [cyan]rkd unpack[/cyan][/dim]",
-        border_style="green",
-        box=box.ROUNDED
-    ))
+    console.print(
+        Panel(
+            f"[bold green]✅ Environment packaged successfully[/bold green]\n\n"
+            f"[bold]📁 File:[/bold] [cyan]{zip_path}[/cyan]\n"
+            f"[bold]📦 Files included:[/bold] {file_count}\n"
+            f"[bold]💾 Size:[/bold] {zip_size_mb:.1f} MB\n"
+            f"[bold]🔐 SSH Keys:[/bold] {'excluded ✓' if uses_ssh else 'not applicable'}\n"
+            f"[bold]💿 DB Backup:[/bold] {'included ✓' if db_backup_path else ('skipped (--no-db)' if no_db else 'not available')}\n\n"
+            f"[dim]Share the ZIP with the other developer.\n"
+            f"The recipient should run: [cyan]rkd unpack[/cyan][/dim]",
+            border_style="green",
+            box=box.ROUNDED,
+        )
+    )
     console.print()

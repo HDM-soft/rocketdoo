@@ -8,6 +8,7 @@ from rocketdoo.core.gitignore_manager import ensure_gitignore
 # Rendered into .gitignore instead of being copied verbatim
 GITIGNORE_TEMPLATE = ".gitignore.jinja"
 
+
 def scaffold_project(template="basic", force=False, verbose=False):
     """
     Create the project structure by copying the templates included in Rocketdoo

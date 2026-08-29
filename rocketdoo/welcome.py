@@ -6,6 +6,7 @@ from rocketdoo import __version__
 
 console = Console()
 
+
 def show_welcome():
     # We generated the logo with pyfiglet.
     fig = Figlet(font="slant")

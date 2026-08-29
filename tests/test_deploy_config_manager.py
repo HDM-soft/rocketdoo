@@ -3,6 +3,7 @@
 deploy.yaml decides where modules get shipped, so validation gaps here surface
 as a deployment against the wrong host or with half a connection block.
 """
+
 import pytest
 import yaml
 

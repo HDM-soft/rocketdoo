@@ -1,4 +1,3 @@
-
 """
 RocketDoo Deploy - Base Deployer
 Abstract base class for all deployers
@@ -34,7 +33,7 @@ class DeploymentResult:
 class BaseDeployer(ABC):
     """
     Abstract base class for deployers
-    
+
     Each deployment type (VPS, Odoo.sh, etc) inherits from this class
     and implements the abstract methods.
     """
@@ -42,7 +41,7 @@ class BaseDeployer(ABC):
     def __init__(self, target_name: str, config: Dict, project_path: Path):
         """
         Initialize the deployer
-        
+
         Args:
             target_name: Name of the target (e.g., 'vps_production')
             config: Target configuration from deploy.yaml
@@ -51,7 +50,7 @@ class BaseDeployer(ABC):
         self.target_name = target_name
         self.config = config
         self.project_path = Path(project_path)
-        self.addons_path = self.project_path / config.get('modules', {}).get('base_path', 'addons')
+        self.addons_path = self.project_path / config.get("modules", {}).get("base_path", "addons")
         self.console = console
 
         # Deployment logs
@@ -60,26 +59,17 @@ class BaseDeployer(ABC):
     def log(self, message: str, level: str = "info"):
         """Log a message"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        self.logs.append({
-            'timestamp': timestamp,
-            'level': level,
-            'message': message
-        })
+        self.logs.append({"timestamp": timestamp, "level": level, "message": message})
 
         # Also print to console
-        styles = {
-            'info': 'cyan',
-            'success': 'green',
-            'warning': 'yellow',
-            'error': 'red'
-        }
-        self.console.print(f"[{timestamp}] {message}", style=styles.get(level, 'white'))
+        styles = {"info": "cyan", "success": "green", "warning": "yellow", "error": "red"}
+        self.console.print(f"[{timestamp}] {message}", style=styles.get(level, "white"))
 
     @abstractmethod
     def validate_config(self) -> List[str]:
         """
         Validate deployer configuration
-        
+
         Returns:
             List of configuration errors (empty if OK)
         """
@@ -89,7 +79,7 @@ class BaseDeployer(ABC):
     def pre_deploy_check(self) -> bool:
         """
         Pre-deployment checks (connectivity, permissions, etc)
-        
+
         Returns:
             True if all checks pass
         """
@@ -99,10 +89,10 @@ class BaseDeployer(ABC):
     def deploy_modules(self, modules: List[Dict]) -> DeploymentResult:
         """
         Deploy the modules
-        
+
         Args:
             modules: List of modules to deploy (from ModuleScanner)
-            
+
         Returns:
             DeploymentResult with the operation result
         """
@@ -112,7 +102,7 @@ class BaseDeployer(ABC):
     def post_deploy_actions(self) -> DeploymentResult:
         """
         Post-deployment actions (restart, update, etc)
-        
+
         Returns:
             DeploymentResult with the operation result
         """
@@ -122,32 +112,29 @@ class BaseDeployer(ABC):
         """
         Rollback in case of error
         Default does nothing, subclasses can implement
-        
+
         Returns:
             DeploymentResult with rollback result
         """
         self.log("Rollback not implemented for this deployer", "warning")
-        return DeploymentResult(
-            success=True,
-            message="No rollback needed"
-        )
+        return DeploymentResult(success=True, message="No rollback needed")
 
     def create_backup(self, modules: List[Dict]) -> bool:
         """
         Create backup of modules before deployment
-        
+
         Args:
             modules: List of modules to backup
-            
+
         Returns:
             True if backup was successful
         """
-        backup_config = self.config.get('backup', {})
-        if not backup_config.get('enabled', True):
+        backup_config = self.config.get("backup", {})
+        if not backup_config.get("enabled", True):
             return True
 
         try:
-            backup_path = self.project_path / backup_config.get('path', '.rkd/deploy_backups')
+            backup_path = self.project_path / backup_config.get("path", ".rkd/deploy_backups")
             backup_path.mkdir(parents=True, exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -156,15 +143,16 @@ class BaseDeployer(ABC):
 
             # Copy modules to backup
             import shutil
+
             for module in modules:
-                src = Path(module['full_path'])
-                dst = backup_dir / module['name']
+                src = Path(module["full_path"])
+                dst = backup_dir / module["name"]
                 shutil.copytree(src, dst)
 
             self.log(f"Backup created at: {backup_dir}", "success")
 
             # Clean up old backups
-            self._cleanup_old_backups(backup_path, backup_config.get('keep_last', 3))
+            self._cleanup_old_backups(backup_path, backup_config.get("keep_last", 3))
 
             return True
 
@@ -178,12 +166,13 @@ class BaseDeployer(ABC):
             backups = sorted(
                 [d for d in backup_path.iterdir() if d.is_dir() and d.name.startswith(self.target_name)],
                 key=lambda x: x.stat().st_mtime,
-                reverse=True
+                reverse=True,
             )
 
             # Delete old backups
             for backup in backups[keep_last:]:
                 import shutil
+
                 shutil.rmtree(backup)
                 self.log(f"Old backup deleted: {backup.name}", "info")
 
@@ -193,45 +182,46 @@ class BaseDeployer(ABC):
     def validate_modules(self, modules: List[Dict]) -> List[str]:
         """
         Validate modules before deployment
-        
+
         Args:
             modules: List of modules to validate
-            
+
         Returns:
             List of errors found
         """
         errors = []
-        validations = self.config.get('validations', {})
+        validations = self.config.get("validations", {})
 
         if not validations:
             return errors
 
         for module in modules:
-            module_name = module['name']
-            module_path = Path(module['full_path'])
+            module_name = module["name"]
+            module_path = Path(module["full_path"])
 
             # Validate manifest
-            if validations.get('check_manifest', True):
+            if validations.get("check_manifest", True):
                 manifest_path = module_path / "__manifest__.py"
                 if not manifest_path.exists():
                     errors.append(f"{module_name}: __manifest__.py not found")
 
             # Validate Python syntax
-            if validations.get('check_python_syntax', True):
+            if validations.get("check_python_syntax", True):
                 py_files = list(module_path.rglob("*.py"))
                 for py_file in py_files:
                     try:
-                        with open(py_file, 'r', encoding='utf-8') as f:
-                            compile(f.read(), str(py_file), 'exec')
+                        with open(py_file, "r", encoding="utf-8") as f:
+                            compile(f.read(), str(py_file), "exec")
                     except SyntaxError as e:
                         errors.append(f"{module_name}: Syntax error in {py_file.name}: {e}")
 
             # Validate XML
-            if validations.get('check_xml_syntax', True):
+            if validations.get("check_xml_syntax", True):
                 xml_files = list(module_path.rglob("*.xml"))
                 for xml_file in xml_files:
                     try:
                         import xml.etree.ElementTree as ET
+
                         ET.parse(xml_file)
                     except ET.ParseError as e:
                         errors.append(f"{module_name}: Invalid XML in {xml_file.name}: {e}")
@@ -241,12 +231,12 @@ class BaseDeployer(ABC):
     def execute(self, modules: List[Dict]) -> DeploymentResult:
         """
         Execute the complete deployment
-        
+
         This is the main method that orchestrates the entire process
-        
+
         Args:
             modules: List of modules to deploy
-            
+
         Returns:
             DeploymentResult with final result
         """
@@ -259,11 +249,7 @@ class BaseDeployer(ABC):
         if config_errors:
             for error in config_errors:
                 self.log(f"  ❌ {error}", "error")
-            return DeploymentResult(
-                success=False,
-                message="Invalid configuration",
-                details={'errors': config_errors}
-            )
+            return DeploymentResult(success=False, message="Invalid configuration", details={"errors": config_errors})
 
         # 2. Validate modules
         self.log("Validating modules...", "info")
@@ -271,31 +257,21 @@ class BaseDeployer(ABC):
         if validation_errors:
             for error in validation_errors:
                 self.log(f"  ❌ {error}", "error")
-            return DeploymentResult(
-                success=False,
-                message="Module validation failed",
-                details={'errors': validation_errors}
-            )
+            return DeploymentResult(success=False, message="Module validation failed", details={"errors": validation_errors})
 
         # 3. Create backup
-        backup_config = self.config.get('backup', {})
-        if backup_config.get('enabled', True):
+        backup_config = self.config.get("backup", {})
+        if backup_config.get("enabled", True):
             self.log("Creating backup...", "info")
             if not self.create_backup(modules):
-                return DeploymentResult(
-                    success=False,
-                    message="Backup failed"
-                )
+                return DeploymentResult(success=False, message="Backup failed")
         else:
             self.log("Backup skipped (disabled)", "info")
 
         # 4. Pre-deploy check
         self.log("Checking connectivity...", "info")
         if not self.pre_deploy_check():
-            return DeploymentResult(
-                success=False,
-                message="Pre-deploy check failed"
-            )
+            return DeploymentResult(success=False, message="Pre-deploy check failed")
 
         # 5. Deploy
         self.log("Deploying modules...", "info")
@@ -316,8 +292,5 @@ class BaseDeployer(ABC):
         return DeploymentResult(
             success=True,
             message=f"Deployment to {self.target_name} completed",
-            details={
-                'modules_deployed': len(modules),
-                'logs': self.logs
-            }
+            details={"modules_deployed": len(modules), "logs": self.logs},
         )

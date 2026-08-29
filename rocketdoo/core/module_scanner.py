@@ -37,7 +37,7 @@ class OdooModule:
     def _load_manifest(self) -> Dict:
         """Safely loads __manifest__.py"""
         try:
-            with open(self.manifest_path, 'r', encoding='utf-8') as f:
+            with open(self.manifest_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Parse content as AST
@@ -57,27 +57,27 @@ class OdooModule:
     @property
     def is_installable(self) -> bool:
         """Checks if the module is installable"""
-        return self.manifest.get('installable', True)
+        return self.manifest.get("installable", True)
 
     @property
     def version(self) -> str:
         """Module version"""
-        return self.manifest.get('version', '1.0')
+        return self.manifest.get("version", "1.0")
 
     @property
     def depends(self) -> List[str]:
         """List of dependencies"""
-        return self.manifest.get('depends', [])
+        return self.manifest.get("depends", [])
 
     @property
     def has_invalid_name(self) -> bool:
         """Checks if name contains hyphens (not recommended)"""
-        return '-' in self.name
+        return "-" in self.name
 
     def validate(self) -> List[str]:
         """
         Validates the module and returns list of warnings/errors
-        
+
         Returns:
             List of validation messages
         """
@@ -93,7 +93,7 @@ class OdooModule:
             return issues
 
         # Validate required fields
-        required_fields = ['name', 'version', 'depends', 'data']
+        required_fields = ["name", "version", "depends", "data"]
         for field in required_fields:
             if field not in self.manifest:
                 issues.append(f"⚠️  Field '{field}' missing in __manifest__.py")
@@ -107,13 +107,13 @@ class OdooModule:
     def to_dict(self) -> Dict:
         """Converts the module to dictionary for serialization"""
         return {
-            'name': self.name,
-            'path': str(self.relative_path),
-            'full_path': str(self.path),
-            'installable': self.is_installable,
-            'version': self.version,
-            'depends': self.depends,
-            'manifest': self.manifest
+            "name": self.name,
+            "path": str(self.relative_path),
+            "full_path": str(self.path),
+            "installable": self.is_installable,
+            "version": self.version,
+            "depends": self.depends,
+            "manifest": self.manifest,
         }
 
 
@@ -122,12 +122,7 @@ class ModuleScanner:
 
     def __init__(self, addons_path: Path, exclude_patterns: Optional[List[str]] = None):
         self.addons_path = Path(addons_path)
-        self.exclude_patterns = exclude_patterns or [
-            "*/tests/*",
-            "*/__pycache__/*",
-            "*/.git/*",
-            "*/node_modules/*"
-        ]
+        self.exclude_patterns = exclude_patterns or ["*/tests/*", "*/__pycache__/*", "*/.git/*", "*/node_modules/*"]
         self._modules = None
 
     def should_exclude(self, path: Path) -> bool:
@@ -141,17 +136,17 @@ class ModuleScanner:
             # A module directory is the last path segment, so "*/tests/*" never
             # matched the tests directory itself -- only things nested under it.
             # Without this, a tests/__manifest__.py was reported as a module.
-            if pattern.endswith('/*') and fnmatch(path_str, pattern[:-2]):
+            if pattern.endswith("/*") and fnmatch(path_str, pattern[:-2]):
                 return True
         return False
 
     def scan(self, force_rescan: bool = False) -> List[OdooModule]:
         """
         Scans the addons directory for modules
-        
+
         Args:
             force_rescan: Force a new scan even if cache exists
-            
+
         Returns:
             List of found modules
         """
@@ -196,7 +191,7 @@ class ModuleScanner:
     def validate_all(self) -> Dict[str, List[str]]:
         """
         Validates all modules
-        
+
         Returns:
             Dict with module name and list of issues
         """
@@ -232,10 +227,7 @@ class ModuleScanner:
             if module.has_invalid_name:
                 name_display += " ⚠️"
 
-            console.print(
-                f"  {icon} {name_display:<30} v{module.version:<10} {module.relative_path}",
-                style=style
-            )
+            console.print(f"  {icon} {name_display:<30} v{module.version:<10} {module.relative_path}", style=style)
 
         # Show validations if there are issues
         validation_results = self.validate_all()
@@ -250,11 +242,11 @@ class ModuleScanner:
 def find_odoo_modules(addons_path: Path, exclude_patterns: Optional[List[str]] = None) -> List[Dict]:
     """
     Helper function for compatibility with existing code
-    
+
     Args:
         addons_path: Path to the addons directory
         exclude_patterns: Patterns to exclude
-        
+
     Returns:
         List of dictionaries with module information
     """

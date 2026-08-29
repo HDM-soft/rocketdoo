@@ -3,6 +3,7 @@
 The scanner decides what `rkd deploy` packages and what the GUI lists, so a
 directory wrongly treated as a module is a real deployment hazard.
 """
+
 import pytest
 
 from rocketdoo.core.module_scanner import ModuleScanner, OdooModule, find_odoo_modules

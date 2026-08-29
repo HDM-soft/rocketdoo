@@ -29,13 +29,14 @@ console = Console()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 CONFIG_TEMPLATE_DIR = os.path.join(TEMPLATES_DIR, "config")  # templates/config
-VSCODE_TEMPLATE_DIR = os.path.join(TEMPLATES_DIR, ".vscode")   # templates/.vscode
+VSCODE_TEMPLATE_DIR = os.path.join(TEMPLATES_DIR, ".vscode")  # templates/.vscode
 
 # Output paths are deliberately NOT module-level constants: os.getcwd() at
 # import time freezes whatever directory the process started in, so a caller
 # that imports this module and then changes directory (the GUI navigates
 # between projects) would write odoo.conf into the previous project.
 # render_template() resolves relative paths against the current directory.
+
 
 def render_template(template_dir, template_name, output_name, **context):
     """Render a Jinja2 template in the current or output directory"""
@@ -131,7 +132,6 @@ def init_project():
 
     show_welcome()
 
-
     current_dir = os.path.basename(os.getcwd())
     project_name = click.prompt("Project Name", default=current_dir)
 
@@ -148,28 +148,18 @@ def init_project():
 
         console.print("[dim]💡 Docker project names must be in lowercase[/dim]\n")
 
-
     # Version selection with interactive menu
     odoo_versions = ["15.0", "16.0", "17.0", "18.0", "19.0"]
     click.echo("\n📦 Select Odoo version (use ↑↓ and ENTER):")
-    odoo_version = questionary.select(
-        "Odoo Version:", choices=odoo_versions, default="18.0"
-    ).ask()
+    odoo_version = questionary.select("Odoo Version:", choices=odoo_versions, default="18.0").ask()
 
     # ========== QUESTION: ODOO EDITION ==========
     click.echo("\n🏢 Select Odoo edition (use ↑↓ and ENTER):")
-    odoo_edition = questionary.select(
-        "Odoo Edition:",
-        choices=["Community", "Enterprise"],
-        default="Community"
-    ).ask()
+    odoo_edition = questionary.select("Odoo Edition:", choices=["Community", "Enterprise"], default="Community").ask()
 
     # ========== QUESTION: PRIVATE REPOSITORIES ==========
     click.echo("\n🔐 Do you want to use private repositories?")
-    use_private_repos = questionary.confirm(
-        "Use private repositories?",
-        default=False
-    ).ask()
+    use_private_repos = questionary.confirm("Use private repositories?", default=False).ask()
 
     selected_ssh_key = None
     if use_private_repos:
@@ -181,17 +171,11 @@ def init_project():
             use_private_repos = False
         else:
             click.echo(f"\n🔑 Found {len(available_keys)} available SSH key(s)")
-            selected_ssh_key = questionary.select(
-                "Select SSH key to use:",
-                choices=available_keys
-            ).ask()
+            selected_ssh_key = questionary.select("Select SSH key to use:", choices=available_keys).ask()
 
     # ========== QUESTION: THIRD-PARTY REPOSITORIES ==========
     click.echo("\n📚 Do you want to use third-party repositories (with Gitman)?")
-    use_third_party_repos = questionary.confirm(
-        "Use third-party repositories?",
-        default=False
-    ).ask()
+    use_third_party_repos = questionary.confirm("Use third-party repositories?", default=False).ask()
 
     gitman_sources = []
     if use_third_party_repos:
@@ -199,18 +183,13 @@ def init_project():
         click.echo("💡 You can add more repositories later by editing gitman.yaml.")
 
         # Ask if you want to add repositories now
-        add_repos_now = questionary.confirm(
-            "Would you like to add repositories now?",
-            default=False
-        ).ask()
+        add_repos_now = questionary.confirm("Would you like to add repositories now?", default=False).ask()
 
         if add_repos_now:
             while True:
-                click.echo("\n" + "="*50)
+                click.echo("\n" + "=" * 50)
                 repo_url = click.prompt(
-                    "URL of the repository (press Enter without text to finish)",
-                    default="",
-                    show_default=False
+                    "URL of the repository (press Enter without text to finish)", default="", show_default=False
                 )
 
                 # If the user presses Enter without text, exit the loop.
@@ -234,12 +213,14 @@ def init_project():
                 repo_type = detect_repo_type(repo_url)
 
                 # CORRECT ORDER for gitman.yaml: repo, name, rev, type
-                gitman_sources.append({
-                    "repo": repo_url,
-                    "name": repo_name,
-                    "rev": repo_rev,
-                    "type": repo_type,
-                })
+                gitman_sources.append(
+                    {
+                        "repo": repo_url,
+                        "name": repo_name,
+                        "rev": repo_rev,
+                        "type": repo_type,
+                    }
+                )
 
                 click.echo(f"✅ Repository '{repo_name}' added")
                 click.echo(f"   URL: {repo_url}")
@@ -250,19 +231,15 @@ def init_project():
 
     db_versions = ["13", "14", "15", "16"]
     click.echo("\n📦 Select the PostgreSQL version (use ↑↓ and ENTER):")
-    db_version = questionary.select(
-        "PostgreSQL version:", choices=db_versions, default="16"
-    ).ask()
+    db_version = questionary.select("PostgreSQL version:", choices=db_versions, default="16").ask()
 
     # Ask for the master password
-    admin_passwd = click.prompt(
-        "Odoo master password", default="admin", hide_input=False
-    )
+    admin_passwd = click.prompt("Odoo master password", default="admin", hide_input=False)
 
     restart_policy = questionary.select(
         "\n♻️  How would you like to restart the environment?",
         choices=["no", "always", "unless-stopped"],
-        default="unless-stopped"
+        default="unless-stopped",
     ).ask()
 
     # Ports validations
@@ -377,9 +354,9 @@ def init_project():
             click.echo("You can configure it manually later.")
 
     # Final summary
-    click.echo("\n" + "="*60)
+    click.echo("\n" + "=" * 60)
     click.echo(f"🚀 Project '{project_name}' configured successfully")
-    click.echo("="*60)
+    click.echo("=" * 60)
     click.echo(f"\n📦 Odoo {odoo_version} ({odoo_edition}) + PostgreSQL {db_version}")
     click.echo(f"🌐 Odoo Port: {odoo_port}")
     click.echo(f"🐛 VSC Debug Port: {vsc_port}")

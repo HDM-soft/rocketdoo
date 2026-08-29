@@ -5,6 +5,7 @@ PostgreSQL secret, admin_passwd inside odoo.conf. These tests pin down the two
 properties that keep them out of git: every sensitive entry is covered, and a
 user's own .gitignore is never overwritten.
 """
+
 import pytest
 
 from rocketdoo.core.gitignore_manager import (
@@ -18,11 +19,7 @@ SENSITIVE = [pat for pat, _ in SENSITIVE_ENTRIES]
 
 
 def _entries(path):
-    return {
-        line.strip()
-        for line in path.read_text().splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    }
+    return {line.strip() for line in path.read_text().splitlines() if line.strip() and not line.lstrip().startswith("#")}
 
 
 class TestTemplate:
@@ -75,8 +72,8 @@ class TestEnsureGitignore:
 
         assert action == "appended"
         content = _entries(gitignore)
-        assert {"*.log", "build/"} <= content       # user rules survive
-        assert set(SENSITIVE) <= content            # secrets now covered
+        assert {"*.log", "build/"} <= content  # user rules survive
+        assert set(SENSITIVE) <= content  # secrets now covered
 
     def test_appends_only_what_is_missing(self, tmp_path):
         (tmp_path / ".gitignore").write_text(".ssh/\nodoo_pg_pass\n")

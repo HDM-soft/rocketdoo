@@ -12,8 +12,8 @@ def enable_enterprise_in_compose(compose_path: Path):
 
     # Uncomment the enterprise line
     new_text = text.replace(
-        '#- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise',
-        '- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise'
+        "#- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise",
+        "- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise",
     )
 
     compose_path.write_text(new_text)
@@ -29,9 +29,9 @@ def add_enterprise_to_odoo_conf(odoo_conf_path: Path):
     enterprise_path = "/usr/lib/python3/dist-packages/odoo/enterprise"
 
     # Search for the addons_path line and add enterprise
-    if 'addons_path' in text:
+    if "addons_path" in text:
         # If addons_path already exists, add enterprise
-        pattern = r'(addons_path\s*=\s*)([^\n]+)'
+        pattern = r"(addons_path\s*=\s*)([^\n]+)"
 
         def replace_addons(match):
             prefix = match.group(1)
@@ -56,7 +56,7 @@ def add_enterprise_to_odoo_conf(odoo_conf_path: Path):
 def check_enterprise_folder(project_root: Path) -> bool:
     """
     Check if the enterprise folder exists at the project root.
-    
+
     Args:
         project_root: Project root path
 
@@ -70,7 +70,7 @@ def check_enterprise_folder(project_root: Path) -> bool:
 def setup_enterprise_edition(project_root: Path):
     """
     Configure the project to use Odoo Enterprise.
-    
+
     Args:
         project_root: Project root path where docker-compose.yaml and config/ are located
     """

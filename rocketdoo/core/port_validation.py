@@ -16,7 +16,7 @@ def is_port_in_use(port: int) -> bool:
     """
     # Primero intenta con socket (rápido para conexiones activas)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        if s.connect_ex(('localhost', port)) == 0:
+        if s.connect_ex(("localhost", port)) == 0:
             return True
 
     # Si socket no detectó nada, usa comandos del SO para verificar LISTEN
@@ -37,13 +37,9 @@ def is_port_in_use(port: int) -> bool:
 def _check_port_windows(port: int) -> bool:
     """Verifica si un puerto está en uso en Windows usando netstat."""
     try:
-        output = subprocess.check_output(
-            ['netstat', '-ano', '/p', 'TCP'],
-            stderr=subprocess.DEVNULL,
-            text=True
-        )
+        output = subprocess.check_output(["netstat", "-ano", "/p", "TCP"], stderr=subprocess.DEVNULL, text=True)
         for line in output.splitlines():
-            if f':{port}' in line and 'LISTENING' in line:
+            if f":{port}" in line and "LISTENING" in line:
                 return True
     except subprocess.CalledProcessError:
         pass
@@ -53,22 +49,14 @@ def _check_port_windows(port: int) -> bool:
 def _check_port_unix(port: int) -> bool:
     """Verifica si un puerto está en uso en Linux/macOS usando lsof."""
     try:
-        output = subprocess.check_output(
-            ['lsof', '-i', f':{port}'],
-            stderr=subprocess.DEVNULL,
-            text=True
-        )
+        output = subprocess.check_output(["lsof", "-i", f":{port}"], stderr=subprocess.DEVNULL, text=True)
         return len(output.strip()) > 0
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Si lsof no está disponible, intenta con netstat
         try:
-            output = subprocess.check_output(
-                ['netstat', '-tlnp'],
-                stderr=subprocess.DEVNULL,
-                text=True
-            )
+            output = subprocess.check_output(["netstat", "-tlnp"], stderr=subprocess.DEVNULL, text=True)
             for line in output.splitlines():
-                if f':{port}' in line and 'LISTEN' in line:
+                if f":{port}" in line and "LISTEN" in line:
                     return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
@@ -77,12 +65,21 @@ def _check_port_unix(port: int) -> bool:
 
 # Directorios que nunca contienen proyectos rocketdoo y encarecen el barrido
 _PRUNED_DIRS = {
-    'node_modules', '__pycache__', 'venv', 'site-packages', 'dist', 'build',
-    'filestore', 'sessions', 'external_addons', 'enterprise', 'postgresql',
+    "node_modules",
+    "__pycache__",
+    "venv",
+    "site-packages",
+    "dist",
+    "build",
+    "filestore",
+    "sessions",
+    "external_addons",
+    "enterprise",
+    "postgresql",
 }
 
 # Nombres de archivo de compose reconocidos
-_COMPOSE_NAMES = ('docker-compose.yaml', 'docker-compose.yml', 'compose.yaml', 'compose.yml')
+_COMPOSE_NAMES = ("docker-compose.yaml", "docker-compose.yml", "compose.yaml", "compose.yml")
 
 # Niveles máximos a descender desde cada raíz de búsqueda
 _MAX_SCAN_DEPTH = 3
@@ -103,18 +100,18 @@ def _host_port(port_mapping) -> int | None:
         return port_mapping
     if isinstance(port_mapping, dict):
         try:
-            return int(port_mapping.get('published'))
+            return int(port_mapping.get("published"))
         except (TypeError, ValueError):
             return None
     if not isinstance(port_mapping, str):
         return None
 
-    parts = port_mapping.split(':')
+    parts = port_mapping.split(":")
     if len(parts) < 2:
         # Sólo puerto del contenedor: Docker asigna un puerto de host aleatorio
         return None
     try:
-        return int(parts[-2].split('/')[0].strip())
+        return int(parts[-2].split("/")[0].strip())
     except ValueError:
         return None
 
@@ -158,10 +155,7 @@ def _iter_compose_files(exclude_dir=None, max_depth: int = _MAX_SCAN_DEPTH):
             if len(current.parts) - root_depth >= max_depth:
                 dirnames[:] = []
             else:
-                dirnames[:] = [
-                    d for d in dirnames
-                    if not d.startswith('.') and d not in _PRUNED_DIRS
-                ]
+                dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in _PRUNED_DIRS]
 
             for name in _COMPOSE_NAMES:
                 if name not in filenames:
@@ -186,7 +180,7 @@ def collect_declared_ports(exclude_dir=None) -> dict[int, str]:
     declared: dict[int, str] = {}
     for compose_file in _iter_compose_files(exclude_dir):
         try:
-            with open(compose_file, 'r', encoding='utf-8') as f:
+            with open(compose_file, "r", encoding="utf-8") as f:
                 content = yaml.safe_load(f)
         except Exception:
             # Compose ilegible o YAML inválido: no es asunto nuestro
@@ -194,7 +188,7 @@ def collect_declared_ports(exclude_dir=None) -> dict[int, str]:
 
         if not isinstance(content, dict):
             continue
-        services = content.get('services')
+        services = content.get("services")
         if not isinstance(services, dict):
             continue
 
@@ -202,7 +196,7 @@ def collect_declared_ports(exclude_dir=None) -> dict[int, str]:
         for service_config in services.values():
             if not isinstance(service_config, dict):
                 continue
-            ports = service_config.get('ports')
+            ports = service_config.get("ports")
             if not isinstance(ports, list):
                 continue
             for port_mapping in ports:
@@ -243,18 +237,16 @@ def get_port_publisher(port: int) -> str | None:
     """Nombre del contenedor Docker que publica el puerto, o None."""
     try:
         output = subprocess.check_output(
-            ['docker', 'ps', '--format', '{{.Names}}\t{{.Ports}}'],
-            stderr=subprocess.DEVNULL,
-            text=True
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Ports}}"], stderr=subprocess.DEVNULL, text=True
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
 
     # El puerto del host aparece antes de '->': "0.0.0.0:8069->8069/tcp".
     # El límite de dígitos evita que 8069 matchee 18069.
-    pattern = re.compile(rf'(?<![0-9]){port}->')
+    pattern = re.compile(rf"(?<![0-9]){port}->")
     for line in output.splitlines():
-        name, _, ports = line.partition('\t')
+        name, _, ports = line.partition("\t")
         if pattern.search(ports):
             return name
     return None

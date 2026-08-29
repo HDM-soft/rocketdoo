@@ -71,7 +71,9 @@ async def get_logs(container_name: str, tail: int = 200):
     """Returns last N lines of logs for a container (non-streaming)."""
     result = subprocess.run(
         ["docker", "logs", "--tail", str(tail), container_name],
-        capture_output=True, text=True, timeout=15,
+        capture_output=True,
+        text=True,
+        timeout=15,
     )
     lines = (result.stdout + result.stderr).splitlines()
     return {"lines": lines}

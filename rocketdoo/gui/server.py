@@ -25,15 +25,16 @@ def create_app() -> FastAPI:
     )
 
     from rocketdoo.gui.api import router as api_router
+
     app.include_router(api_router, prefix="/api")
 
     _DOCKER_CMDS = {
-        "up":      ["docker", "compose", "up", "-d"],
-        "build":   ["docker", "compose", "build"],
-        "down":    ["docker", "compose", "down"],
+        "up": ["docker", "compose", "up", "-d"],
+        "build": ["docker", "compose", "build"],
+        "down": ["docker", "compose", "down"],
         "restart": ["docker", "compose", "restart"],
-        "stop":    ["docker", "compose", "stop"],
-        "pull":    ["docker", "compose", "pull"],
+        "stop": ["docker", "compose", "stop"],
+        "pull": ["docker", "compose", "pull"],
     }
 
     @app.websocket("/ws/docker/{action}")
@@ -90,7 +91,12 @@ def create_app() -> FastAPI:
         process = None
         try:
             process = await asyncio.create_subprocess_exec(
-                "docker", "logs", "-f", "--tail", str(tail), container_name,
+                "docker",
+                "logs",
+                "-f",
+                "--tail",
+                str(tail),
+                container_name,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )

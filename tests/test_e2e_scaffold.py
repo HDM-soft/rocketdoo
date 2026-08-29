@@ -6,6 +6,7 @@ under test — template rendering, port validation, .gitignore, odoo.conf — an
 the resulting docker-compose.yaml is handed to `docker compose config`, which
 is the only authority on whether Docker would actually accept it.
 """
+
 import shutil
 import subprocess
 
@@ -60,9 +61,7 @@ def scripted_wizard(monkeypatch):
     # show_welcome() blocks on a bare input() for "Press ENTER to start"
     monkeypatch.setattr("builtins.input", lambda *a: "")
     # Keep the port scan inside the tmpdir instead of walking the real home
-    monkeypatch.setattr(
-        "rocketdoo.init_project.collect_declared_ports", lambda *a, **kw: {}
-    )
+    monkeypatch.setattr("rocketdoo.init_project.collect_declared_ports", lambda *a, **kw: {})
     monkeypatch.setattr("rocketdoo.core.port_validation.is_port_in_use", lambda p: False)
     monkeypatch.setattr("rocketdoo.init_project.is_port_in_use", lambda p: False, raising=False)
 
@@ -87,9 +86,7 @@ class TestScaffold:
     def test_writes_a_gitignore_covering_every_secret(self, project_dir):
         scaffold_project()
         entries = {
-            ln.strip()
-            for ln in (project_dir / ".gitignore").read_text().splitlines()
-            if ln.strip() and not ln.startswith("#")
+            ln.strip() for ln in (project_dir / ".gitignore").read_text().splitlines() if ln.strip() and not ln.startswith("#")
         }
         assert {pat for pat, _ in SENSITIVE_ENTRIES} <= entries
 
@@ -155,11 +152,7 @@ class TestInit:
         result = _docker_compose_config(initialised)
         assert result.returncode == 0, result.stderr
         resolved = yaml.safe_load(result.stdout)
-        published = {
-            int(p["published"])
-            for svc in resolved["services"].values()
-            for p in svc.get("ports", [])
-        }
+        published = {int(p["published"]) for svc in resolved["services"].values() for p in svc.get("ports", [])}
         assert {8069, 8888} <= published
 
 

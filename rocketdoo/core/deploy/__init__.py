@@ -9,11 +9,4 @@ from .module_packager import ModulePackager
 from .odoo_sh import OdooSHDeployer
 from .vps import VPSDeployer
 
-__all__ = [
-    'BaseDeployer',
-    'DeploymentResult',
-    'DeployConfigManager',
-    'ModulePackager',
-    'VPSDeployer',
-    'OdooSHDeployer'
-]
+__all__ = ["BaseDeployer", "DeploymentResult", "DeployConfigManager", "ModulePackager", "VPSDeployer", "OdooSHDeployer"]

@@ -10,24 +10,25 @@ directory, so it could not be recovered either.
 Secrets live in .rkd/secrets/instance_{env}_db.env (0600), alongside the VPS
 credentials written by ssh_utils.resolve_auth().
 """
+
 import secrets
 import stat
 import string
 from pathlib import Path
 
-PG_PASS = 'ODOO_PG_PASS'
-ADMIN_PASSWD = 'ODOO_ADMIN_PASSWD'
+PG_PASS = "ODOO_PG_PASS"
+ADMIN_PASSWD = "ODOO_ADMIN_PASSWD"
 
-_HEADER = '# Rocketdoo instance secrets - do not commit\n'
+_HEADER = "# Rocketdoo instance secrets - do not commit\n"
 
 
 def random_password(length: int = 20) -> str:
     alphabet = string.ascii_letters + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 def secrets_file(project_path: Path, env: str) -> Path:
-    return Path(project_path) / '.rkd' / 'secrets' / f'instance_{env}_db.env'
+    return Path(project_path) / ".rkd" / "secrets" / f"instance_{env}_db.env"
 
 
 def load(project_path: Path, env: str) -> dict[str, str]:
@@ -39,9 +40,9 @@ def load(project_path: Path, env: str) -> dict[str, str]:
     values = {}
     for line in path.read_text().splitlines():
         line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        key, _, value = line.partition('=')
+        key, _, value = line.partition("=")
         values[key.strip()] = value.strip()
     return values
 
@@ -52,7 +53,7 @@ def save(project_path: Path, env: str, values: dict[str, str]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
 
     merged = {**load(project_path, env), **values}
-    body = ''.join(f'{key}={value}\n' for key, value in sorted(merged.items()))
+    body = "".join(f"{key}={value}\n" for key, value in sorted(merged.items()))
     path.write_text(_HEADER + body)
     path.chmod(stat.S_IRUSR | stat.S_IWUSR)
     return path
