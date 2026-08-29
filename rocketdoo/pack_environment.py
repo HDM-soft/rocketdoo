@@ -315,6 +315,11 @@ def pack_environment(no_db, output, db_name):
     backup_dir = project_dir / "rkd_backups"
     db_backup_path = None
     fs_backup_path = None
+    # Initialised here, not inside the `if not no_db` block below: with
+    # --no-db, or when the instance has no databases yet, none of the
+    # branches that assign it run, and the manifest at the end reads it
+    # anyway (UnboundLocalError).
+    filestore_base = None
 
     if not no_db:
         db_container = _get_db_container(compose_data) if compose_data else None
