@@ -5,7 +5,9 @@ GUI API — Module deployment (rkd deploy group).
 from pathlib import Path
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+from rocketdoo.core.models import DeployConfig
 
 router = APIRouter()
 
@@ -95,9 +97,18 @@ async def deploy_init(body: DeployInitRequest):
             "validations": {"check_manifest": True, "check_python_syntax": True},
             "logging": {"level": "INFO", "file": ".rkd/deploy.log", "console": True},
         }
+        # Validate before writing: an unusable deploy.yaml saved here would
+        # only surface later, at deploy time.
+        parsed = DeployConfig.model_validate(config)
+        errors = parsed.validation_errors()
+        if errors:
+            return {"ok": False, "error": "; ".join(errors)}
+
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False, allow_unicode=True))
         return {"ok": True}
+    except ValidationError as e:
+        return {"ok": False, "error": "; ".join(f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}" for err in e.errors())}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

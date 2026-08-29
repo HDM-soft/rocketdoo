@@ -8,9 +8,12 @@ from typing import Dict, List, Optional
 
 import questionary
 import yaml
+from pydantic import ValidationError
 from questionary import Style
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
+
+from rocketdoo.core.models import DeployConfig
 
 console = Console()
 
@@ -28,6 +31,15 @@ custom_style = Style(
         ("text", ""),
     ]
 )
+
+
+def _readable_errors(exc: ValidationError) -> List[str]:
+    """Turn pydantic's report into the field-named messages the CLI prints."""
+    messages = []
+    for error in exc.errors():
+        location = ".".join(str(part) for part in error["loc"]) or "config"
+        messages.append(f"{location}: {error['msg']}")
+    return messages
 
 
 class DeployConfigManager:
@@ -94,50 +106,11 @@ class DeployConfigManager:
         Returns:
             List of errors (empty if OK)
         """
-        errors = []
-
-        # Validate basic structure
-        if "modules" not in config:
-            errors.append("Missing 'modules' section")
-
-        if "targets" not in config:
-            errors.append("Missing 'targets' section")
-        elif not config["targets"]:
-            errors.append("No deployment targets configured")
-
-        # Validate each target
-        for target_name, target_config in config.get("targets", {}).items():
-            if "type" not in target_config:
-                errors.append(f"Target '{target_name}': missing 'type' field")
-
-            target_type = target_config.get("type")
-
-            # Validate VPS
-            if target_type == "vps":
-                if "connection" not in target_config:
-                    errors.append(f"Target '{target_name}': missing 'connection' section")
-                else:
-                    conn = target_config["connection"]
-                    required = ["host", "user"]
-                    for field in required:
-                        if field not in conn:
-                            errors.append(f"Target '{target_name}': missing connection.{field}")
-
-                if "deployment_type" not in target_config:
-                    errors.append(f"Target '{target_name}': missing 'deployment_type'")
-
-            # Validate Odoo.sh
-            elif target_type == "odoo-sh":
-                if "odoo_sh" not in target_config:
-                    errors.append(f"Target '{target_name}': missing 'odoo_sh' section")
-                else:
-                    odoo_sh = target_config["odoo_sh"]
-                    required = ["project_id", "branch"]
-                    for field in required:
-                        if field not in odoo_sh:
-                            errors.append(f"Target '{target_name}': missing odoo_sh.{field}")
-
-        return errors
+        try:
+            parsed = DeployConfig.model_validate(config)
+        except ValidationError as exc:
+            return _readable_errors(exc)
+        return parsed.validation_errors()
 
     def get_default_config(self) -> Dict:
         """
