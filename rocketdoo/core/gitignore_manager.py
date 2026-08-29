@@ -9,18 +9,19 @@ a plain `git add .` commits all of them, so scaffold/init always write one and
 The template lives at templates/.gitignore.jinja — named with the .jinja
 suffix so git does not apply it to Rocketdoo's own source tree.
 """
+
 from pathlib import Path
 
-_TEMPLATE = Path(__file__).parent.parent / 'templates' / '.gitignore.jinja'
+_TEMPLATE = Path(__file__).parent.parent / "templates" / ".gitignore.jinja"
 
 # Entries that must be present for credentials to stay out of the repo.
 # Kept deliberately short: these are the leak vectors, not the full template.
 SENSITIVE_ENTRIES = [
-    ('.ssh/', 'SSH private key copied into the build context'),
-    ('.rkd/secrets/', 'VPS passwords'),
-    ('odoo_pg_pass', 'PostgreSQL password'),
-    ('.rkd/instance.yaml', 'deployment config with admin_passwd'),
-    ('config/odoo.conf', 'Odoo config with admin_passwd'),
+    (".ssh/", "SSH private key copied into the build context"),
+    (".rkd/secrets/", "VPS passwords"),
+    ("odoo_pg_pass", "PostgreSQL password"),
+    (".rkd/instance.yaml", "deployment config with admin_passwd"),
+    ("config/odoo.conf", "Odoo config with admin_passwd"),
 ]
 
 
@@ -31,11 +32,7 @@ def template_content() -> str:
 
 def _entries(text: str) -> set[str]:
     """Non-comment, non-empty lines of a .gitignore."""
-    return {
-        line.strip()
-        for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith('#')
-    }
+    return {line.strip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")}
 
 
 def missing_entries(project_root: Path) -> list[tuple[str, str]]:
@@ -44,7 +41,7 @@ def missing_entries(project_root: Path) -> list[tuple[str, str]]:
 
     A missing .gitignore returns every entry.
     """
-    gitignore = Path(project_root) / '.gitignore'
+    gitignore = Path(project_root) / ".gitignore"
     if not gitignore.exists():
         return list(SENSITIVE_ENTRIES)
 
@@ -65,22 +62,22 @@ def ensure_gitignore(project_root: Path) -> tuple[str, list[str]]:
     only the missing sensitive entries are appended.
     """
     project_root = Path(project_root)
-    gitignore = project_root / '.gitignore'
+    gitignore = project_root / ".gitignore"
 
     if not gitignore.exists():
         gitignore.write_text(template_content())
-        return 'created', [pat for pat, _ in SENSITIVE_ENTRIES]
+        return "created", [pat for pat, _ in SENSITIVE_ENTRIES]
 
     missing = missing_entries(project_root)
     if not missing:
-        return 'ok', []
+        return "ok", []
 
     current = gitignore.read_text()
-    block = ['', '# ─── Added by Rocketdoo: secrets that must not be committed ───']
+    block = ["", "# ─── Added by Rocketdoo: secrets that must not be committed ───"]
     block += [pat for pat, _ in missing]
-    suffix = '\n'.join(block) + '\n'
-    gitignore.write_text(current if current.endswith('\n') else current + '\n')
-    with gitignore.open('a') as fh:
+    suffix = "\n".join(block) + "\n"
+    gitignore.write_text(current if current.endswith("\n") else current + "\n")
+    with gitignore.open("a") as fh:
         fh.write(suffix)
 
-    return 'appended', [pat for pat, _ in missing]
+    return "appended", [pat for pat, _ in missing]

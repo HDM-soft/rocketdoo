@@ -1,4 +1,5 @@
 import subprocess
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
@@ -10,6 +11,7 @@ async def get_project():
     """Returns project info and running container statuses."""
     try:
         from rocketdoo.project_info import get_project_info, project_exists
+
         exists = project_exists()
         if not exists:
             return {"exists": False}
@@ -26,12 +28,15 @@ async def get_containers():
     try:
         result = subprocess.run(
             ["docker", "compose", "ps", "--format", "json", "--all"],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if result.returncode != 0:
             return {"containers": [], "error": result.stderr.strip()}
 
         import json
+
         containers = []
         for line in result.stdout.strip().splitlines():
             line = line.strip()

@@ -1,12 +1,13 @@
-import os
 import shutil
-import click
 from pathlib import Path
+
+import click
 
 from rocketdoo.core.gitignore_manager import ensure_gitignore
 
 # Rendered into .gitignore instead of being copied verbatim
 GITIGNORE_TEMPLATE = ".gitignore.jinja"
+
 
 def scaffold_project(template="basic", force=False, verbose=False):
     """
@@ -57,7 +58,7 @@ def scaffold_project(template="basic", force=False, verbose=False):
                 if dest.exists() and not force:
                     click.echo(f"⚠️  Skipping {dest} (already exists, use --force to overwrite)")
                     continue
-                
+
                 shutil.copy2(src, dest)
                 if verbose:
                     click.echo(f"✅ Copied file: {dest}")

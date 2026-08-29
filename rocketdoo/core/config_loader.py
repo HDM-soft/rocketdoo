@@ -1,11 +1,14 @@
 # rocketdoo/core/config_loader.py
-import yaml
 from pathlib import Path
+
+import yaml
+
 
 def get_config_path(base_dir: Path = None) -> Path:
     if base_dir is None:
         base_dir = Path.cwd()
     return base_dir / "rocketdoo.yml"
+
 
 def load_config(base_dir: Path = None) -> dict:
     cfg_path = get_config_path(base_dir)
@@ -13,6 +16,7 @@ def load_config(base_dir: Path = None) -> dict:
         with open(cfg_path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     return {}
+
 
 def save_config(config: dict, base_dir: Path = None):
     cfg_path = get_config_path(base_dir)

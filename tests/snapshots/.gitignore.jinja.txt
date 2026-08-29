@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────
+# Secrets and credentials — NEVER commit these
+# ─────────────────────────────────────────────────────────────────────
+# SSH build context: holds the private key copied for private repos
+.ssh/
+# VPS passwords written by `rkd deploy` / `rkd instance`
+.rkd/secrets/
+# PostgreSQL password (Docker secret)
+odoo_pg_pass
+*.env
+!*.env.example
+# Deployment config: contains admin_passwd in clear text
+.rkd/instance.yaml
+# Odoo config: contains admin_passwd in clear text.
+# `rkd init` regenerates it. To version it, commit a sanitized
+# copy as config/odoo.conf.example instead.
+config/odoo.conf
+
+# ─────────────────────────────────────────────────────────────────────
+# Local state, logs and backups
+# ─────────────────────────────────────────────────────────────────────
+.rkd/deploy_backups/
+.rkd/deploy.log
+rkd-shared.json
+
+# ─────────────────────────────────────────────────────────────────────
+# External code — re-fetch instead of committing
+# ─────────────────────────────────────────────────────────────────────
+# Third-party repos cloned by gitman: `gitman install`
+external_addons/
+# Odoo Enterprise: proprietary, licensed separately
+enterprise/
+
+# ─────────────────────────────────────────────────────────────────────
+# Python
+# ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ─────────────────────────────────────────────────────────────────────
+# Editors and OS noise
+# ─────────────────────────────────────────────────────────────────────
+*.Identifier
+.DS_Store
+*.swp

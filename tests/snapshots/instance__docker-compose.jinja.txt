@@ -1,0 +1,103 @@
+name: demo-stage
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: Dockerfile.stage
+    image: demo-stage
+    container_name: demo-stage
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8069"
+      - "8072"
+    environment:
+      HOST: db
+      PORT: 5432
+      USER: odoo
+      PASSWORD_FILE: /run/secrets/postgresql_password
+    volumes:
+      - demo-stage-data:/var/lib/odoo
+      - ../extra-addons:/mnt/extra-addons
+
+      - ./config/odoo.conf:/etc/odoo/odoo.conf
+    secrets:
+      - postgresql_password
+    networks:
+      - traefik-public
+      - stage-internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.demo-stage-http.rule=Host(`stage.example.com`)"
+      - "traefik.http.routers.demo-stage-http.entrypoints=web"
+      - "traefik.http.routers.demo-stage-http.middlewares=redirect-https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.demo-stage.rule=Host(`stage.example.com`)"
+      - "traefik.http.routers.demo-stage.entrypoints=websecure"
+      - "traefik.http.routers.demo-stage.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.demo-stage.service=demo-stage-svc"
+      - "traefik.http.services.demo-stage-svc.loadbalancer.server.port=8069"
+      - "traefik.http.routers.demo-stage-lp.rule=Host(`stage.example.com`) && (PathPrefix(`/longpolling`) || PathPrefix(`/websocket`))"
+      - "traefik.http.routers.demo-stage-lp.entrypoints=websecure"
+      - "traefik.http.routers.demo-stage-lp.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.demo-stage-lp.service=demo-stage-lp-svc"
+      - "traefik.http.services.demo-stage-lp-svc.loadbalancer.server.port=8072"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8069/web/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    stop_grace_period: 1m
+
+  db:
+    image: postgres:15
+    container_name: demo-stage-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: odoo
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgresql_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c work_mem=8MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=50
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c wal_buffers=8MB
+      -c checkpoint_completion_target=0.9
+      -c max_wal_size=1GB
+
+    volumes:
+      - demo-stage-db:/var/lib/postgresql/data/pgdata
+    secrets:
+      - postgresql_password
+    networks:
+      - stage-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U odoo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  demo-stage-data:
+  demo-stage-db:
+
+secrets:
+  postgresql_password:
+    file: ./odoo_pg_pass
+
+networks:
+  traefik-public:
+    external: true
+  stage-internal:
+    driver: bridge

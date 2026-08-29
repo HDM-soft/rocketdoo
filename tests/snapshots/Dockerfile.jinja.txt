@@ -1,0 +1,41 @@
+FROM odoo:17.0
+
+COPY ./config/odoo.conf /etc/odoo/
+
+#COPY ./gitman.yaml /usr/lib/python3/dist-packages/odoo/
+
+COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
+
+USER root
+
+# Permite instalar con pip en la imagen base.
+# No usar --break-system-packages: llegó en pip 23 y las imágenes base viejas
+# no lo soportan (odoo:15.0/16.0 = Debian bullseye, pip 20.3; odoo:17.0 =
+# Ubuntu jammy, pip 22.0). Borrar EXTERNALLY-MANAGED sirve en todas: donde el
+# archivo no existe, el rm -f no falla.
+RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED
+
+# pipx no está en los repos de Debian bullseye (odoo:15.0/16.0). Es una
+# conveniencia para trabajar dentro del contenedor, no un requisito del build,
+# así que su ausencia no debe abortar la imagen.
+RUN apt update && \
+    apt install -y libssl-dev swig python3-dev gcc && \
+    apt install -y python3-m2crypto && \
+    apt install -y git && \
+    { apt install -y pipx || echo "pipx no disponible en esta imagen base, se omite"; } && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    python3 -m pip install debugpy gitman
+
+#RUN mkdir -p /root/.ssh
+#COPY ./.ssh/rsa /root/.ssh/id_rsa
+#RUN chmod 700 /root/.ssh/id_rsa
+#RUN echo "StrictHostKeyChecking no" >> /root/.ssh/config
+
+RUN git config --global http.postBuffer 104857600
+#RUN git config --global http.retry 5
+
+#RUN gitman install -r /usr/lib/python3/dist-packages/odoo/
+
+
+CMD python3 -m debugpy --listen 0.0.0.0:8888 /usr/bin/odoo -c /etc/odoo/odoo.conf

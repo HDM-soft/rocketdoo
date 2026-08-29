@@ -2,11 +2,11 @@
 GUI API — Workspace management.
 Discover Rocketdoo projects on the host, navigate between them, and create new ones.
 """
-import os
+
 import json
+import os
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -15,6 +15,7 @@ router = APIRouter()
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _default_scan_dir() -> Path:
     home = Path.home()
@@ -33,7 +34,10 @@ def _container_status(project_path: Path) -> dict:
     try:
         result = subprocess.run(
             ["docker", "compose", "ps", "--format", "json", "--all"],
-            capture_output=True, text=True, timeout=6, cwd=str(project_path),
+            capture_output=True,
+            text=True,
+            timeout=6,
+            cwd=str(project_path),
         )
         if result.returncode != 0:
             return {"total": 0, "running": 0}
@@ -46,16 +50,14 @@ def _container_status(project_path: Path) -> dict:
                 containers.append(json.loads(line))
             except Exception:
                 pass
-        running = sum(
-            1 for c in containers
-            if "running" in (c.get("State", "") or c.get("Status", "")).lower()
-        )
+        running = sum(1 for c in containers if "running" in (c.get("State", "") or c.get("Status", "")).lower())
         return {"total": len(containers), "running": running}
     except Exception:
         return {"total": 0, "running": 0}
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────────
+
 
 @router.get("")
 async def get_workspace():
@@ -125,8 +127,19 @@ async def discover_projects(body: DiscoverRequest):
     projects: list[dict] = []
     visited: set[str] = set()
 
-    _SKIP = {".git", "__pycache__", "node_modules", ".venv", "venv", ".env",
-             "dist", "build", ".tox", ".mypy_cache", ".pytest_cache"}
+    _SKIP = {
+        ".git",
+        "__pycache__",
+        "node_modules",
+        ".venv",
+        "venv",
+        ".env",
+        "dist",
+        "build",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
 
     def _scan(path: Path, depth: int) -> None:
         real = str(path.resolve())
@@ -139,13 +152,15 @@ async def discover_projects(body: DiscoverRequest):
                     continue
                 if _is_rkd_project(child):
                     status = _container_status(child)
-                    projects.append({
-                        "path": str(child),
-                        "name": child.name,
-                        "containers": status["total"],
-                        "running": status["running"],
-                        "is_current": str(child) == cwd,
-                    })
+                    projects.append(
+                        {
+                            "path": str(child),
+                            "name": child.name,
+                            "containers": status["total"],
+                            "running": status["running"],
+                            "is_current": str(child) == cwd,
+                        }
+                    )
                 else:
                     _scan(child, depth - 1)
         except PermissionError:

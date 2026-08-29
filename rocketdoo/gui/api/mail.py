@@ -1,6 +1,6 @@
 import subprocess
-import re
 from pathlib import Path
+
 from fastapi import APIRouter
 
 router = APIRouter()
@@ -38,9 +38,12 @@ def _mailpit_running() -> bool:
     try:
         r = subprocess.run(
             ["docker", "compose", "ps", "--format", "json", "mailpit"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         import json
+
         for line in r.stdout.strip().splitlines():
             try:
                 data = json.loads(line)
@@ -66,6 +69,7 @@ async def mail_status():
 async def mail_on():
     try:
         from rocketdoo.mail_cli import _enable_mailpit
+
         _enable_mailpit()
         return {"ok": True}
     except Exception as e:
@@ -76,6 +80,7 @@ async def mail_on():
 async def mail_off():
     try:
         from rocketdoo.mail_cli import _disable_mailpit
+
         _disable_mailpit()
         return {"ok": True}
     except Exception as e:

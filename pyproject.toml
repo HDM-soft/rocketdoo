@@ -50,3 +50,31 @@ rocketdoo = [
 
 [tool.setuptools]
 include-package-data = true
+
+# ─────────────────────────── Tests ───────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "docker: requires a working Docker daemon (skipped when unavailable)",
+    "slow: takes more than a couple of seconds",
+]
+filterwarnings = ["error::DeprecationWarning:rocketdoo.*"]
+
+# ─────────────────────────── Lint ────────────────────────────
+[tool.ruff]
+target-version = "py310"
+line-length = 127
+# Legacy modules pending removal in #137 (E2). config.py runs a wizard at
+# import time and main.py imports a module that no longer exists, so neither
+# can be linted or imported until they are deleted.
+extend-exclude = ["build", "rocketdoo/config.py", "rocketdoo/main.py", "rocketdoo/rocketdoo.py"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "W", "I"]
+# E501 (line-too-long) is pure style over 322 pre-existing lines; revisit in #137.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
