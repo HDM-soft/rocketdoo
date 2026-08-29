@@ -1,0 +1,59 @@
+name: demo
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    image: demo
+    container_name: odoo-demo
+    depends_on:
+      - db
+    ports:
+      - "8069:8069"
+      - "8888:8888"
+    volumes:
+      - demo-web-data:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/usr/lib/python3/dist-packages/odoo/extra-addons
+      #- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise
+      - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
+  db:
+    restart: unless-stopped
+    image: postgres:15
+    container_name: db-demo
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgresql_password
+      - POSTGRES_USER=root
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - demo-db-data:/var/lib/postgresql/data/pgdata
+    secrets:
+      - postgresql_password
+
+  # rkd:mailpit
+  #mailpit:
+  #  image: axllent/mailpit:latest
+  #  container_name: demo-mailpit
+  #  restart: unless-stopped
+  #  ports:
+  #    - "1025:1025"
+  #    - "8025:8025"
+  #  environment:
+  #    MP_MAX_MESSAGES: 5000
+  #    MP_DATABASE: /data/mailpit.db
+  #    MP_SMTP_AUTH_ACCEPT_ANY: 1
+  #    MP_SMTP_AUTH_ALLOW_INSECURE: 1
+  #  volumes:
+  #    - demo-mailpit-data:/data
+  # /rkd:mailpit
+
+volumes:
+  demo-web-data:
+  demo-db-data:
+  # rkd:mailpit
+  #demo-mailpit-data:
+  # /rkd:mailpit
+
+secrets:
+  postgresql_password:
+    file: odoo_pg_pass

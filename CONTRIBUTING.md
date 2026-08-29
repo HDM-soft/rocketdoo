@@ -10,6 +10,7 @@ Thank you for your interest in contributing to **Rocketdoo**! This guide covers 
 - [Setting up the development environment](#setting-up-the-development-environment)
 - [Installing Rocketdoo in development mode](#installing-rocketdoo-in-development-mode)
 - [Testing your branch without affecting your production install](#testing-your-branch-without-affecting-your-production-install)
+- [Tests and CI](#tests-and-ci)
 - [Step-by-step workflow](#step-by-step-workflow)
 - [Code conventions](#code-conventions)
 - [How to open a Pull Request](#how-to-open-a-pull-request)
@@ -194,6 +195,73 @@ pip install git+https://YOUR_TOKEN@github.com/HDM-soft/rocketdoo.git@feature/my-
 
 ---
 
+## Tests and CI
+
+The suite lives in `tests/` and runs with `pytest`. Install the development
+dependencies once:
+
+```bash
+pip install -e . -r requirements-dev.txt
+```
+
+### Running the tests
+
+```bash
+pytest                      # everything
+pytest -m "not docker"      # skip anything that needs a Docker daemon
+pytest -m docker            # only the end-to-end Docker checks
+pytest tests/test_imports.py -v
+```
+
+Tests that need Docker are marked `docker` and skip automatically when no
+daemon is reachable, so the suite is runnable on any machine.
+
+### What the suite covers
+
+| File | Covers |
+|------|--------|
+| `test_imports.py` | Every module imports, and every `from rocketdoo.x import y` resolves — including imports deferred inside functions |
+| `test_port_validation.py` | Parsing of compose port entries, own-project exclusion, container lookup |
+| `test_module_scanner.py` | What counts as an Odoo module and what does not |
+| `test_deploy_config_manager.py` | `deploy.yaml` round-trip and per-target validation |
+| `test_gitignore_manager.py` | Secret coverage without clobbering user rules |
+| `test_templates.py` | Jinja renders, with snapshots |
+| `test_e2e_scaffold.py` | Full `scaffold` + `init`, validated by `docker compose config` |
+
+### Snapshots
+
+Template renders are snapshotted under `tests/snapshots/`. When a template
+change is intentional, refresh them and commit the result:
+
+```bash
+UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py
+```
+
+### Lint and format
+
+```bash
+ruff check .          # lint
+ruff check . --fix    # apply the safe fixes
+ruff format .         # format
+```
+
+### CI
+
+`.github/workflows/ci.yml` runs on every pull request into `dev/v3`, `test/v3`
+and `main`: lint, tests on Python 3.10–3.13, the Docker end-to-end run, and a
+package build that checks the templates actually ship in the wheel. No job uses
+`continue-on-error` — a red run blocks the merge.
+
+On pull requests heading into `test/v3` or `main` an extra matrix builds the
+generated `Dockerfile` against `odoo:15.0` through `odoo:19.0`. Those images
+span three Debian/Ubuntu bases with three different pip versions, which is how
+a pip flag can work on one and break on another (see issue #152).
+
+`publish-rkd.yml` reuses this same workflow as a blocking gate before
+publishing to PyPI, and refuses to publish a version that already exists there.
+
+---
+
 ## Step-by-step workflow
 
 ### 1. Open an issue and sync with the latest `dev/v3`
@@ -223,11 +291,11 @@ Types: `fix`, `feat`, `mig`, `chore`, `docs`, `refactor` (and `hotfix`, branched
 Make your changes, run the tests, and make sure everything works:
 
 ```bash
-# Run tests (adjust to the project's test runner)
-pytest
-# or
-python -m pytest tests/
+pytest                  # the full suite
+ruff check . && ruff format --check .
 ```
+
+See [Tests and CI](#tests-and-ci) for markers, snapshots and what CI runs.
 
 ### 4. Write descriptive commits
 

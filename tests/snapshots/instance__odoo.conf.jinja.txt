@@ -1,0 +1,26 @@
+[options]
+addons_path = /mnt/extra-addons
+
+data_dir = /var/lib/odoo
+admin_passwd = s3cr3t-admin
+
+db_host = db
+db_port = 5432
+db_user = odoo
+db_password = False
+db_maxconn = 64
+
+log_level = info
+logfile = /var/log/odoo/odoo-server.log
+
+workers = 2
+gevent_port = 8072
+
+limit_memory_hard = 1610612736
+limit_memory_soft = 1073741824
+limit_request = 8192
+limit_time_cpu = 60
+limit_time_real = 120
+
+proxy_mode = True
+list_db = False

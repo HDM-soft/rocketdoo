@@ -1,11 +1,13 @@
 """
 GUI API — Module deployment (rkd deploy group).
 """
-import subprocess
+
 from pathlib import Path
-from typing import Optional
+
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+from rocketdoo.core.models import DeployConfig
 
 router = APIRouter()
 
@@ -18,6 +20,7 @@ def _deploy_yaml_path() -> Path:
 async def get_deploy_config():
     """Read and return deploy.yaml content."""
     import yaml
+
     p = _deploy_yaml_path()
     if not p.exists():
         return {"exists": False, "config": None}
@@ -31,6 +34,7 @@ async def get_deploy_config():
 async def get_targets():
     """Return list of configured deploy targets."""
     import yaml
+
     p = _deploy_yaml_path()
     if not p.exists():
         return {"targets": []}
@@ -66,6 +70,7 @@ class DeployInitRequest(BaseModel):
 async def deploy_init(body: DeployInitRequest):
     """Create or overwrite .rkd/deploy.yaml with the provided target config."""
     import yaml
+
     p = _deploy_yaml_path()
     if p.exists() and not body.force:
         return {"ok": False, "error": "deploy.yaml already exists. Use force=true to overwrite."}
@@ -80,9 +85,9 @@ async def deploy_init(body: DeployInitRequest):
                 body.target_name: {
                     "type": body.target_type,
                     "connection": {
-                        "host":    body.host,
-                        "user":    body.user,
-                        "port":    body.ssh_port,
+                        "host": body.host,
+                        "user": body.user,
+                        "port": body.ssh_port,
                         "ssh_key": body.ssh_key,
                     },
                     "deployment_type": body.deployment_type,
@@ -92,9 +97,18 @@ async def deploy_init(body: DeployInitRequest):
             "validations": {"check_manifest": True, "check_python_syntax": True},
             "logging": {"level": "INFO", "file": ".rkd/deploy.log", "console": True},
         }
+        # Validate before writing: an unusable deploy.yaml saved here would
+        # only surface later, at deploy time.
+        parsed = DeployConfig.model_validate(config)
+        errors = parsed.validation_errors()
+        if errors:
+            return {"ok": False, "error": "; ".join(errors)}
+
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(yaml.dump(config, default_flow_style=False, sort_keys=False, allow_unicode=True))
         return {"ok": True}
+    except ValidationError as e:
+        return {"ok": False, "error": "; ".join(f"{'.'.join(str(x) for x in err['loc'])}: {err['msg']}" for err in e.errors())}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -128,6 +142,7 @@ async def deploy_run(body: DeployRunRequest):
         target_type = target_config.get("type", "vps")
         if target_type == "vps":
             from rocketdoo.core.deploy.vps import VPSDeployer
+
             deployer = VPSDeployer(body.target, target_config, project_path)
         else:
             return {"ok": False, "error": f"Target type '{target_type}' not yet supported via GUI."}
@@ -152,6 +167,7 @@ async def deploy_validate():
     """Validate all Odoo modules (manifest + Python syntax)."""
     try:
         from rocketdoo.core.module_scanner import ModuleScanner
+
         scanner = ModuleScanner(base_path=Path.cwd() / "addons")
         modules = scanner.scan()
         errors = {}

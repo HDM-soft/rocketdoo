@@ -2,6 +2,7 @@
 import shutil
 from pathlib import Path
 
+
 def copy_templates(src_dir: Path, dest_dir: Path):
     """Copia un árbol de plantillas al destino."""
     for item in src_dir.iterdir():

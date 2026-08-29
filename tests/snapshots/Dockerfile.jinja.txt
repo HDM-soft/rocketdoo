@@ -1,0 +1,44 @@
+FROM odoo:17.0
+
+COPY ./config/odoo.conf /etc/odoo/
+
+#COPY ./gitman.yaml /usr/lib/python3/dist-packages/odoo/
+
+COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
+
+USER root
+
+# pipx no está en los repos de Debian bullseye (odoo:15.0/16.0). Es una
+# conveniencia para trabajar dentro del contenedor, no un requisito del build,
+# así que su ausencia no debe abortar la imagen.
+#
+# El rm de EXTERNALLY-MANAGED va acá, en la misma capa y DESPUÉS de los apt
+# install, no en una capa previa: python3-dev arrastra el paquete python3.N,
+# que vuelve a colocar el archivo. Borrarlo antes no sirve de nada en
+# odoo:18.0/19.0 (Ubuntu noble), donde el marcador sí existe.
+#
+# No usar --break-system-packages para lo mismo: llegó en pip 23 y las imágenes
+# viejas no lo soportan (odoo:15.0/16.0 = bullseye, pip 20.3; odoo:17.0 =
+# jammy, pip 22.0). Donde el archivo no existe, el rm -f no falla.
+RUN apt update && \
+    apt install -y libssl-dev swig python3-dev gcc && \
+    apt install -y python3-m2crypto && \
+    apt install -y git && \
+    { apt install -y pipx || echo "pipx no disponible en esta imagen base, se omite"; } && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -f /usr/lib/python*/EXTERNALLY-MANAGED && \
+    python3 -m pip install debugpy gitman
+
+#RUN mkdir -p /root/.ssh
+#COPY ./.ssh/rsa /root/.ssh/id_rsa
+#RUN chmod 700 /root/.ssh/id_rsa
+#RUN echo "StrictHostKeyChecking no" >> /root/.ssh/config
+
+RUN git config --global http.postBuffer 104857600
+#RUN git config --global http.retry 5
+
+#RUN gitman install -r /usr/lib/python3/dist-packages/odoo/
+
+
+CMD python3 -m debugpy --listen 0.0.0.0:8888 /usr/bin/odoo -c /etc/odoo/odoo.conf
