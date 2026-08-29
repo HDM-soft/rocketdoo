@@ -132,10 +132,15 @@ class ModuleScanner:
     def should_exclude(self, path: Path) -> bool:
         """Checks if a path should be excluded"""
         from fnmatch import fnmatch
-        
+
         path_str = str(path)
         for pattern in self.exclude_patterns:
             if fnmatch(path_str, pattern):
+                return True
+            # A module directory is the last path segment, so "*/tests/*" never
+            # matched the tests directory itself -- only things nested under it.
+            # Without this, a tests/__manifest__.py was reported as a module.
+            if pattern.endswith('/*') and fnmatch(path_str, pattern[:-2]):
                 return True
         return False
     
