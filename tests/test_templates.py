@@ -245,33 +245,42 @@ class TestDockerfilePipInstall:
     def dockerfile(self):
         return render("Dockerfile.jinja", **PROJECT_CONTEXT)
 
-    def test_does_not_use_break_system_packages(self, dockerfile):
+    @pytest.fixture
+    def instructions(self, dockerfile):
+        """The Dockerfile without comments — what actually runs.
+
+        The comments deliberately mention --break-system-packages to explain
+        why it is not used, so a plain substring check would fail on them.
+        """
+        return "\n".join(line for line in dockerfile.splitlines() if not line.lstrip().startswith("#"))
+
+    def test_does_not_use_break_system_packages(self, instructions):
         """pip 20.3 (bullseye) and 22.0 (jammy) reject the flag outright."""
-        assert "--break-system-packages" not in dockerfile
+        assert "--break-system-packages" not in instructions
 
-    def test_removes_the_externally_managed_marker(self, dockerfile):
-        assert "rm -f /usr/lib/python*/EXTERNALLY-MANAGED" in dockerfile
+    def test_removes_the_externally_managed_marker(self, instructions):
+        assert "rm -f /usr/lib/python*/EXTERNALLY-MANAGED" in instructions
 
-    def test_the_marker_is_removed_after_apt_and_before_pip(self, dockerfile):
+    def test_the_marker_is_removed_after_apt_and_before_pip(self, instructions):
         """Order is the whole bug: python3-dev reinstates the marker.
 
         A removal in an earlier layer is undone by the apt install, so pip then
         fails with externally-managed-environment on Ubuntu noble.
         """
-        removal = dockerfile.index("rm -f /usr/lib/python*/EXTERNALLY-MANAGED")
-        apt_install = dockerfile.rindex("apt install -y python3-m2crypto")
-        pip_install = dockerfile.index("python3 -m pip install")
+        removal = instructions.index("rm -f /usr/lib/python*/EXTERNALLY-MANAGED")
+        apt_install = instructions.rindex("apt install -y python3-m2crypto")
+        pip_install = instructions.index("python3 -m pip install")
 
         assert apt_install < removal < pip_install, (
             "EXTERNALLY-MANAGED must be removed after the apt installs (python3-dev puts it back) and before pip runs"
         )
 
-    def test_the_removal_shares_a_layer_with_pip(self, dockerfile):
+    def test_the_removal_shares_a_layer_with_pip(self, instructions):
         """Same RUN: a separate layer would be undone by any later apt."""
-        run_blocks = dockerfile.split("\nRUN ")
+        run_blocks = instructions.split("\nRUN ")
         pip_block = next(b for b in run_blocks if "python3 -m pip install" in b)
         assert "EXTERNALLY-MANAGED" in pip_block
 
-    def test_pipx_failure_does_not_abort_the_build(self, dockerfile):
+    def test_pipx_failure_does_not_abort_the_build(self, instructions):
         """pipx is not packaged for bullseye (odoo:15.0/16.0)."""
-        assert "|| echo" in dockerfile
+        assert "|| echo" in instructions
