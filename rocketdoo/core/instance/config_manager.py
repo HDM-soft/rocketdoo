@@ -13,6 +13,7 @@ from questionary import Style
 from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
+from rocketdoo.core.models import InstanceConfig
 from rocketdoo.core.ssh_manager import list_private_keys
 
 console = Console()
@@ -84,7 +85,10 @@ class InstanceConfigManager:
     def load(self) -> dict:
         if not self.exists():
             raise FileNotFoundError(f"Instance config not found: {self.config_path}")
-        return yaml.safe_load(self.config_path.read_text()) or {}
+        raw = yaml.safe_load(self.config_path.read_text()) or {}
+        # Normalise through the model so a file written by an older GUI (flat
+        # connection fields, no `environments` wrapper) still deploys.
+        return InstanceConfig.model_validate(raw).to_yaml_dict()
 
     def save(self, config: dict):
         self.config_path.parent.mkdir(parents=True, exist_ok=True)

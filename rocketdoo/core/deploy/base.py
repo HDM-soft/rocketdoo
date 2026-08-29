@@ -6,28 +6,13 @@ Abstract base class for all deployers
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from rich.console import Console
 
+from rocketdoo.core.models import DeploymentResult
+
 console = Console()
-
-
-class DeploymentResult:
-    """Result of a deployment operation"""
-
-    def __init__(self, success: bool, message: str, details: Optional[Dict] = None):
-        self.success = success
-        self.message = message
-        self.details = details or {}
-        self.timestamp = datetime.now()
-
-    def __bool__(self):
-        return self.success
-
-    def __str__(self):
-        status = "✅ SUCCESS" if self.success else "❌ FAILED"
-        return f"{status}: {self.message}"
 
 
 class BaseDeployer(ABC):
