@@ -57,5 +57,7 @@ def gui_command(port, host, auto_open, cwd):
 
         threading.Thread(target=_open, daemon=True).start()
 
-    app = create_app()
+    # host/port reach the app so CORS can allow exactly the origin the user
+    # will open, and nothing else.
+    app = create_app(host=host, port=port)
     uvicorn.run(app, host=host, port=port, log_level="error")

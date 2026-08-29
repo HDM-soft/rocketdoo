@@ -7,8 +7,28 @@ from fastapi.responses import FileResponse, JSONResponse
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+DEFAULT_PORT = 8070
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1", "0.0.0.0")
 
-def create_app() -> FastAPI:
+
+def local_origins(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> list[str]:
+    """Browser origins allowed to call this API.
+
+    The SPA is served from this same app, so its own requests are same-origin
+    and need no CORS at all. The header only ever matters for a *different*
+    page calling in — which is exactly what must not be allowed: these
+    endpoints drive Docker and browse the filesystem, and binding to localhost
+    is no protection, since the request comes from the user's own browser.
+    """
+    origins = [f"http://localhost:{port}", f"http://127.0.0.1:{port}"]
+    if host not in _LOOPBACK_HOSTS:
+        # Explicitly bound elsewhere (e.g. --host 192.168.1.10): allow that too,
+        # otherwise the page the user actually opens cannot call its own API.
+        origins.append(f"http://{host}:{port}")
+    return origins
+
+
+def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
     app = FastAPI(
         title="Rocketdoo GUI",
         version="3.0.0",
@@ -16,9 +36,12 @@ def create_app() -> FastAPI:
         redoc_url=None,
     )
 
+    # Not allow_origins=["*"]: with allow_credentials=True Starlette echoes the
+    # caller's Origin back, so any site the user visited while `rkd gui` was
+    # running could read /api/workspace and POST /api/docker/down.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=local_origins(host, port),
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
