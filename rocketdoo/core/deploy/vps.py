@@ -4,7 +4,6 @@ Deploys Odoo modules to VPS servers (Docker or Native)
 """
 
 import os
-import shutil
 import stat
 import subprocess
 from getpass import getpass
@@ -13,6 +12,8 @@ from typing import Dict, List
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+
+from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref
 
 from .base import BaseDeployer, DeploymentResult
 from .module_packager import ModulePackager
@@ -28,12 +29,6 @@ class VPSDeployer(BaseDeployer):
     Uses SSH/SCP for file transfer and remote command execution
     Supports both SSH key and password authentication
     """
-
-    def _check_sshpass(self) -> bool:
-        """
-        Check if sshpass is available in system
-        """
-        return shutil.which("sshpass") is not None
 
     def __init__(self, target_name: str, config: Dict, project_path: Path):
         """
@@ -68,9 +63,9 @@ class VPSDeployer(BaseDeployer):
             self.auth_method = None
 
         # Resolve environment variables in password
-        if self.password and self.password.startswith("${") and self.password.endswith("}"):
-            env_var = self.password[2:-1]
-            self.password = os.environ.get(env_var)
+        env_var = env_ref_name(self.password) if self.password else None
+        if env_var:
+            self.password = resolve_env_ref(self.password)
             if not self.password:
                 console.print(f"[yellow]Warning: Environment variable {env_var} not set[/yellow]")
 
@@ -143,7 +138,7 @@ class VPSDeployer(BaseDeployer):
         elif self.auth_method == "password":
             if not self.password:
                 errors.append("Password authentication selected but 'password' not configured or environment variable not set")
-            elif not self._check_sshpass():
+            elif not check_sshpass():
                 errors.append("Password authentication requires 'sshpass'. Install it with: sudo apt install sshpass")
 
         # Validate type-specific config
