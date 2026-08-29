@@ -160,6 +160,88 @@ def _container_running(service: str) -> bool:
 
 # ─── command group ────────────────────────────────────────────────────────────
 
+class MailpitError(RuntimeError):
+    """Mailpit cannot be toggled in this project."""
+
+    def __init__(self, message: str, hint: str = ''):
+        super().__init__(message)
+        self.hint = hint
+
+
+def _enable_mailpit(restart_web: bool = True) -> dict:
+    """Enable Mailpit in docker-compose.yaml and point odoo.conf at it.
+
+    Shared by `rkd mail on` and the GUI endpoint so the two cannot drift.
+    Returns a report of what actually changed; callers render their own output.
+    Raises MailpitError when the project cannot support Mailpit at all.
+    """
+    compose = _compose_path()
+    if not compose:
+        raise MailpitError('No docker-compose.yaml found.', 'Run rkd init first.')
+
+    content = compose.read_text()
+    if not _has_markers(content):
+        raise MailpitError(
+            'Mailpit block not found in docker-compose.yaml.',
+            'This project was initialized before v3. Re-run rkd scaffold to update the template.',
+        )
+
+    if _is_enabled(content):
+        return {'changed': False, 'conf_updated': False, 'started': False, 'restarted': False}
+
+    compose.write_text(_toggle_compose(content, enable=True))
+
+    conf = _odoo_conf_path()
+    conf_updated = False
+    if conf:
+        conf.write_text(_toggle_smtp(conf.read_text(), enable=True))
+        conf_updated = True
+
+    started = _run_compose('up', '-d', 'mailpit') == 0
+
+    restarted = False
+    if restart_web and _container_running(_WEB_SERVICE):
+        _run_compose('restart', _WEB_SERVICE)
+        restarted = True
+
+    return {'changed': True, 'conf_updated': conf_updated, 'started': started, 'restarted': restarted}
+
+
+def _disable_mailpit(restart_web: bool = True) -> dict:
+    """Stop Mailpit, comment its block back out and restore odoo.conf SMTP.
+
+    Counterpart of _enable_mailpit; same contract.
+    """
+    compose = _compose_path()
+    if not compose:
+        raise MailpitError('No docker-compose.yaml found.')
+
+    content = compose.read_text()
+    if not _has_markers(content):
+        raise MailpitError('Mailpit block not found in docker-compose.yaml.')
+
+    if not _is_enabled(content):
+        return {'changed': False, 'conf_updated': False, 'restarted': False}
+
+    _run_compose('stop', 'mailpit')
+    _run_compose('rm', '-f', 'mailpit')
+
+    compose.write_text(_toggle_compose(content, enable=False))
+
+    conf = _odoo_conf_path()
+    conf_updated = False
+    if conf:
+        conf.write_text(_toggle_smtp(conf.read_text(), enable=False))
+        conf_updated = True
+
+    restarted = False
+    if restart_web and _container_running(_WEB_SERVICE):
+        _run_compose('restart', _WEB_SERVICE)
+        restarted = True
+
+    return {'changed': True, 'conf_updated': conf_updated, 'restarted': restarted}
+
+
 @click.group(name='mail')
 def mail():
     """Manage Mailpit email testing service.
@@ -189,61 +271,43 @@ def mail():
 @mail.command(name='on')
 def mail_on():
     """Enable Mailpit for outgoing email testing."""
-    compose = _compose_path()
-    if not compose:
-        console.print('\n[red]No docker-compose.yaml found. Run rkd init first.[/red]\n')
+    try:
+        report = _enable_mailpit()
+    except MailpitError as exc:
+        console.print(f'\n[yellow]{exc}[/yellow]')
+        if exc.hint:
+            console.print(f'[dim]{exc.hint}[/dim]')
+        console.print()
         return
 
-    content = compose.read_text()
-
-    if not _has_markers(content):
-        console.print(
-            '\n[yellow]Mailpit block not found in docker-compose.yaml.[/yellow]\n'
-            '[dim]This project was initialized before v3. '
-            'Re-run rkd scaffold to update the template.[/dim]\n'
-        )
-        return
-
-    if _is_enabled(content):
+    if not report['changed']:
         console.print(
             f'\n[green]Mailpit is already enabled.[/green]\n'
-            f'[dim]Web UI → http://localhost:{_MAILPIT_WEB_PORT}[/dim]\n'
+            f'[dim]Web UI \u2192 http://localhost:{_MAILPIT_WEB_PORT}[/dim]\n'
         )
         return
 
     console.print()
     console.print(Panel(
         '[bold cyan]Enabling Mailpit[/bold cyan]\n\n'
-        '[dim]SMTP testing service — all outgoing emails will be captured[/dim]',
+        '[dim]SMTP testing service \u2014 all outgoing emails will be captured[/dim]',
         border_style='cyan', box=box.ROUNDED
     ))
     console.print()
 
-    # 1. Uncomment mailpit blocks in docker-compose
-    compose.write_text(_toggle_compose(content, enable=True))
-    console.print('[green]✓[/green] docker-compose.yaml updated')
-
-    # 2. Update SMTP settings in odoo.conf
-    conf = _odoo_conf_path()
-    if conf:
-        conf.write_text(_toggle_smtp(conf.read_text(), enable=True))
-        console.print(f'[green]✓[/green] odoo.conf → smtp_server = mailpit, smtp_port = {_MAILPIT_SMTP_PORT}')
+    console.print('[green]\u2713[/green] docker-compose.yaml updated')
+    if report['conf_updated']:
+        console.print(f'[green]\u2713[/green] odoo.conf \u2192 smtp_server = mailpit, smtp_port = {_MAILPIT_SMTP_PORT}')
     else:
-        console.print('[yellow]⚠ odoo.conf not found — update SMTP settings manually[/yellow]')
+        console.print('[yellow]\u26a0 odoo.conf not found \u2014 update SMTP settings manually[/yellow]')
 
-    # 3. Start mailpit container
-    console.print('\n[dim]Starting mailpit container...[/dim]')
-    rc = _run_compose('up', '-d', 'mailpit')
-    if rc != 0:
-        console.print('[yellow]⚠ Could not start mailpit (is Docker running?)[/yellow]')
+    if report['started']:
+        console.print('[green]\u2713[/green] mailpit started')
     else:
-        console.print('[green]✓[/green] mailpit started')
+        console.print('[yellow]\u26a0 Could not start mailpit (is Docker running?)[/yellow]')
 
-    # 4. Restart Odoo web to pick up new SMTP config
-    if _container_running(_WEB_SERVICE):
-        console.print(f'[dim]Restarting {_WEB_SERVICE} to apply SMTP settings...[/dim]')
-        _run_compose('restart', _WEB_SERVICE)
-        console.print(f'[green]✓[/green] {_WEB_SERVICE} restarted')
+    if report['restarted']:
+        console.print(f'[green]\u2713[/green] {_WEB_SERVICE} restarted')
 
     console.print()
     console.print(Panel(
@@ -259,18 +323,13 @@ def mail_on():
 @mail.command(name='off')
 def mail_off():
     """Disable Mailpit and restore default SMTP settings."""
-    compose = _compose_path()
-    if not compose:
-        console.print('\n[red]No docker-compose.yaml found.[/red]\n')
+    try:
+        report = _disable_mailpit()
+    except MailpitError as exc:
+        console.print(f'\n[yellow]{exc}[/yellow]\n')
         return
 
-    content = compose.read_text()
-
-    if not _has_markers(content):
-        console.print('\n[yellow]Mailpit block not found in docker-compose.yaml.[/yellow]\n')
-        return
-
-    if not _is_enabled(content):
+    if not report['changed']:
         console.print('\n[dim]Mailpit is already disabled.[/dim]\n')
         return
 
@@ -281,29 +340,15 @@ def mail_off():
     ))
     console.print()
 
-    # 1. Stop and remove mailpit container
-    console.print('[dim]Stopping mailpit container...[/dim]')
-    _run_compose('stop', 'mailpit')
-    _run_compose('rm', '-f', 'mailpit')
-    console.print('[green]✓[/green] mailpit stopped')
-
-    # 2. Comment mailpit blocks back out in docker-compose
-    compose.write_text(_toggle_compose(content, enable=False))
-    console.print('[green]✓[/green] docker-compose.yaml updated')
-
-    # 3. Restore SMTP defaults in odoo.conf
-    conf = _odoo_conf_path()
-    if conf:
-        conf.write_text(_toggle_smtp(conf.read_text(), enable=False))
-        console.print('[green]✓[/green] odoo.conf SMTP settings restored to defaults')
+    console.print('[green]\u2713[/green] mailpit stopped')
+    console.print('[green]\u2713[/green] docker-compose.yaml updated')
+    if report['conf_updated']:
+        console.print('[green]\u2713[/green] odoo.conf SMTP settings restored to defaults')
     else:
-        console.print('[yellow]⚠ odoo.conf not found[/yellow]')
+        console.print('[yellow]\u26a0 odoo.conf not found[/yellow]')
 
-    # 4. Restart Odoo web to apply restored SMTP config
-    if _container_running(_WEB_SERVICE):
-        console.print(f'[dim]Restarting {_WEB_SERVICE}...[/dim]')
-        _run_compose('restart', _WEB_SERVICE)
-        console.print(f'[green]✓[/green] {_WEB_SERVICE} restarted')
+    if report['restarted']:
+        console.print(f'[green]\u2713[/green] {_WEB_SERVICE} restarted')
 
     console.print()
     console.print('[dim]Mailpit disabled. Emails are no longer captured locally.[/dim]\n')

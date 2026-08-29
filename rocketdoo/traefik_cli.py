@@ -230,6 +230,22 @@ networks:
 
 # ─── command group ────────────────────────────────────────────────────────────
 
+def _disable_traefik(restart: bool = True) -> bool:
+    """Remove the Traefik override and bring the project back on direct ports.
+
+    Shared by `rkd traefik off` and the GUI endpoint. Returns False when the
+    project was not connected to Traefik in the first place.
+    """
+    override = Path.cwd() / _OVERRIDE_FILE
+    if not override.exists():
+        return False
+
+    override.unlink()
+    if restart:
+        _run_compose('up', '-d')
+    return True
+
+
 @click.group(name='traefik')
 def traefik():
     """Manage Traefik reverse proxy integration.
@@ -431,12 +447,10 @@ def traefik_off():
     ))
     console.print()
 
-    override.unlink()
-    console.print(f'[green]✓[/green] Removed {_OVERRIDE_FILE}')
-
     console.print('[dim]Restarting project without Traefik...[/dim]')
-    _run_compose('up', '-d')
-    console.print('[green]✓[/green] Project restarted')
+    _disable_traefik()
+    console.print(f'[green]\u2713[/green] Removed {_OVERRIDE_FILE}')
+    console.print('[green]\u2713[/green] Project restarted')
 
     console.print('\n[dim]Traefik disabled. Project is accessible via direct ports again.[/dim]\n')
 
