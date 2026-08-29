@@ -31,9 +31,13 @@ console = Console()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 CONFIG_TEMPLATE_DIR = os.path.join(TEMPLATES_DIR, "config")  # templates/config
-CONFIG_OUTPUT_DIR = os.path.join(os.getcwd(), "config")       # ./config
 VSCODE_TEMPLATE_DIR = os.path.join(TEMPLATES_DIR, ".vscode")   # templates/.vscode
-VSCODE_OUTPUT_DIR = os.path.join(os.getcwd(), ".vscode")
+
+# Output paths are deliberately NOT module-level constants: os.getcwd() at
+# import time freezes whatever directory the process started in, so a caller
+# that imports this module and then changes directory (the GUI navigates
+# between projects) would write odoo.conf into the previous project.
+# render_template() resolves relative paths against the current directory.
 
 def render_template(template_dir, template_name, output_name, **context):
     """Render a Jinja2 template in the current or output directory"""
@@ -302,11 +306,11 @@ def init_project():
 
     # Generate config/odoo.conf from templates/config/odoo.conf.jinja
     conf_template = "odoo.conf.jinja"
-    conf_output = os.path.join(CONFIG_OUTPUT_DIR, "odoo.conf")
+    conf_output = os.path.join("config", "odoo.conf")
     render_template(CONFIG_TEMPLATE_DIR, conf_template, conf_output, **context)
     
     vscode_template = "launch.json.jinja"
-    vscode_output = os.path.join(VSCODE_OUTPUT_DIR, "launch.json")
+    vscode_output = os.path.join(".vscode", "launch.json")
     render_template(VSCODE_TEMPLATE_DIR, vscode_template, vscode_output, **context)
 
     # ========== CONFIGURE ENTERPRISE IF SELECTED ==========
