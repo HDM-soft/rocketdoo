@@ -3,13 +3,13 @@ GUI API — Workspace management.
 Discover Rocketdoo projects on the host, navigate between them, and create new ones.
 """
 
-import json
 import os
-import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from rocketdoo.core.compose import compose_ps, is_running
 
 router = APIRouter()
 
@@ -31,29 +31,11 @@ def _is_rkd_project(p: Path) -> bool:
 
 
 def _container_status(project_path: Path) -> dict:
-    try:
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "json", "--all"],
-            capture_output=True,
-            text=True,
-            timeout=6,
-            cwd=str(project_path),
-        )
-        if result.returncode != 0:
-            return {"total": 0, "running": 0}
-        containers = []
-        for line in result.stdout.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                containers.append(json.loads(line))
-            except Exception:
-                pass
-        running = sum(1 for c in containers if "running" in (c.get("State", "") or c.get("Status", "")).lower())
-        return {"total": len(containers), "running": running}
-    except Exception:
-        return {"total": 0, "running": 0}
+    containers = compose_ps("--all", cwd=project_path, timeout=6)
+    return {
+        "total": len(containers),
+        "running": sum(1 for c in containers if is_running(c)),
+    }
 
 
 # ── endpoints ─────────────────────────────────────────────────────────────────

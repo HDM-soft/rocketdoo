@@ -8,18 +8,15 @@ Mirrors the auth pattern from core/deploy/vps.py:
 """
 
 import os
-import shutil
 import stat
 from getpass import getpass
 from pathlib import Path
 
 from rich.console import Console
 
+from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref
+
 console = Console()
-
-
-def _check_sshpass() -> bool:
-    return shutil.which("sshpass") is not None
 
 
 def resolve_auth(vps_cfg: dict, env: str, project_path: Path) -> dict:
@@ -51,9 +48,9 @@ def resolve_auth(vps_cfg: dict, env: str, project_path: Path) -> dict:
     password = vps_cfg.get("password", "")
 
     # Resolve env var reference  (e.g. ${INSTANCE_STAGE_PASSWORD})
-    if password.startswith("${") and password.endswith("}"):
-        var_name = password[2:-1]
-        password = os.environ.get(var_name, "")
+    var_name = env_ref_name(password)
+    if var_name:
+        password = resolve_env_ref(password)
         if not password:
             console.print(f"[yellow]Environment variable {var_name} not set.[/yellow]")
 
@@ -72,7 +69,7 @@ def resolve_auth(vps_cfg: dict, env: str, project_path: Path) -> dict:
         secret_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
         console.print(f"[green]✔[/green] Password stored in {secret_file}")
 
-    if not _check_sshpass():
+    if not check_sshpass():
         raise RuntimeError("Password authentication requires 'sshpass'.\nInstall it with: sudo apt install sshpass")
 
     return {"method": "password", "key_path": None, "password": password}

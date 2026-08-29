@@ -2,7 +2,6 @@
 RocketDoo Mail - Mailpit email testing service integration
 """
 
-import subprocess
 import webbrowser
 from pathlib import Path
 
@@ -12,6 +11,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from rocketdoo.core.compose import compose_path, container_running, run_compose
+
 console = Console()
 
 _MARKER_START = "# rkd:mailpit"
@@ -19,20 +20,11 @@ _MARKER_END = "# /rkd:mailpit"
 _MAILPIT_SMTP_PORT = 1025
 _MAILPIT_WEB_PORT = 8025
 _WEB_SERVICE = "web"
-_COMPOSE_NAMES = ("docker-compose.yaml", "docker-compose.yml")
 _CONF_PATHS = ("config/odoo.conf", "odoo.conf")
 _SMTP_KEYS = frozenset({"smtp_server", "smtp_port", "smtp_ssl", "smtp_user", "smtp_password"})
 
 
 # ─── file helpers ────────────────────────────────────────────────────────────
-
-
-def _compose_path() -> Path | None:
-    for name in _COMPOSE_NAMES:
-        p = Path.cwd() / name
-        if p.exists():
-            return p
-    return None
 
 
 def _odoo_conf_path() -> Path | None:
@@ -149,16 +141,6 @@ def _toggle_smtp(content: str, enable: bool) -> str:
 # ─── docker helpers ───────────────────────────────────────────────────────────
 
 
-def _run_compose(*args: str) -> int:
-    result = subprocess.run(["docker", "compose", *args], cwd=Path.cwd())
-    return result.returncode
-
-
-def _container_running(service: str) -> bool:
-    result = subprocess.run(["docker", "compose", "ps", "-q", service], capture_output=True, text=True, cwd=Path.cwd())
-    return bool(result.stdout.strip())
-
-
 # ─── command group ────────────────────────────────────────────────────────────
 
 
@@ -177,7 +159,7 @@ def _enable_mailpit(restart_web: bool = True) -> dict:
     Returns a report of what actually changed; callers render their own output.
     Raises MailpitError when the project cannot support Mailpit at all.
     """
-    compose = _compose_path()
+    compose = compose_path()
     if not compose:
         raise MailpitError("No docker-compose.yaml found.", "Run rkd init first.")
 
@@ -199,11 +181,11 @@ def _enable_mailpit(restart_web: bool = True) -> dict:
         conf.write_text(_toggle_smtp(conf.read_text(), enable=True))
         conf_updated = True
 
-    started = _run_compose("up", "-d", "mailpit") == 0
+    started = run_compose("up", "-d", "mailpit") == 0
 
     restarted = False
-    if restart_web and _container_running(_WEB_SERVICE):
-        _run_compose("restart", _WEB_SERVICE)
+    if restart_web and container_running(_WEB_SERVICE):
+        run_compose("restart", _WEB_SERVICE)
         restarted = True
 
     return {"changed": True, "conf_updated": conf_updated, "started": started, "restarted": restarted}
@@ -214,7 +196,7 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
 
     Counterpart of _enable_mailpit; same contract.
     """
-    compose = _compose_path()
+    compose = compose_path()
     if not compose:
         raise MailpitError("No docker-compose.yaml found.")
 
@@ -225,8 +207,8 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
     if not _is_enabled(content):
         return {"changed": False, "conf_updated": False, "restarted": False}
 
-    _run_compose("stop", "mailpit")
-    _run_compose("rm", "-f", "mailpit")
+    run_compose("stop", "mailpit")
+    run_compose("rm", "-f", "mailpit")
 
     compose.write_text(_toggle_compose(content, enable=False))
 
@@ -237,8 +219,8 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
         conf_updated = True
 
     restarted = False
-    if restart_web and _container_running(_WEB_SERVICE):
-        _run_compose("restart", _WEB_SERVICE)
+    if restart_web and container_running(_WEB_SERVICE):
+        run_compose("restart", _WEB_SERVICE)
         restarted = True
 
     return {"changed": True, "conf_updated": conf_updated, "restarted": restarted}
@@ -361,7 +343,7 @@ def mail_off():
 @mail.command(name="status")
 def mail_status():
     """Show current Mailpit status."""
-    compose = _compose_path()
+    compose = compose_path()
 
     configured = False
     enabled = False
@@ -371,7 +353,7 @@ def mail_status():
         content = compose.read_text()
         configured = _has_markers(content)
         enabled = configured and _is_enabled(content)
-        running = enabled and _container_running("mailpit")
+        running = enabled and container_running("mailpit")
 
     table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
     table.add_column("Key", style="cyan bold", width=22)
@@ -395,7 +377,7 @@ def mail_status():
 @mail.command(name="open")
 def mail_open():
     """Open Mailpit web UI in the browser."""
-    if not _container_running("mailpit"):
+    if not container_running("mailpit"):
         console.print("\n[yellow]Mailpit is not running.[/yellow] Run [cyan bold]rkd mail on[/cyan bold] first.\n")
         return
 

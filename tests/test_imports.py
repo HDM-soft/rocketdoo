@@ -8,6 +8,10 @@ nothing was noticed.
 These tests walk the package the way an installer would and resolve every
 intra-package import — including the deferred ones — so that a missing module
 or a renamed function breaks CI instead of a user's browser.
+
+Every module in the package is expected to import cleanly: the v1/v2 orphans
+that could not (config.py blocked on stdin at import time, main.py imported a
+module that no longer existed) were removed in #137.
 """
 
 import ast
@@ -19,31 +23,15 @@ import pytest
 
 from .conftest import PACKAGE_ROOT
 
-# Orphan modules from v1/v2: nothing imports them and they are not exposed as
-# console scripts. rocketdoo/config.py runs an interactive port wizard at import
-# time (it blocks on stdin) and rocketdoo/main.py imports rocketdoo.cli.init,
-# which has not existed since cli.py became a module. Scheduled for deletion in
-# #137 (E2); test_legacy_modules_are_still_orphans below guards the claim that
-# removing them is safe.
-LEGACY_UNIMPORTABLE = {
-    "rocketdoo.config",
-    "rocketdoo.main",
-    "rocketdoo.rocketdoo",
-}
-
 
 def _package_modules() -> list[str]:
     import rocketdoo
 
-    return sorted(m.name for m in pkgutil.walk_packages(rocketdoo.__path__, "rocketdoo.") if m.name not in LEGACY_UNIMPORTABLE)
+    return sorted(m.name for m in pkgutil.walk_packages(rocketdoo.__path__, "rocketdoo."))
 
 
 def _source_files() -> list[Path]:
-    return sorted(
-        p
-        for p in PACKAGE_ROOT.rglob("*.py")
-        if f"rocketdoo.{p.relative_to(PACKAGE_ROOT).with_suffix('').as_posix().replace('/', '.')}" not in LEGACY_UNIMPORTABLE
-    )
+    return sorted(PACKAGE_ROOT.rglob("*.py"))
 
 
 @pytest.mark.parametrize("module_name", _package_modules())
@@ -112,22 +100,3 @@ def test_imported_symbol_exists(where, lineno, module, symbol):
         importlib.import_module(f"{module}.{symbol}")
     except ImportError:
         pytest.fail(f"{where}:{lineno} imports {symbol!r} from {module}, which does not define it")
-
-
-@pytest.mark.parametrize("module_name", sorted(LEGACY_UNIMPORTABLE))
-def test_legacy_modules_are_still_orphans(module_name):
-    """No live code depends on the legacy modules, so #137 can delete them.
-
-    If this fails, something started importing a module that is about to be
-    removed — fix the caller, do not widen LEGACY_UNIMPORTABLE.
-    """
-    importers = []
-    for py in _source_files():
-        tree = ast.parse(py.read_text(), filename=str(py))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and (node.module or "") == module_name:
-                importers.append(f"{py.name}:{node.lineno}")
-            elif isinstance(node, ast.Import):
-                if any(a.name == module_name for a in node.names):
-                    importers.append(f"{py.name}:{node.lineno}")
-    assert not importers, f"{module_name} is imported by {importers}"
