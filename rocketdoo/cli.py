@@ -11,6 +11,7 @@ from rich.text import Text
 
 from rocketdoo import __version__
 from rocketdoo.core.gitignore_manager import missing_entries
+from rocketdoo.core.models.profiles import ProfileCatalog, get_golden_path
 from rocketdoo.deploy_cli import deploy, deploy_config, deploy_init, deploy_run, list_modules, validate_modules
 from rocketdoo.docker_cli import build, docker, down, logs, pause, restart, status, stop, up
 from rocketdoo.gui_cli import gui_command
@@ -194,21 +195,99 @@ def scaffold(ctx, template, force):
 
 
 @main.command()
-@click.option("--docker-compose", "-d", is_flag=True, help="Generate docker-compose.yml configuration")
 @click.option(
-    "--odoo-version",
-    "-o",
-    default="16.0",
-    type=click.Choice(["14.0", "15.0", "16.0", "17.0"]),
-    help="Odoo version to configure for the project",
+    "--profile",
+    "-p",
+    default=None,
+    help="Create the project from a golden path without prompting (see: rkd profiles list)",
 )
 @click.pass_context
-def init(ctx, docker_compose, odoo_version):
-    """Initialize interactive environment configuration setup."""
-    # NOTE: --docker-compose and --odoo-version are accepted but ignored;
-    # init_project() runs the full interactive wizard regardless. Wiring
-    # them up means giving `rkd init` a real non-interactive mode.
-    init_project()
+def init(ctx, profile):
+    """Initialize environment configuration, interactively or from a profile."""
+    if profile:
+        try:
+            get_golden_path(profile)
+        except ValueError as exc:
+            raise click.BadParameter(str(exc), param_hint="--profile") from None
+    init_project(profile=profile)
+
+
+@main.group(invoke_without_command=True)
+@click.pass_context
+def profiles(ctx):
+    """Show the supported Odoo / PostgreSQL / edition combinations."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(profiles_list)
+
+
+@profiles.command(name="list")
+def profiles_list():
+    """List the golden paths available to `rkd init --profile`."""
+    catalog = ProfileCatalog()
+    table = Table(title="Rocketdoo golden paths", box=box.ROUNDED, header_style="bold cyan")
+    table.add_column("Profile", style="cyan", no_wrap=True)
+    table.add_column("Odoo", justify="right")
+    table.add_column("Edition")
+    table.add_column("PG", justify="right")
+    table.add_column("Needs", style="dim", justify="right")
+    table.add_column("Base", style="dim", no_wrap=True)
+    table.add_column("Support", no_wrap=True)
+
+    for row in catalog.rows():
+        release = get_golden_path(row["name"]).release
+        # "bullseye · py3.9" reads better than the full distro id in a table.
+        base = f"{release.base_distro.split('-')[-1]} · py{row['python']}"
+        table.add_row(
+            row["name"],
+            row["odoo_version"],
+            "CE" if row["edition"] == "Community" else "EE",
+            row["db_version"],
+            f"{release.postgres_minimum}+",
+            base,
+            "[green]golden[/green]" if row["golden"] else "[dim]best effort[/dim]",
+        )
+
+    console.print()
+    console.print(table)
+    console.print(
+        "\n[dim]PG[/dim]    the version this profile uses.  "
+        "[dim]Needs[/dim]  the minimum Odoo supports.\n"
+        "[green]golden[/green]      rendered and built by CI on every release PR.\n"
+        "[dim]best effort[/dim] within Odoo's stated requirements, but not built by CI.\n"
+    )
+    console.print("[dim]Create one with:[/dim] [cyan]rkd init --profile odoo18-ce[/cyan]\n")
+
+
+@profiles.command(name="show")
+@click.argument("name")
+def profiles_show(name):
+    """Show the details of one profile."""
+    try:
+        profile = get_golden_path(name)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="NAME") from None
+
+    release = profile.release
+    console.print()
+    console.print(
+        Panel(
+            f"[bold cyan]{profile.description}[/bold cyan]\n\n"
+            f"[dim]Odoo       :[/dim] {profile.odoo_version} ({profile.edition})\n"
+            f"[dim]Image      :[/dim] {release.image}\n"
+            f"[dim]Base       :[/dim] {release.base_distro}\n"
+            f"[dim]Python     :[/dim] {release.python_version}\n"
+            f"[dim]pip        :[/dim] {release.pip_version}\n"
+            f"[dim]PostgreSQL :[/dim] {profile.db_version} "
+            f"(supported: {', '.join(release.supported_postgres())})\n"
+            f"[dim]Support    :[/dim] {'golden — built by CI' if profile.is_golden else 'best effort'}",
+            title=profile.name,
+            border_style="cyan",
+            box=box.ROUNDED,
+        )
+    )
+    for note in profile.notes():
+        console.print(f"[yellow]![/yellow] {note}")
+    console.print()
 
 
 @main.command()

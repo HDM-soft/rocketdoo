@@ -4,7 +4,9 @@ from pathlib import Path
 import click
 import questionary
 from jinja2 import Environment, FileSystemLoader
+from rich import box
 from rich.console import Console
+from rich.panel import Panel
 
 from rocketdoo.core.edition_setup import setup_enterprise_edition
 from rocketdoo.core.gitignore_manager import ensure_gitignore
@@ -14,6 +16,7 @@ from rocketdoo.core.gitman_config import (
     generate_gitman_yaml,
     update_odoo_conf_with_gitman,
 )
+from rocketdoo.core.models.profiles import SUPPORTED_ODOO_VERSIONS, get_golden_path, get_release
 from rocketdoo.core.port_validation import (
     collect_declared_ports,
     find_available_port,
@@ -127,8 +130,51 @@ def prompt_ports_until_valid(default_odoo=8069, default_vsc=8888):
             click.echo("\n⬇️  Please enter other ports:\n")
 
 
-def init_project():
+def init_from_profile(profile_name: str, project_name: str | None = None, admin_passwd: str | None = None) -> None:
+    """Create a project from a named golden path, without prompting.
+
+    This is what `rkd init --profile odoo18-ce` runs, and what lets CI and the
+    generated per-project pipelines build an environment unattended.
+    """
+    profile = get_golden_path(profile_name)
+    project_name = (project_name or os.path.basename(os.getcwd())).lower()
+    admin_passwd = admin_passwd or "admin"
+
+    console.print()
+    console.print(
+        Panel(
+            f"[bold cyan]{profile.description}[/bold cyan]\n\n"
+            f"[dim]Image     :[/dim] {profile.release.image}\n"
+            f"[dim]PostgreSQL:[/dim] {profile.db_version}\n"
+            f"[dim]Python    :[/dim] {profile.release.python_version} on {profile.release.base_distro}\n"
+            f"[dim]Support   :[/dim] {'golden — built by CI' if profile.is_golden else 'best effort'}",
+            title=f"Profile {profile.name}",
+            border_style="cyan",
+            box=box.ROUNDED,
+        )
+    )
+    for note in profile.notes():
+        console.print(f"[yellow]![/yellow] {note}")
+    console.print()
+
+    context = profile.to_context(project_name, admin_passwd)
+    context.update({"use_private_repos": False, "ssh_key_name": None, "use_third_party_repos": False})
+
+    generate_project(context)
+
+    if profile.uses_enterprise:
+        try:
+            setup_enterprise_edition(Path(os.getcwd()))
+        except Exception as e:
+            click.echo(f"\n⚠️  Warning: Could not fully configure Enterprise: {e}")
+
+
+def init_project(profile: str | None = None):
     """Initial configuration assistant for Rocketdoo"""
+
+    if profile:
+        init_from_profile(profile)
+        return
 
     show_welcome()
 
@@ -149,7 +195,7 @@ def init_project():
         console.print("[dim]💡 Docker project names must be in lowercase[/dim]\n")
 
     # Version selection with interactive menu
-    odoo_versions = ["15.0", "16.0", "17.0", "18.0", "19.0"]
+    odoo_versions = list(SUPPORTED_ODOO_VERSIONS)
     click.echo("\n📦 Select Odoo version (use ↑↓ and ENTER):")
     odoo_version = questionary.select("Odoo Version:", choices=odoo_versions, default="18.0").ask()
 
@@ -229,9 +275,13 @@ def init_project():
                 if not questionary.confirm("Would you like to add another repository?", default=False).ask():
                     break
 
-    db_versions = ["13", "14", "15", "16"]
-    click.echo("\n📦 Select the PostgreSQL version (use ↑↓ and ENTER):")
-    db_version = questionary.select("PostgreSQL version:", choices=db_versions, default="16").ask()
+    # Only the majors this Odoo release supports: the wizard used to offer a
+    # fixed 13-16 list, so it happily produced Odoo 19 on PostgreSQL 12.
+    release = get_release(odoo_version)
+    db_versions = release.supported_postgres()
+    click.echo(f"\n📦 Select the PostgreSQL version for Odoo {odoo_version} (use ↑↓ and ENTER):")
+    click.echo(f"   [Odoo {odoo_version} requires PostgreSQL {release.postgres_minimum} or above]")
+    db_version = questionary.select("PostgreSQL version:", choices=db_versions, default=release.postgres_recommended).ask()
 
     # Ask for the master password
     admin_passwd = click.prompt("Odoo master password", default="admin", hide_input=False)
@@ -266,6 +316,31 @@ def init_project():
         "ssh_key_name": selected_ssh_key,
         "use_third_party_repos": use_third_party_repos,
     }
+
+    generate_project(context, gitman_sources=gitman_sources, selected_ssh_key=selected_ssh_key)
+
+
+def generate_project(
+    context: dict,
+    *,
+    gitman_sources=None,
+    selected_ssh_key=None,
+) -> None:
+    """Render the templates and run the post-setup steps.
+
+    Shared by the interactive wizard and by `rkd init --profile`, so both
+    produce byte-identical projects for the same choices.
+    """
+    project_name = context["project_name"]
+    odoo_version = context["odoo_version"]
+    odoo_edition = context["odoo_edition"]
+    db_version = context["db_version"]
+    odoo_port = context["odoo_port"]
+    vsc_port = context["vsc_port"]
+    use_private_repos = context.get("use_private_repos", False)
+    use_third_party_repos = context.get("use_third_party_repos", False)
+    gitman_sources = gitman_sources or []
+    selected_ssh_key = selected_ssh_key or context.get("ssh_key_name")
 
     # === Generate files ===
     # First, so the files rendered below (odoo.conf carries admin_passwd) are

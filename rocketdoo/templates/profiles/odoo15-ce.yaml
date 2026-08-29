@@ -1,0 +1,25 @@
+# Golden path: Odoo 15 Community on PostgreSQL 14
+#
+# Generated environments start from one of these. `rkd init --profile odoo15-ce`
+# creates it without prompting; the interactive wizard uses the same values as
+# defaults.
+#
+# Facts about the odoo:15.0 image itself -- base distro, Python, pip, the
+# PostgreSQL minimum -- are not repeated here: they live in
+# rocketdoo/core/models/profiles.py because they describe the published image,
+# not a choice this file gets to make.
+
+name: odoo15-ce
+description: Odoo 15 Community on PostgreSQL 14
+
+odoo_version: "15.0"
+edition: Community
+db_version: "14"
+
+odoo_port: 8069
+vsc_port: 8888
+restart: unless-stopped
+
+# golden: CI renders and builds this combination on every release PR.
+# Anything else is supported best effort.
+golden: true

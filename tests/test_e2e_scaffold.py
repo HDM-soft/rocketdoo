@@ -161,3 +161,77 @@ def test_scaffolded_templates_are_not_valid_compose_before_init(project_dir):
     """Scaffold ships .jinja sources; docker-compose.yaml only exists after init."""
     scaffold_project()
     assert not (project_dir / "docker-compose.yaml").exists()
+
+
+class TestInitFromProfile:
+    """`rkd init --profile` — the non-interactive path added in #139.
+
+    This is what makes an unattended `rkd init` possible at all, which the E2E
+    test above still has to work around by driving the wizard prompt by prompt.
+    """
+
+    @pytest.fixture
+    def built(self, project_dir):
+        from rocketdoo.init_project import init_from_profile
+
+        scaffold_project()
+        init_from_profile("odoo18-ce", project_name="demo")
+        return project_dir
+
+    def test_generates_the_core_files_without_prompting(self, built):
+        for expected in ("Dockerfile", "docker-compose.yaml", "config/odoo.conf"):
+            assert (built / expected).exists(), f"missing {expected}"
+
+    def test_uses_the_profile_odoo_version(self, built):
+        assert "FROM odoo:18.0" in (built / "Dockerfile").read_text()
+
+    def test_uses_the_profile_postgres_version(self, built):
+        compose = yaml.safe_load((built / "docker-compose.yaml").read_text())
+        assert compose["services"]["db"]["image"] == "postgres:16"
+
+    def test_writes_a_gitignore(self, built):
+        assert (built / ".gitignore").exists()
+
+    def test_scaffold_does_not_copy_the_profile_templates(self, project_dir):
+        """profiles/ describes Rocketdoo's own catalog, not the user's project."""
+        scaffold_project()
+        assert not (project_dir / "profiles").exists()
+
+    @pytest.mark.parametrize("profile", ["odoo15-ce", "odoo18-ce", "odoo19-ee"])
+    def test_the_canonical_combinations_generate(self, project_dir, profile):
+        """The three combinations CI builds on every release PR."""
+        from rocketdoo.core.models.profiles import get_golden_path
+        from rocketdoo.init_project import init_from_profile
+
+        scaffold_project()
+        init_from_profile(profile, project_name="demo")
+
+        expected = get_golden_path(profile)
+        assert f"FROM odoo:{expected.odoo_version}" in (project_dir / "Dockerfile").read_text()
+        compose = yaml.safe_load((project_dir / "docker-compose.yaml").read_text())
+        assert compose["services"]["db"]["image"] == f"postgres:{expected.db_version}"
+
+    def test_enterprise_profile_enables_the_enterprise_volume(self, project_dir):
+        from rocketdoo.init_project import init_from_profile
+
+        scaffold_project()
+        init_from_profile("odoo19-ee", project_name="demo")
+        assert "enterprise" in (project_dir / "docker-compose.yaml").read_text()
+
+    def test_an_unknown_profile_raises(self, project_dir):
+        from rocketdoo.init_project import init_from_profile
+
+        scaffold_project()
+        with pytest.raises(ValueError, match="Unknown profile"):
+            init_from_profile("odoo99-ce")
+
+    @pytest.mark.docker
+    @pytest.mark.slow
+    @pytest.mark.parametrize("profile", ["odoo15-ce", "odoo18-ce", "odoo19-ee"])
+    def test_docker_accepts_every_canonical_combination(self, project_dir, profile, requires_docker):
+        from rocketdoo.init_project import init_from_profile
+
+        scaffold_project()
+        init_from_profile(profile, project_name="demo")
+        result = _docker_compose_config(project_dir)
+        assert result.returncode == 0, result.stderr

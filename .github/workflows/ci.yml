@@ -103,6 +103,50 @@ jobs:
           name: release-dists
           path: dist/
 
+  golden-paths:
+    name: Golden path ${{ matrix.profile }}
+    # The canonical combinations from #139. Cheap enough to run on every PR:
+    # rendering plus `docker compose config`, no image build.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [odoo15-ce, odoo18-ce, odoo19-ee]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: rkd scaffold && rkd init --profile ${{ matrix.profile }}
+        run: |
+          mkdir -p /tmp/${{ matrix.profile }}
+          cd /tmp/${{ matrix.profile }}
+          rkd scaffold
+          rkd init --profile ${{ matrix.profile }}
+      - name: docker compose config accepts it
+        run: docker compose -f /tmp/${{ matrix.profile }}/docker-compose.yaml config > /dev/null
+      - name: The rendered files match the profile
+        run: |
+          cd /tmp/${{ matrix.profile }}
+          python - <<'PY'
+          import os, re, pathlib
+          from rocketdoo.core.models.profiles import get_golden_path
+
+          profile = get_golden_path(os.environ["PROFILE"])
+          dockerfile = pathlib.Path("Dockerfile").read_text()
+          compose = pathlib.Path("docker-compose.yaml").read_text()
+
+          assert f"FROM odoo:{profile.odoo_version}" in dockerfile, dockerfile.splitlines()[0]
+          assert f"postgres:{profile.db_version}" in compose, "postgres image mismatch"
+          if profile.uses_enterprise:
+              assert "enterprise" in compose, "enterprise volume not enabled"
+          print(f"{profile.name}: odoo {profile.odoo_version} / pg {profile.db_version} OK")
+          PY
+        env:
+          PROFILE: ${{ matrix.profile }}
+
   odoo-images:
     name: Docker build (odoo:${{ matrix.odoo-version }})
     # Expensive: only on the way to a release, or when explicitly requested.
@@ -166,7 +210,7 @@ jobs:
     if: always()
     # odoo-images is conditional: when it is skipped its result is 'skipped',
     # not 'failure', so it gates the release PRs without blocking dev/v3.
-    needs: [lint, test, test-docker, build, odoo-images]
+    needs: [lint, test, test-docker, build, golden-paths, odoo-images]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed
