@@ -175,3 +175,86 @@ class TestInstancesRoundTrip:
         body = response.json()
         assert body["ok"] is True
         assert "vps.host" in body["incomplete"]["stage"]
+
+
+class TestCORSPolicy:
+    """The GUI API must only be callable from the page it serves.
+
+    These endpoints drive Docker and browse the filesystem. Binding to
+    127.0.0.1 is no protection on its own: the request comes from the user's
+    own browser, so any site they visit while `rkd gui` runs is already on
+    localhost as far as the server is concerned. With allow_origins=["*"] and
+    allow_credentials=True, Starlette echoes the caller's Origin back and the
+    browser lets that site read the response.
+    """
+
+    EVIL = "https://malicious.example"
+
+    def test_a_foreign_origin_cannot_read_responses(self, client):
+        response = client.get("/api/workspace", headers={"Origin": self.EVIL})
+        allowed = response.headers.get("access-control-allow-origin")
+        assert allowed != self.EVIL
+        assert allowed != "*"
+
+    def test_a_foreign_origin_preflight_is_rejected(self, client):
+        response = client.options(
+            "/api/docker/down",
+            headers={
+                "Origin": self.EVIL,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert response.status_code >= 400
+
+    @pytest.mark.parametrize("origin", ["http://localhost:8070", "http://127.0.0.1:8070"])
+    def test_the_gui_own_origins_are_allowed(self, client, origin):
+        response = client.get("/api/workspace", headers={"Origin": origin})
+        assert response.headers.get("access-control-allow-origin") == origin
+
+    def test_the_wildcard_is_never_used(self, client):
+        """allow_origins=["*"] is what made this exploitable."""
+        response = client.get("/api/workspace", headers={"Origin": "http://localhost:8070"})
+        assert response.headers.get("access-control-allow-origin") != "*"
+
+    def test_the_spa_is_still_served(self, client):
+        """Same-origin requests need no CORS; the page itself must still load."""
+        assert client.get("/").status_code == 200
+
+
+class TestLocalOrigins:
+    def test_defaults_to_both_loopback_names(self):
+        from rocketdoo.gui.server import local_origins
+
+        assert local_origins() == ["http://localhost:8070", "http://127.0.0.1:8070"]
+
+    def test_follows_a_custom_port(self):
+        """`rkd gui --port 9090` must allow the port the user actually opens."""
+        from rocketdoo.gui.server import local_origins
+
+        assert local_origins(port=9090) == ["http://localhost:9090", "http://127.0.0.1:9090"]
+
+    def test_an_explicit_external_host_is_added(self):
+        from rocketdoo.gui.server import local_origins
+
+        assert "http://192.168.1.10:8070" in local_origins("192.168.1.10", 8070)
+
+    @pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "0.0.0.0", "::1"])
+    def test_loopback_hosts_add_nothing_extra(self, host):
+        from rocketdoo.gui.server import local_origins
+
+        assert len(local_origins(host)) == 2
+
+    def test_no_origin_is_a_wildcard(self):
+        from rocketdoo.gui.server import local_origins
+
+        assert "*" not in local_origins("192.168.1.10", 9090)
+
+
+def test_the_app_honours_the_port_it_was_created_with():
+    """`rkd gui --port N` passes N through, so CORS matches the real URL."""
+    from rocketdoo.gui.server import create_app
+
+    client = fastapi_testclient.TestClient(create_app(port=9090))
+    response = client.get("/api/workspace", headers={"Origin": "http://localhost:9090"})
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:9090"
