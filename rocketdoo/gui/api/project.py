@@ -1,6 +1,7 @@
-import subprocess
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+
+from rocketdoo.core.compose import compose_ps_result
 
 router = APIRouter()
 
@@ -10,6 +11,7 @@ async def get_project():
     """Returns project info and running container statuses."""
     try:
         from rocketdoo.project_info import get_project_info, project_exists
+
         exists = project_exists()
         if not exists:
             return {"exists": False}
@@ -23,26 +25,7 @@ async def get_project():
 @router.get("/containers")
 async def get_containers():
     """Returns docker ps output for the current project."""
-    try:
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "json", "--all"],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode != 0:
-            return {"containers": [], "error": result.stderr.strip()}
-
-        import json
-        containers = []
-        for line in result.stdout.strip().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                containers.append(json.loads(line))
-            except json.JSONDecodeError:
-                pass
-        return {"containers": containers}
-    except FileNotFoundError:
-        return {"containers": [], "error": "docker not found"}
-    except Exception as e:
-        return {"containers": [], "error": str(e)}
+    containers, error = compose_ps_result("--all")
+    if error:
+        return {"containers": containers, "error": error}
+    return {"containers": containers}

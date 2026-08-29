@@ -1,12 +1,18 @@
-import os
 import shutil
-import click
 from pathlib import Path
+
+import click
 
 from rocketdoo.core.gitignore_manager import ensure_gitignore
 
 # Rendered into .gitignore instead of being copied verbatim
 GITIGNORE_TEMPLATE = ".gitignore.jinja"
+
+# Package-level template directories that are not part of a user's project.
+# profiles/ describes the golden paths Rocketdoo itself offers; copying it into
+# every generated project would just ship dead files.
+INTERNAL_TEMPLATE_DIRS = {"profiles"}
+
 
 def scaffold_project(template="basic", force=False, verbose=False):
     """
@@ -38,6 +44,9 @@ def scaffold_project(template="basic", force=False, verbose=False):
                 # Handled after the loop so credentials are covered from the start
                 continue
 
+            if item.is_dir() and item.name in INTERNAL_TEMPLATE_DIRS:
+                continue
+
             if src.is_dir():
                 # Copy entire directory (including hidden files)
                 if dest.exists():
@@ -57,7 +66,7 @@ def scaffold_project(template="basic", force=False, verbose=False):
                 if dest.exists() and not force:
                     click.echo(f"⚠️  Skipping {dest} (already exists, use --force to overwrite)")
                     continue
-                
+
                 shutil.copy2(src, dest)
                 if verbose:
                     click.echo(f"✅ Copied file: {dest}")

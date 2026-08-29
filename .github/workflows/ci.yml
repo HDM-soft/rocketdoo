@@ -1,0 +1,220 @@
+# Continuous integration for the rocketdoo repo itself.
+#
+# Runs on every pull request into dev/v3, test/v3 and main, and is reused as a
+# blocking gate by publish-rkd.yml. Nothing here uses continue-on-error: a red
+# job means the change does not merge.
+name: CI
+
+on:
+  pull_request:
+    branches: [dev/v3, test/v3, main]
+  push:
+    branches: [dev/v3]
+  workflow_call:
+    inputs:
+      build-odoo-images:
+        description: Build the Dockerfile against every supported Odoo image
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: ruff check
+        run: ruff check --output-format=github .
+      - name: ruff format --check
+        run: ruff format --check .
+
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Matches requires-python = ">=3.10"
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -e . -r requirements-dev.txt
+      - name: pytest
+        run: pytest -v --cov=rocketdoo --cov-report=term-missing
+
+  test-docker:
+    name: E2E with Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e . -r requirements-dev.txt
+      - name: Docker-marked tests
+        # ubuntu-latest ships a working daemon, so these must not silently skip
+        run: pytest -v -m docker
+
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check dist/*
+      - name: Templates are present in the wheel
+        # A wheel missing templates/ installs fine and then fails at `rkd init`
+        run: |
+          WHEEL=$(ls dist/*.whl)
+          COUNT=$(python -m zipfile -l "$WHEEL" | grep -c 'rocketdoo/templates/')
+          echo "template entries: $COUNT"
+          test "$COUNT" -ge 10
+          python -m zipfile -l "$WHEEL" | grep -q 'templates/.gitignore.jinja'
+          python -m zipfile -l "$WHEEL" | grep -q 'gui/static/index.html'
+      - name: Installed package exposes the CLI
+        run: |
+          python -m venv /tmp/probe
+          /tmp/probe/bin/pip install --quiet dist/*.whl
+          /tmp/probe/bin/rkd --version
+          /tmp/probe/bin/rocketdoo --help > /dev/null
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dists
+          path: dist/
+
+  golden-paths:
+    name: Golden path ${{ matrix.profile }}
+    # The canonical combinations from #139. Cheap enough to run on every PR:
+    # rendering plus `docker compose config`, no image build.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [odoo15-ce, odoo18-ce, odoo19-ee]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: rkd scaffold && rkd init --profile ${{ matrix.profile }}
+        run: |
+          mkdir -p /tmp/${{ matrix.profile }}
+          cd /tmp/${{ matrix.profile }}
+          rkd scaffold
+          rkd init --profile ${{ matrix.profile }}
+      - name: docker compose config accepts it
+        run: docker compose -f /tmp/${{ matrix.profile }}/docker-compose.yaml config > /dev/null
+      - name: The rendered files match the profile
+        run: |
+          cd /tmp/${{ matrix.profile }}
+          python - <<'PY'
+          import os, re, pathlib
+          from rocketdoo.core.models.profiles import get_golden_path
+
+          profile = get_golden_path(os.environ["PROFILE"])
+          dockerfile = pathlib.Path("Dockerfile").read_text()
+          compose = pathlib.Path("docker-compose.yaml").read_text()
+
+          assert f"FROM odoo:{profile.odoo_version}" in dockerfile, dockerfile.splitlines()[0]
+          assert f"postgres:{profile.db_version}" in compose, "postgres image mismatch"
+          if profile.uses_enterprise:
+              assert "enterprise" in compose, "enterprise volume not enabled"
+          print(f"{profile.name}: odoo {profile.odoo_version} / pg {profile.db_version} OK")
+          PY
+        env:
+          PROFILE: ${{ matrix.profile }}
+
+  odoo-images:
+    name: Docker build (odoo:${{ matrix.odoo-version }})
+    # Expensive: only on the way to a release, or when explicitly requested.
+    if: >
+      inputs.build-odoo-images ||
+      github.base_ref == 'test/v3' ||
+      github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # odoo:15/16 are Debian bullseye (pip 20), 17 is Ubuntu jammy (pip 22),
+        # 18/19 are noble (pip 24). Issue #152 only broke on the older three,
+        # which is exactly what a single-version build would have missed.
+        odoo-version: ["15.0", "16.0", "17.0", "18.0", "19.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+      - name: Render a project for odoo:${{ matrix.odoo-version }}
+        run: |
+          mkdir -p /tmp/proj && cd /tmp/proj
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from rocketdoo.scaffold import scaffold_project
+          from rocketdoo.init_project import render_template, TEMPLATES_DIR, CONFIG_TEMPLATE_DIR
+
+          scaffold_project()
+          context = {
+              "project_name": "ci",
+              "odoo_version": os.environ["ODOO_VERSION"],
+              "db_version": "15",
+              "odoo_port": 8069,
+              "vsc_port": 8888,
+              "restart": "unless-stopped",
+              "odoo_container": "odoo-ci",
+              "db_container": "db-ci",
+              "admin_passwd": "ci-admin",
+              "use_third_party_repos": False,
+          }
+          render_template(TEMPLATES_DIR, "Dockerfile.jinja", "Dockerfile", **context)
+          render_template(TEMPLATES_DIR, "docker-compose.yaml.jinja", "docker-compose.yaml", **context)
+          render_template(CONFIG_TEMPLATE_DIR, "odoo.conf.jinja", str(Path("config") / "odoo.conf"), **context)
+          PY
+        env:
+          ODOO_VERSION: ${{ matrix.odoo-version }}
+      - name: docker compose config
+        run: docker compose -f /tmp/proj/docker-compose.yaml config > /dev/null
+      - name: docker build
+        # This is the check that would have caught #152: the pip flags in the
+        # Dockerfile have to work on every supported base image, not just one.
+        run: docker build -t rkd-ci:${{ matrix.odoo-version }} /tmp/proj
+
+  ci-ok:
+    name: CI
+    # Single required status check: add THIS to branch protection.
+    if: always()
+    # odoo-images is conditional: when it is skipped its result is 'skipped',
+    # not 'failure', so it gates the release PRs without blocking dev/v3.
+    needs: [lint, test, test-docker, build, golden-paths, odoo-images]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any job failed
+        run: |
+          echo '${{ toJSON(needs) }}'
+          [ "${{ contains(needs.*.result, 'failure') }}" = "false" ] || exit 1
+          [ "${{ contains(needs.*.result, 'cancelled') }}" = "false" ] || exit 1

@@ -1,7 +1,7 @@
 import click
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich import box
 
 console = Console()
 
@@ -22,34 +22,42 @@ def gui_command(port, host, auto_open, cwd):
       rkd gui --cwd /path/to/project # Specify project directory
     """
     import os
+
     if cwd:
         os.chdir(cwd)
 
     import uvicorn
+
     from rocketdoo.gui.server import create_app
 
     url = f"http://{host}:{port}"
 
     console.print()
-    console.print(Panel(
-        f"[bold white]Rocketdoo GUI[/bold white] [dim]v3[/dim]\n\n"
-        f"  [dim]URL:[/dim]      [bold cyan]{url}[/bold cyan]\n"
-        f"  [dim]Press:[/dim]    [bold]Ctrl+C[/bold] to stop",
-        title="[bold blue]RKD GUI[/bold blue]",
-        border_style="blue",
-        box=box.ROUNDED,
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            f"[bold white]Rocketdoo GUI[/bold white] [dim]v3[/dim]\n\n"
+            f"  [dim]URL:[/dim]      [bold cyan]{url}[/bold cyan]\n"
+            f"  [dim]Press:[/dim]    [bold]Ctrl+C[/bold] to stop",
+            title="[bold blue]RKD GUI[/bold blue]",
+            border_style="blue",
+            box=box.ROUNDED,
+            padding=(1, 2),
+        )
+    )
     console.print()
 
     if auto_open:
         import threading
         import time
         import webbrowser
+
         def _open():
             time.sleep(1.2)
             webbrowser.open(url)
+
         threading.Thread(target=_open, daemon=True).start()
 
-    app = create_app()
+    # host/port reach the app so CORS can allow exactly the origin the user
+    # will open, and nothing else.
+    app = create_app(host=host, port=port)
     uvicorn.run(app, host=host, port=port, log_level="error")
