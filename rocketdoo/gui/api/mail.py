@@ -1,7 +1,6 @@
-import subprocess
-from pathlib import Path
-
 from fastapi import APIRouter
+
+from rocketdoo.core.compose import compose_path, container_running
 
 router = APIRouter()
 
@@ -9,16 +8,8 @@ MARKER_START = "# rkd:mailpit"
 MARKER_END = "# /rkd:mailpit"
 
 
-def _compose_path() -> Path | None:
-    for name in ("docker-compose.yaml", "docker-compose.yml"):
-        p = Path.cwd() / name
-        if p.exists():
-            return p
-    return None
-
-
 def _mailpit_enabled() -> bool:
-    path = _compose_path()
+    path = compose_path()
     if not path:
         return False
     content = path.read_text()
@@ -35,26 +26,7 @@ def _mailpit_enabled() -> bool:
 
 
 def _mailpit_running() -> bool:
-    try:
-        r = subprocess.run(
-            ["docker", "compose", "ps", "--format", "json", "mailpit"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        import json
-
-        for line in r.stdout.strip().splitlines():
-            try:
-                data = json.loads(line)
-                state = data.get("State", data.get("Status", "")).lower()
-                if "running" in state or "up" in state:
-                    return True
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return False
+    return container_running("mailpit")
 
 
 @router.get("/status")

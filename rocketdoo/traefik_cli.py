@@ -16,6 +16,8 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from rocketdoo.core.compose import COMPOSE_NAMES, compose_path, run_compose
+
 console = Console()
 
 _custom_style = Style(
@@ -32,7 +34,6 @@ _custom_style = Style(
 _NETWORK = "traefik-public"
 _OVERRIDE_FILE = "docker-compose.override.yml"
 _CONFIG_FILE = ".rkd/traefik.yaml"
-_COMPOSE_NAMES = ("docker-compose.yaml", "docker-compose.yml")
 _DEFAULT_TRAEFIK_DIR = "./traefik"
 
 
@@ -46,16 +47,8 @@ def _is_wsl2() -> bool:
         return False
 
 
-def _compose_path() -> Path | None:
-    for name in _COMPOSE_NAMES:
-        p = Path.cwd() / name
-        if p.exists():
-            return p
-    return None
-
-
 def _project_name() -> str:
-    for name in _COMPOSE_NAMES:
+    for name in COMPOSE_NAMES:
         p = Path.cwd() / name
         if p.exists():
             try:
@@ -100,10 +93,6 @@ def _override_exists() -> bool:
 def _traefik_running() -> bool:
     r = subprocess.run(["docker", "ps", "-q", "--filter", "name=traefik"], capture_output=True, text=True)
     return bool(r.stdout.strip())
-
-
-def _run_compose(*args: str) -> int:
-    return subprocess.run(["docker", "compose", *args], cwd=Path.cwd()).returncode
 
 
 # ─── content generators ───────────────────────────────────────────────────────
@@ -245,7 +234,7 @@ def _disable_traefik(restart: bool = True) -> bool:
 
     override.unlink()
     if restart:
-        _run_compose("up", "-d")
+        run_compose("up", "-d")
     return True
 
 
@@ -300,7 +289,7 @@ def traefik_on(domain, mode, traefik_dir):
     After enabling, add the domain to /etc/hosts:
       rkd traefik guide
     """
-    if not _compose_path():
+    if not compose_path():
         console.print("\n[red]No docker-compose.yaml found. Run rkd init first.[/red]\n")
         return
 
@@ -412,7 +401,7 @@ def traefik_on(domain, mode, traefik_dir):
 
     # ── Restart Odoo with new override ──
     console.print("[dim]Restarting Odoo with Traefik integration...[/dim]")
-    _run_compose("up", "-d")
+    run_compose("up", "-d")
     console.print("[green]✓[/green] Project restarted")
 
     # ── Summary ──
