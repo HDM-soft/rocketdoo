@@ -213,3 +213,26 @@ class TestRenderContext:
         context = profile.to_context("demo", "pw")
         context.setdefault("use_third_party_repos", False)
         assert f"FROM odoo:{profile.odoo_version}" in render("Dockerfile.jinja", **context)
+
+
+class TestProfilesArePackaged:
+    """The profiles must ship inside the installed package.
+
+    They live under templates/, which package-data covers, but nothing else
+    would notice if that stopped being true until `rkd profiles list` came back
+    empty for an installed user.
+    """
+
+    def test_the_profile_directory_is_inside_the_package(self):
+        from rocketdoo.core.models import profiles as module
+
+        package_root = __import__("rocketdoo").__path__[0]
+        assert str(PROFILE_DIR).startswith(package_root)
+        assert module.PROFILE_DIR.is_dir()
+
+    def test_ten_profiles_are_shipped(self):
+        assert len(list(PROFILE_DIR.glob("*.yaml"))) == 10
+
+    def test_the_readme_documents_the_policy(self):
+        readme = (PROFILE_DIR / "README.md").read_text()
+        assert "golden" in readme and "best effort" in readme
