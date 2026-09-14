@@ -191,14 +191,14 @@ Dashboard, para que un refresh no la desmonte.
   se llama a `asyncio.create_subprocess_exec` (monkeypatch que falla si corre).
   Commit: `FEAT: websocket de update de modulo Odoo`.
 
-- [ ] **T6 — `DockerTerminal` acepta `url` y `label`.**
+- [x] **T6 — `DockerTerminal` acepta `url` y `label`.**
   Cambia los props y actualiza el único llamador actual (Dashboard).
   Sin backend involucrado; se puede mergear solo.
   Validación: manual — `rkd gui`, Dashboard → **Build**: el encabezado sigue
   diciendo `docker compose build`, el log fluye y aparece el banner de exit.
   Commit: `REF: DockerTerminal recibe la URL del stream`.
 
-- [ ] **T7 — Selector de base y columna State en Modules.**
+- [x] **T7 — Selector de base y columna State en Modules.**
   `dbs` / `db` / `states`, persistencia en `localStorage['rkd-db']`,
   preselección de la única base, `watch(db)` → `loadStates()`, columna **State**
   en la tabla, y el motivo visible cuando no hay bases.

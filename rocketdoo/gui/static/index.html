@@ -706,6 +706,43 @@ const Modules = {
       loadGitman()
     }
 
+    // ── Databases & module states ────────────────────────────────────────
+    const dbs     = ref([])
+    const dbError = ref('')
+    const db      = ref('')
+    const states  = ref({})
+
+    async function loadDbs() {
+      try {
+        const r = await api.get('/odoo/databases')
+        dbs.value = r.databases || []
+        dbError.value = r.error || ''
+      } catch(e) { dbs.value = []; dbError.value = e.message }
+      const saved = localStorage.getItem('rkd-db')
+      db.value = dbs.value.includes(saved) ? saved : (dbs.value[0] || '')
+    }
+
+    async function loadStates() {
+      if (!db.value) { states.value = {}; return }
+      try {
+        const r = await api.get('/odoo/module-states?db='+encodeURIComponent(db.value))
+        states.value = r.states || {}
+        if (r.error) notify('Module states: '+r.error, 'err')
+      } catch(e) { states.value = {} }
+    }
+
+    function stateOf(m) { return states.value[m.name] || '—' }
+    function stateBadgeClass(s) {
+      if (s === 'installed') return 'badge-green'
+      if (s && s.startsWith('to ')) return 'badge-yellow'
+      return 'badge-gray'
+    }
+
+    watch(db, v => {
+      if (v) localStorage.setItem('rkd-db', v)
+      loadStates()
+    })
+
     // ── Gitman repos ──────────────────────────────────────────────────────
     const gitSources  = ref([])
     const gitOriginal = ref([])
@@ -786,9 +823,10 @@ const Modules = {
     }
 
     watch(all, load)
-    onActivated(load)
+    onActivated(() => { load(); loadDbs() })
     return {
       mods, busy, all, q, filtered, load,
+      dbs, dbError, db, states, stateOf, stateBadgeClass,
       gitSources, gitExists, gitBusy, gitSaving, rebuildBusy, gitForm, gitDirty,
       addGitRepo, editGitRepo, deleteGitRepo, autoName, confirmGitForm,
       saveGitman, rebuildDocker, initGitman, I
@@ -799,6 +837,13 @@ const Modules = {
     <div class="page-header">
       <div><div class="page-title">Modules</div><div class="page-sub">Local addons and external Gitman repositories</div></div>
       <div style="display:flex;gap:10px;align-items:center;">
+        <div v-if="dbs.length" style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:11px;color:#6B82A8;">DB</label>
+          <select v-model="db" class="input" style="width:auto;padding:5px 8px;font-size:12px;">
+            <option v-for="d in dbs" :key="d" :value="d">{{ d }}</option>
+          </select>
+        </div>
+        <div v-else style="font-size:12px;color:#F87171;" :title="dbError">{{ dbError || 'No databases found' }}</div>
         <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#5577A2;cursor:pointer;">
           <input type="checkbox" v-model="all" style="accent-color:#1A3DCC;"> Show all
         </label>
@@ -830,7 +875,7 @@ const Modules = {
       <div v-else class="card-flat">
         <table class="table">
           <thead>
-            <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>Depends</th></tr>
+            <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>State</th><th>Depends</th></tr>
           </thead>
           <tbody>
             <tr v-for="m in filtered" :key="m.name">
@@ -841,6 +886,7 @@ const Modules = {
               <td style="font-family:monospace;font-size:11px;color:#6B82A8;">{{ m.path }}</td>
               <td style="font-size:12px;color:#6B82A8;">{{ m.version||'—' }}</td>
               <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?'Installable':'Disabled' }}</span></td>
+              <td><span class="badge" :class="stateBadgeClass(stateOf(m))">{{ stateOf(m) }}</span></td>
               <td style="font-size:11px;color:#5577A2;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
             </tr>
           </tbody>

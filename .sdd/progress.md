@@ -117,4 +117,56 @@
   después" del plan se respetó literalmente; no se lanza ningún subproceso
   cuando `build_update_command` devuelve error.
 
-Pendiente: T6 a T9 (frontend y documentación, fuera del alcance de esta tarea).
+## T6 — `DockerTerminal` acepta `url` y `label` — COMPLETADA
+
+- Archivos:
+  - `rocketdoo/gui/static/index.html`: `DockerTerminal` cambia sus props de
+    `{ action: String }` a `{ url: String, label: String }`. El `WebSocket` se
+    conecta a `${proto}://${location.host}${props.url}` en lugar de armar la
+    URL con `/ws/docker/${props.action}`; el encabezado y el placeholder de
+    "Connecting to…" muestran `label` en vez de interpolar `action`. El único
+    llamador (Dashboard) pasa `:url="'/ws/docker/'+termAction"` y
+    `:label="'docker compose '+termAction"`, preservando el comportamiento
+    visible actual.
+- Validación:
+  - `pytest -q` (suite completa) → 712 passed, sin cambios (el HTML no tiene
+    tests automáticos).
+  - `ruff check .` y `ruff format --check .` → limpios.
+  - `node --check` sobre el contenido de `<script>` extraído del HTML → sin
+    errores de sintaxis.
+  - Manual (RF/CA13, pendiente de verificación con Docker real): botón
+    **Build** del Dashboard debería seguir mostrando `docker compose build` en
+    el encabezado y el log en vivo. No se pudo ejecutar en este entorno (sin
+    Docker); ver sección "Pendiente" al final.
+
+## T7 — Selector de base y columna State en Modules — COMPLETADA
+
+- Archivos:
+  - `rocketdoo/gui/static/index.html`: en `Modules.setup()` agrega
+    `dbs`, `dbError`, `db`, `states`; `loadDbs()` llama a
+    `GET /api/odoo/databases`, resuelve la selección desde
+    `localStorage['rkd-db']` si sigue en la lista, o cae a la primera base (o
+    `''` si no hay ninguna); `loadStates()` llama a
+    `GET /api/odoo/module-states?db=` + `encodeURIComponent(db)` y notifica el
+    error de psql sin romper la vista; `stateOf(m)` devuelve
+    `states[m.name] || '—'`; `stateBadgeClass(s)` mapea `installed` a verde,
+    cualquier `to *` a amarillo, y el resto (incluido `uninstalled` y `—`) a
+    gris. `watch(db, ...)` persiste la selección en `localStorage` (solo si no
+    está vacía, para no pisar la preferencia guardada cuando el stack está
+    abajo) y dispara `loadStates()`. `onActivated` ahora llama también a
+    `loadDbs()`. Plantilla: `<select v-model="db">` en el header (mismo patrón
+    `class="input" style="width:auto"` que el resto del SPA) junto con el
+    motivo (`dbError`) cuando no hay bases; nueva columna **State** en la
+    tabla de Local Addons con un badge coloreado. Todavía sin botón Update
+    (eso es T8): la vista queda usable y verde con la base y los estados
+    visibles.
+- Validación:
+  - `pytest -q` (suite completa) → 712 passed (el HTML no tiene tests
+    automáticos, sin impacto en la suite Python).
+  - `ruff check .` y `ruff format --check .` → limpios.
+  - `node --check` sobre el `<script>` extraído → sin errores de sintaxis.
+  - Manual (CA3/CA4/CA5, pendiente de verificación con Docker real y un
+    proyecto Rocketdoo real): no se pudo ejecutar en este entorno sandbox
+    (requiere `rkd up -d` con Postgres real). Ver sección "Pendiente".
+
+Pendiente: T8 y T9.
