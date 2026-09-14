@@ -150,6 +150,56 @@ class TestNativeInstanceCallSites:
         assert kwargs["env"]["SSHPASS"] == SENTINEL
 
 
+class TestConfigureOdooStdin:
+    """_configure_odoo() (T5 / RF-6): admin_passwd travels by stdin, not argv."""
+
+    def _deployer(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        cfg = _password_vps_config(admin_passwd=SENTINEL)
+        return deployer_native.NativeInstanceDeployer("stage", cfg, tmp_path)
+
+    def test_conf_content_travels_by_stdin_not_argv(self, tmp_path, monkeypatch):
+        deployer = self._deployer(tmp_path, monkeypatch)
+        run = _RecordingRun()
+        monkeypatch.setattr(deployer_native.subprocess, "run", run)
+
+        deployer._configure_odoo()
+
+        args, kwargs = run.calls[0]
+        assert all(SENTINEL not in item for item in args)
+        assert "admin_passwd" not in " ".join(args)
+        assert kwargs["input"].startswith("[options]\n")
+        assert f"admin_passwd = {SENTINEL}\n" in kwargs["input"]
+
+    def test_conf_content_is_unchanged(self, tmp_path, monkeypatch):
+        deployer = self._deployer(tmp_path, monkeypatch)
+        run = _RecordingRun()
+        monkeypatch.setattr(deployer_native.subprocess, "run", run)
+
+        deployer._configure_odoo()
+
+        conf = run.calls[0][1]["input"]
+        assert conf == (
+            "[options]\n"
+            "addons_path = /opt/odoo-stage\n"
+            "data_dir = /var/lib/odoo\n"
+            f"admin_passwd = {SENTINEL}\n"
+            "db_host = localhost\n"
+            "db_port = 5432\n"
+            "db_user = odoo_stage\n"
+            "db_password = False\n"
+            "db_maxconn = 64\n"
+            "log_level = info\n"
+            "logfile = /var/log/odoo/odoo-server.log\n"
+            "workers = 2\n"
+            "gevent_port = 8072\n"
+            "limit_memory_hard = 1610612736\n"
+            "limit_memory_soft = 1073741824\n"
+            "proxy_mode = True\n"
+            "list_db = False\n"
+        )
+
+
 def _password_vps_deployer_config(**overrides):
     cfg = {
         "connection": {
