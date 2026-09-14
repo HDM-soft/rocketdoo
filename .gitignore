@@ -9,3 +9,4 @@ build/
 
 # SDD planning artifacts: our workflow, not part of Rocketdoo
 .sdd/
+.sdd-archive/

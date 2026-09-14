@@ -179,8 +179,13 @@ def disable_mailpit_server(db: str) -> tuple[int, str]:
         f"WHERE name = '{MAILPIT_SERVER_NAME}' AND smtp_host = '{MAILPIT_SMTP_HOST}' "
         "RETURNING id;"
     )
-    stdout, error = _psql(db, sql, "-t", "-A")
+    # -q suppresses psql's status line: without it, `RETURNING id` with zero
+    # rows still prints "UPDATE 0", which counts as a row and makes the command
+    # report an archive that never happened.
+    stdout, error = _psql(db, sql, "-q", "-t", "-A")
     if error:
         return 0, error
 
-    return len([line for line in stdout.splitlines() if line.strip()]), ""
+    # Count returned ids, not non-empty lines: psql's status line ("UPDATE 0")
+    # is not a row, and counting it reports an archive that never happened.
+    return len([line for line in stdout.splitlines() if line.strip().isdigit()]), ""

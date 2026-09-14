@@ -268,3 +268,58 @@ class TestDisableMailpitServer:
         count, error = odoo_db.disable_mailpit_server("dev")
         assert count == 0
         assert error == "permission denied"
+
+
+class TestDisableCountsRealPsqlOutput:
+    """psql prints a status line even with -t -A, and it must not count as a row.
+
+    Found running against a real database: `RETURNING id` with zero matches
+    still emits "UPDATE 0" on stdout, so counting non-empty lines reported one
+    archived row and `rkd mail off` claimed it had archived a record that did
+    not exist. The earlier tests missed it because their mocks returned the
+    idealised output, without the status line.
+    """
+
+    def _psql_returning(self, monkeypatch, stdout):
+        import subprocess
+
+        from rocketdoo.core import odoo_db
+
+        captured = {}
+
+        def _run(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, stdout, "")
+
+        monkeypatch.setattr(odoo_db.subprocess, "run", _run)
+        monkeypatch.setattr(odoo_db, "db_container", lambda *a, **k: "db-demo")
+        return captured
+
+    def test_quiet_flag_is_passed(self, monkeypatch):
+        """Without -q the status line comes back and breaks the count."""
+        from rocketdoo.core.odoo_db import disable_mailpit_server
+
+        captured = self._psql_returning(monkeypatch, "")
+        disable_mailpit_server("demo")
+
+        assert "-q" in captured["cmd"]
+
+    def test_no_match_counts_zero(self, monkeypatch):
+        from rocketdoo.core.odoo_db import disable_mailpit_server
+
+        self._psql_returning(monkeypatch, "")
+        assert disable_mailpit_server("demo")[0] == 0
+
+    def test_one_match_counts_one(self, monkeypatch):
+        from rocketdoo.core.odoo_db import disable_mailpit_server
+
+        self._psql_returning(monkeypatch, "7\n")
+        assert disable_mailpit_server("demo")[0] == 1
+
+    def test_a_stray_status_line_is_not_counted(self, monkeypatch):
+        """Belt and braces: even if -q were dropped, "UPDATE 0" is not a row."""
+        from rocketdoo.core.odoo_db import disable_mailpit_server
+
+        self._psql_returning(monkeypatch, "UPDATE 0\n")
+        rows = disable_mailpit_server("demo")[0]
+        assert rows == 0, "the psql status line was counted as an archived row"
