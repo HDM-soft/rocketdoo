@@ -10,9 +10,22 @@ COPY ./install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
 
 USER root
 
-# pipx no está en los repos de Debian bullseye (odoo:15.0/16.0). Es una
-# conveniencia para trabajar dentro del contenedor, no un requisito del build,
-# así que su ausencia no debe abortar la imagen.
+# Dos instalaciones toleran el fallo, por la misma razón: no son requisitos
+# del build y su ausencia no debe abortar la imagen.
+#
+# - pipx no está en los repos de Debian bullseye (odoo:15.0/16.0).
+# - libssl-dev/swig/python3-dev/gcc sirven para compilar M2Crypto desde
+#   fuente, pero abajo se instala python3-m2crypto, que es el binario ya
+#   compilado. Verificado: sin ellos, M2Crypto igual importa.
+#
+# El sed sobre sources.list corre sólo en bullseye (odoo:15.0/16.0). Esa
+# release pasó a oldoldstable y los binarios de debian-security salieron de
+# deb.debian.org: el índice sigue anunciando versiones (libssl-dev u8,
+# git-man u5) cuyos .deb devuelven 404 en todos los mirrors, y
+# archive.debian.org todavía no las tiene. Con el repo presente, apt resuelve
+# contra ese índice y falla al descargar, incluso para git, que sí hace falta.
+# Sin él, los paquetes salen de bullseye/main, que conserva sus binarios.
+# No se pierden parches: hoy no hay de dónde bajarlos.
 #
 # El rm de EXTERNALLY-MANAGED va acá, en la misma capa y DESPUÉS de los apt
 # install, no en una capa previa: python3-dev arrastra el paquete python3.N,
@@ -22,8 +35,12 @@ USER root
 # No usar --break-system-packages para lo mismo: llegó en pip 23 y las imágenes
 # viejas no lo soportan (odoo:15.0/16.0 = bullseye, pip 20.3; odoo:17.0 =
 # jammy, pip 22.0). Donde el archivo no existe, el rm -f no falla.
-RUN apt update && \
-    apt install -y libssl-dev swig python3-dev gcc && \
+RUN . /etc/os-release && \
+    if [ "$VERSION_CODENAME" = "bullseye" ]; then \
+        sed -i '/security/d' /etc/apt/sources.list; \
+    fi && \
+    apt update && \
+    { apt install -y libssl-dev swig python3-dev gcc || echo "build deps unavailable on this base image, skipping"; } && \
     apt install -y python3-m2crypto && \
     apt install -y git && \
     { apt install -y pipx || echo "pipx no disponible en esta imagen base, se omite"; } && \

@@ -13,7 +13,7 @@ from typing import Dict, List
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
-from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref
+from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref, sshpass_wrap
 
 from .base import BaseDeployer, DeploymentResult
 from .module_packager import ModulePackager
@@ -109,6 +109,11 @@ class VPSDeployer(BaseDeployer):
             secret_file.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600
 
             console.print(f"[green]✔ Password stored securely at {secret_file}[/green]")
+
+    @property
+    def _sshpass_password(self) -> str | None:
+        """The password to feed sshpass, or None when authenticating with a key."""
+        return self.password if self.auth_method == "password" else None
 
     def validate_config(self) -> List[str]:
         """
@@ -388,11 +393,23 @@ class VPSDeployer(BaseDeployer):
         Returns:
             CompletedProcess with result
         """
-        # Handle sudo with password authentication
+        # Handle sudo with password authentication. The password never touches
+        # the command string: it travels through the stdin of subprocess.run,
+        # which ssh forwards over the encrypted channel to the remote sudo -S.
+        # This keeps the password out of `ps aux` on both ends and, unlike the
+        # old `echo '{password}' | sudo -S` interpolation, means the password's
+        # content can never alter the structure of the remote command.
+        # The password goes to sudo's stdin, so a remote command that reads
+        # stdin itself cannot be run with use_sudo=True: it would consume the
+        # password line. Today none of the callers do (the only two are
+        # `mkdir` and `systemctl restart`).
+        sudo_input = None
         if use_sudo:
             if self.auth_method == "password" and self.password:
-                # Use echo password | sudo -S for password-based sudo
-                command = f"echo '{self.password}' | sudo -S {command}"
+                command = f"sudo -S -p '' {command}"
+                # Only the first line reaches sudo; a multi-line password would
+                # leave the rest in the remote command's stdin.
+                sudo_input = self.password.splitlines()[0] + "\n" if self.password else None
             else:
                 # Try passwordless sudo or rely on SSH key having sudo access
                 command = f"sudo {command}"
@@ -406,9 +423,6 @@ class VPSDeployer(BaseDeployer):
         if self.auth_method == "ssh_key" and self.ssh_key:
             key_path = os.path.expanduser(self.ssh_key)
             ssh_cmd.extend(["-i", key_path])
-        elif self.auth_method == "password" and self.password:
-            # Use sshpass for password authentication
-            ssh_cmd = ["sshpass", "-p", self.password] + ssh_cmd
 
         # Add user@host
         ssh_cmd.append(f"{self.user}@{self.host}")
@@ -416,9 +430,11 @@ class VPSDeployer(BaseDeployer):
         # Add command
         ssh_cmd.append(command)
 
+        ssh_cmd, env = sshpass_wrap(self._sshpass_password, ssh_cmd)
+
         # Execute
         try:
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout)
+            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout, env=env, input=sudo_input)
             return result
         except FileNotFoundError as e:
             if "sshpass" in str(e):
@@ -447,9 +463,6 @@ class VPSDeployer(BaseDeployer):
             if self.auth_method == "ssh_key" and self.ssh_key:
                 key_path = os.path.expanduser(self.ssh_key)
                 ssh_opts += f" -i {key_path}"
-            elif self.auth_method == "password" and self.password:
-                # Use sshpass for rsync with password
-                rsync_cmd = ["sshpass", "-p", self.password] + rsync_cmd
 
             rsync_cmd.extend(["-e", f"ssh {ssh_opts}"])
 
@@ -457,8 +470,10 @@ class VPSDeployer(BaseDeployer):
             rsync_cmd.append(f"{local_path}/")
             rsync_cmd.append(f"{self.user}@{self.host}:{remote_path}/")
 
+            rsync_cmd, env = sshpass_wrap(self._sshpass_password, rsync_cmd)
+
             # Execute rsync
-            result = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=600)
+            result = subprocess.run(rsync_cmd, capture_output=True, text=True, timeout=600, env=env)
 
             if result.returncode != 0:
                 self.log(f"rsync failed: {result.stderr}", "error")
@@ -500,16 +515,15 @@ class VPSDeployer(BaseDeployer):
             if self.auth_method == "ssh_key" and self.ssh_key:
                 key_path = os.path.expanduser(self.ssh_key)
                 scp_cmd.extend(["-i", key_path])
-            elif self.auth_method == "password" and self.password:
-                # Use sshpass for password authentication
-                scp_cmd = ["sshpass", "-p", self.password] + scp_cmd
 
             # Add source and destination
             scp_cmd.append(str(local_path))
             scp_cmd.append(f"{self.user}@{self.host}:{remote_path}")
 
+            scp_cmd, env = sshpass_wrap(self._sshpass_password, scp_cmd)
+
             # Execute
-            result = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=300)
+            result = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=300, env=env)
 
             return result.returncode == 0
 

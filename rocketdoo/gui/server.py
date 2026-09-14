@@ -5,10 +5,61 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from rocketdoo import __version__
+
 STATIC_DIR = Path(__file__).parent / "static"
 
 DEFAULT_PORT = 8070
 _LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1", "0.0.0.0")
+
+
+async def _stream_process(websocket: WebSocket, cmd: list[str], timeout: float = 600.0) -> None:
+    """Stream a subprocess's combined stdout/stderr over an already-accepted websocket.
+
+    Emits each line as its own text message, then a final ``\\x00exit:{code}``
+    marker. Assumes the caller already called ``websocket.accept()`` and, on
+    validation failure, already sent its own error and exit banner instead of
+    calling this at all. Shared by every route that runs a CLI command and
+    shows its live output in the frontend's DockerTerminal.
+    """
+    process = None
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        while True:
+            line = await asyncio.wait_for(process.stdout.readline(), timeout=timeout)
+            if not line:
+                break
+            await websocket.send_text(line.decode("utf-8", errors="replace").rstrip())
+        await process.wait()
+        await websocket.send_text(f"\x00exit:{process.returncode}")
+    except WebSocketDisconnect:
+        pass
+    except asyncio.TimeoutError:
+        try:
+            await websocket.send_text("[error] Timed out after 10 minutes")
+            await websocket.send_text("\x00exit:1")
+        except Exception:
+            pass
+    except Exception as e:
+        try:
+            await websocket.send_text(f"[error] {e}")
+            await websocket.send_text("\x00exit:1")
+        except Exception:
+            pass
+    finally:
+        if process and process.returncode is None:
+            try:
+                process.kill()
+            except Exception:
+                pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 def local_origins(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> list[str]:
@@ -31,7 +82,7 @@ def local_origins(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> list[str
 def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
     app = FastAPI(
         title="Rocketdoo GUI",
-        version="3.0.0",
+        version=__version__,
         docs_url="/api/docs",
         redoc_url=None,
     )
@@ -47,7 +98,13 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.get("/api/version")
+    def get_version():
+        """The installed rocketdoo version, so the SPA stops hardcoding it."""
+        return {"version": __version__}
+
     from rocketdoo.gui.api import router as api_router
+    from rocketdoo.gui.api.odoo import build_update_command
 
     app.include_router(api_router, prefix="/api")
 
@@ -69,44 +126,18 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
             await websocket.send_text("\x00exit:1")
             await websocket.close()
             return
-        process = None
-        try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-            while True:
-                line = await asyncio.wait_for(process.stdout.readline(), timeout=600.0)
-                if not line:
-                    break
-                await websocket.send_text(line.decode("utf-8", errors="replace").rstrip())
-            await process.wait()
-            await websocket.send_text(f"\x00exit:{process.returncode}")
-        except WebSocketDisconnect:
-            pass
-        except asyncio.TimeoutError:
-            try:
-                await websocket.send_text("[error] Timed out after 10 minutes")
-                await websocket.send_text("\x00exit:1")
-            except Exception:
-                pass
-        except Exception as e:
-            try:
-                await websocket.send_text(f"[error] {e}")
-                await websocket.send_text("\x00exit:1")
-            except Exception:
-                pass
-        finally:
-            if process and process.returncode is None:
-                try:
-                    process.kill()
-                except Exception:
-                    pass
-            try:
-                await websocket.close()
-            except Exception:
-                pass
+        await _stream_process(websocket, cmd)
+
+    @app.websocket("/ws/odoo/update")
+    async def ws_odoo_update(websocket: WebSocket, module: str, db: str):
+        await websocket.accept()
+        cmd, error = build_update_command(module, db)
+        if error:
+            await websocket.send_text(f"[error] {error}")
+            await websocket.send_text("\x00exit:1")
+            await websocket.close()
+            return
+        await _stream_process(websocket, cmd)
 
     @app.websocket("/ws/logs/{container_name}")
     async def ws_logs(websocket: WebSocket, container_name: str, tail: int = 150):
