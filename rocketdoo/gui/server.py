@@ -176,13 +176,20 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
             except Exception:
                 pass
 
+    # The SPA is one file with a fixed name, so without this the browser keeps
+    # serving its stored copy across upgrades — a user on a new version saw the
+    # previous interface until a forced refresh. "no-cache" does not disable
+    # caching, it requires revalidation: with the etag already sent, an
+    # unchanged file still answers 304.
+    _SPA_HEADERS = {"Cache-Control": "no-cache"}
+
     @app.get("/", response_class=FileResponse)
     async def root():
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(STATIC_DIR / "index.html", headers=_SPA_HEADERS)
 
     @app.get("/health")
     async def health():
-        return {"status": "ok", "version": "3.0.0"}
+        return {"status": "ok", "version": __version__}
 
     @app.get("/{path:path}", response_class=FileResponse)
     async def spa_fallback(path: str):
@@ -190,7 +197,7 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
             return JSONResponse({"error": "Not found"}, status_code=404)
         index = STATIC_DIR / "index.html"
         if index.exists():
-            return FileResponse(index)
+            return FileResponse(index, headers=_SPA_HEADERS)
         return JSONResponse({"error": "GUI not found"}, status_code=404)
 
     return app
