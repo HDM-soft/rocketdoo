@@ -58,3 +58,16 @@ def resolve_env_ref(value: str) -> str:
     if name is None:
         return value
     return os.environ.get(name, "")
+
+
+def sshpass_wrap(password: str | None, argv: list[str]) -> tuple[list[str], dict | None]:
+    """Return (argv, env) for a command that may need password authentication.
+
+    The password travels in the SSHPASS environment variable of the child
+    process, never as an argv element readable through `ps`. Without a
+    password the command is returned untouched and env is None, which makes
+    subprocess inherit the parent environment exactly as before.
+    """
+    if not password:
+        return argv, None
+    return ["sshpass", "-e", *argv], {**os.environ, "SSHPASS": password}

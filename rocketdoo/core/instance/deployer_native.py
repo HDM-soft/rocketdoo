@@ -160,9 +160,11 @@ class NativeInstanceDeployer:
             "list_db = False\n"
         )
 
-        # Write conf via heredoc on remote. The heredoc delimiter is quoted
-        # (<< \'ENDCONF\'), so the shell performs no expansion on the body.
-        return self._ssh(f"sudo bash -c 'cat > {self.odoo_conf_path} << \\'ENDCONF\\'\n{conf}\nENDCONF'")
+        # The conf body (including admin_passwd) travels through stdin rather
+        # than being embedded in the command string: it never touches argv,
+        # so it cannot appear in `ps aux` and cannot be affected by shell
+        # quoting rules regardless of what a value contains.
+        return self._ssh(f"sudo tee {self.odoo_conf_path} > /dev/null", input=conf)
 
     def _sync_addons(self) -> bool:
         addons_dir = self.project_path / "addons"
@@ -171,8 +173,8 @@ class NativeInstanceDeployer:
             return True
 
         self._ssh(f"sudo mkdir -p {self.remote_addons} && sudo chown {self.user} {self.remote_addons}")
-        cmd = build_rsync_cmd(self.auth, self.port, self.user, self.host, f"{addons_dir}/", f"{self.remote_addons}/")
-        result = subprocess.run(cmd)
+        cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, f"{addons_dir}/", f"{self.remote_addons}/")
+        result = subprocess.run(cmd, env=env)
         return result.returncode == 0
 
     def _enable_service(self) -> bool:
@@ -180,9 +182,9 @@ class NativeInstanceDeployer:
 
     # ─── helpers ─────────────────────────────────────────────────────────────
 
-    def _ssh(self, command: str, timeout: int = 300) -> bool:
-        cmd = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
-        return subprocess.run(cmd, timeout=timeout).returncode == 0
+    def _ssh(self, command: str, timeout: int = 300, input: str | None = None) -> bool:
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
+        return subprocess.run(cmd, timeout=timeout, env=env, input=input, text=True).returncode == 0
 
     def _show_plan(self):
         console.print("\n[bold]DRY-RUN — Steps that would be executed:[/bold]")

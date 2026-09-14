@@ -284,3 +284,140 @@ class TestDockerfilePipInstall:
     def test_pipx_failure_does_not_abort_the_build(self, instructions):
         """pipx is not packaged for bullseye (odoo:15.0/16.0)."""
         assert "|| echo" in instructions
+
+
+class TestOdooConfKeys:
+    """The generated odoo.conf must use keys Odoo actually reads.
+
+    `givent_port` shipped for a while: Odoo ignores an unknown key and falls
+    back to the default, so nothing broke visibly, but editing that line to
+    change the port had no effect.
+    """
+
+    @pytest.fixture
+    def conf(self):
+        return render("config/odoo.conf.jinja", **PROJECT_CONTEXT)
+
+    def test_gevent_port_is_spelled_correctly(self, conf):
+        assert "gevent_port" in conf
+        assert "givent_port" not in conf
+
+    @pytest.mark.parametrize("rel_path", ["config/odoo.conf.jinja", "instance/odoo.conf.jinja"])
+    def test_no_template_carries_the_typo(self, rel_path):
+        assert "givent_port" not in (TEMPLATES / rel_path).read_text()
+
+    def test_active_keys_have_no_obvious_typos(self, conf):
+        """Guard the uncommented keys against the same class of mistake.
+
+        Odoo swallows unknown options silently, so a misspelling here is
+        invisible until someone wonders why a setting does nothing.
+        """
+        known = {
+            "addons_path",
+            "admin_passwd",
+            "data_dir",
+            "db_host",
+            "db_maxconn",
+            "db_name",
+            "db_password",
+            "db_port",
+            "db_sslmode",
+            "db_template",
+            "db_user",
+            "dbfilter",
+            "demo",
+            "email_from",
+            "gevent_port",
+            "geoip_database",
+            "http_enable",
+            "http_interface",
+            "http_port",
+            "import_partial",
+            "limit_memory_hard",
+            "limit_memory_soft",
+            "limit_request",
+            "limit_time_cpu",
+            "limit_time_real",
+            "limit_time_real_cron",
+            "list_db",
+            "log_db",
+            "log_db_level",
+            "log_handler",
+            "log_level",
+            "logfile",
+            "logrotate",
+            "longpolling_port",
+            "max_cron_threads",
+            "osv_memory_age_limit",
+            "osv_memory_count_limit",
+            "pg_path",
+            "pidfile",
+            "proxy_mode",
+            "reportgz",
+            "screencasts",
+            "screenshots",
+            "server_wide_modules",
+            "smtp_password",
+            "smtp_port",
+            "smtp_server",
+            "smtp_ssl",
+            "smtp_user",
+            "syslog",
+            "test_enable",
+            "test_file",
+            "test_tags",
+            "transient_age_limit",
+            "translate_modules",
+            "unaccent",
+            "upgrade_path",
+            "without_demo",
+            "workers",
+        }
+        active = {
+            line.split("=")[0].strip()
+            for line in conf.splitlines()
+            if "=" in line and not line.strip().startswith((";", "#", "["))
+        }
+        assert active <= known, f"unknown odoo.conf keys: {sorted(active - known)}"
+
+
+class TestDockerfileBullseyeRepos:
+    """Debian 11 left debian-security while its index kept advertising versions.
+
+    bullseye became oldoldstable and its security binaries went away from every
+    mirror, while the index still lists them, so apt resolves against packages
+    whose .deb returns 404 — including git, which the build needs. The Dockerfile
+    drops that repo on bullseye only; elsewhere the security updates are real and
+    must stay.
+    """
+
+    @pytest.fixture
+    def instructions(self):
+        rendered = render("Dockerfile.jinja", **PROJECT_CONTEXT)
+        return "\n".join(line for line in rendered.splitlines() if not line.lstrip().startswith("#"))
+
+    def test_the_security_repo_is_dropped_only_on_bullseye(self, instructions):
+        assert "VERSION_CODENAME" in instructions
+        assert "bullseye" in instructions
+        assert "sed -i '/security/d' /etc/apt/sources.list" in instructions
+
+    def test_the_removal_is_guarded_by_a_conditional(self, instructions):
+        """Unconditional removal would strip real security updates on noble."""
+        sed_at = instructions.index("sed -i '/security/d'")
+        guard_at = instructions.index("VERSION_CODENAME")
+        assert guard_at < sed_at
+
+    def test_it_runs_before_apt_update(self, instructions):
+        """apt update after the edit, or the stale index is used anyway."""
+        assert instructions.index("sed -i '/security/d'") < instructions.index("apt update")
+
+    def test_build_only_deps_tolerate_failure(self, instructions):
+        """libssl-dev and friends compile M2Crypto; python3-m2crypto ships it built."""
+        assert "libssl-dev" in instructions
+        build_deps_line = next(ln for ln in instructions.splitlines() if "libssl-dev" in ln)
+        assert "||" in build_deps_line
+
+    def test_git_is_still_required(self, instructions):
+        """gitman cannot clone without it: its install must NOT be tolerated."""
+        git_line = next(ln for ln in instructions.splitlines() if "apt install -y git" in ln)
+        assert "||" not in git_line

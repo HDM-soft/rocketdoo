@@ -4,7 +4,7 @@ Shared by DockerInstanceDeployer and NativeInstanceDeployer.
 
 Mirrors the auth pattern from core/deploy/vps.py:
   - ssh_key  → -i key_path
-  - password → sshpass -p <pass>  (requires sshpass installed)
+  - password → sshpass -e     (password read from the SSHPASS env var, requires sshpass installed)
 """
 
 import os
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref
+from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref, sshpass_wrap
 
 console = Console()
 
@@ -75,24 +75,8 @@ def resolve_auth(vps_cfg: dict, env: str, project_path: Path) -> dict:
     return {"method": "password", "key_path": None, "password": password}
 
 
-def ssh_prefix(auth: dict) -> list[str]:
-    """
-    Return the command prefix for SSH/rsync based on auth method.
-
-    ssh_key  → []                          (key added via ssh_opts)
-    password → ['sshpass', '-p', '<pass>']
-    """
-    if auth["method"] == "password":
-        return ["sshpass", "-p", auth["password"]]
-    return []
-
-
 def ssh_opts(auth: dict, port: int, agent_forward: bool = False) -> list[str]:
-    """
-    Return SSH -o/-i/-A options (without the leading 'ssh').
-
-    Combine with ssh_prefix() for password auth.
-    """
+    """Return SSH -o/-i/-A options (without the leading 'ssh')."""
     opts = [
         "-p",
         str(port),
@@ -108,24 +92,28 @@ def ssh_opts(auth: dict, port: int, agent_forward: bool = False) -> list[str]:
     return opts
 
 
-def build_ssh_cmd(auth: dict, port: int, user: str, host: str, command: str, agent_forward: bool = False) -> list[str]:
-    """Full SSH command list ready for subprocess.run()."""
-    return [
-        *ssh_prefix(auth),
+def build_ssh_cmd(
+    auth: dict, port: int, user: str, host: str, command: str, agent_forward: bool = False
+) -> tuple[list[str], dict | None]:
+    """Full (cmd, env) pair ready for subprocess.run()."""
+    argv = [
         "ssh",
         *ssh_opts(auth, port, agent_forward),
         f"{user}@{host}",
         command,
     ]
+    # Keyed on the method, as ssh_prefix() was: a dict built by hand without
+    # a "password" key should not silently fall through to key auth.
+    password = auth["password"] if auth["method"] == "password" else None
+    return sshpass_wrap(password, argv)
 
 
 def build_rsync_cmd(
     auth: dict, port: int, user: str, host: str, local: str, remote: str, extra_opts: list[str] | None = None
-) -> list[str]:
-    """rsync command list ready for subprocess.run()."""
+) -> tuple[list[str], dict | None]:
+    """rsync (cmd, env) pair ready for subprocess.run()."""
     ssh_e = "ssh " + " ".join(ssh_opts(auth, port))
-    return [
-        *ssh_prefix(auth),
+    argv = [
         "rsync",
         "-avz",
         "--delete",
@@ -135,3 +123,7 @@ def build_rsync_cmd(
         local,
         f"{user}@{host}:{remote}",
     ]
+    # Keyed on the method, as ssh_prefix() was: a dict built by hand without
+    # a "password" key should not silently fall through to key auth.
+    password = auth["password"] if auth["method"] == "password" else None
+    return sshpass_wrap(password, argv)
