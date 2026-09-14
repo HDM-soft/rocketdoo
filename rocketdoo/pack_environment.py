@@ -25,6 +25,7 @@ from rich import box
 from rich.console import Console
 from rich.panel import Panel
 
+from rocketdoo.core.odoo_db import db_container, list_databases
 from rocketdoo.project_info import get_project_info, project_exists, read_docker_compose
 
 console = Console()
@@ -32,14 +33,6 @@ console = Console()
 # ─────────────────────────────────────────────────────────────
 # Internal helpers
 # ─────────────────────────────────────────────────────────────
-
-
-def _get_db_container(compose_data: dict) -> str | None:
-    """Returns the database container name from docker-compose data."""
-    try:
-        return compose_data["services"]["db"]["container_name"]
-    except (KeyError, TypeError):
-        return None
 
 
 def _get_odoo_container(compose_data: dict) -> str | None:
@@ -59,31 +52,6 @@ def _is_container_running(container_name: str) -> bool:
         return result.stdout.strip() == "true"
     except Exception:
         return False
-
-
-def _list_odoo_databases(db_container: str) -> list[str]:
-    """Lists available databases in the PostgreSQL container."""
-    try:
-        result = subprocess.run(
-            [
-                "docker",
-                "exec",
-                db_container,
-                "psql",
-                "-U",
-                "root",
-                "-d",
-                "postgres",
-                "-t",
-                "-c",
-                "SELECT datname FROM pg_database WHERE datistemplate = false AND datname != 'postgres';",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    except Exception:
-        return []
 
 
 def _backup_database(db_container: str, db_name: str, output_path: Path) -> bool:
@@ -322,21 +290,21 @@ def pack_environment(no_db, output, db_name):
     filestore_base = None
 
     if not no_db:
-        db_container = _get_db_container(compose_data) if compose_data else None
+        db_container_name = db_container(compose_data) if compose_data else None
         odoo_container = _get_odoo_container(compose_data) if compose_data else None
 
-        if not db_container:
+        if not db_container_name:
             console.print("[yellow]⚠[/yellow]  Could not detect the database container.")
             console.print("[dim]   Continuing without DB backup. Use [cyan]--no-db[/cyan] to suppress this warning.[/dim]")
-        elif not _is_container_running(db_container):
-            console.print(f"[yellow]⚠[/yellow]  Container [cyan]{db_container}[/cyan] is not running.")
+        elif not _is_container_running(db_container_name):
+            console.print(f"[yellow]⚠[/yellow]  Container [cyan]{db_container_name}[/cyan] is not running.")
             console.print("[dim]   Start the environment with [cyan]rkd up -d[/cyan] before running pack with backup.[/dim]")
             if not questionary.confirm("Continue anyway without DB backup?", default=False).ask():
                 console.print("[yellow]Operation cancelled.[/yellow]")
                 return
         else:
             console.print("[bold]💾 Database backup:[/bold]")
-            available_dbs = _list_odoo_databases(db_container)
+            available_dbs = list_databases(compose_data)
 
             if not available_dbs:
                 console.print("  [yellow]⚠[/yellow]  No Odoo databases found.")
@@ -354,7 +322,7 @@ def pack_environment(no_db, output, db_name):
                 db_backup_path = backup_dir / f"db_{selected_db}_{timestamp}.dump"
                 fs_backup_path = backup_dir / f"filestore_{selected_db}_{timestamp}.tar.gz"
 
-                db_ok = _backup_database(db_container, selected_db, db_backup_path)
+                db_ok = _backup_database(db_container_name, selected_db, db_backup_path)
                 if not db_ok:
                     db_backup_path = None
 
