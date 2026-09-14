@@ -174,7 +174,7 @@ Dashboard, para que un refresh no la desmonte.
   (d) una `db` fuera de la lista devuelve error.
   Commit: `FEAT: validacion y armado del comando de update de modulo`.
 
-- [ ] **T4 — Extraer `_stream_process` en `server.py`.**
+- [x] **T4 — Extraer `_stream_process` en `server.py`.**
   Refactor puro: `/ws/docker/{action}` pasa a `await _stream_process(ws, cmd)`.
   Sin cambios de comportamiento observables.
   Validación: test unitario de `_stream_process` con un websocket falso

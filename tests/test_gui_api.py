@@ -10,6 +10,9 @@ endpoint reporting "no compose file" is a pass, one blowing up or reporting a
 missing helper is not.
 """
 
+import asyncio
+import sys
+
 import pytest
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
@@ -174,6 +177,52 @@ class TestBuildUpdateCommand:
 
         assert cmd is None
         assert error
+
+
+class TestStreamProcess:
+    """`_stream_process` is the single implementation shared by every
+    websocket route that runs a CLI command and streams its output.
+    """
+
+    class _FakeWebSocket:
+        def __init__(self):
+            self.sent = []
+            self.closed = False
+
+        async def send_text(self, text):
+            self.sent.append(text)
+
+        async def close(self):
+            self.closed = True
+
+    def test_streams_output_and_reports_a_clean_exit(self):
+        from rocketdoo.gui.server import _stream_process
+
+        ws = self._FakeWebSocket()
+        asyncio.run(_stream_process(ws, [sys.executable, "-c", "print('hi')"]))
+
+        assert ws.sent == ["hi", "\x00exit:0"]
+        assert ws.closed is True
+
+    def test_reports_a_non_zero_exit_code(self):
+        from rocketdoo.gui.server import _stream_process
+
+        ws = self._FakeWebSocket()
+        asyncio.run(_stream_process(ws, [sys.executable, "-c", "raise SystemExit(3)"]))
+
+        assert ws.sent[-1] == "\x00exit:3"
+
+
+class TestDockerActionWebSocket:
+    """Regression coverage for `/ws/docker/{action}` after extracting
+    `_stream_process` (CA13): an unknown action must still error out without
+    ever touching `_stream_process`.
+    """
+
+    def test_an_unknown_action_reports_error_and_exit(self, client):
+        with client.websocket_connect("/ws/docker/nope") as ws:
+            assert ws.receive_text() == "[error] Unknown action: nope"
+            assert ws.receive_text() == "\x00exit:1"
 
 
 class TestInstancesRoundTrip:

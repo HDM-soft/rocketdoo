@@ -67,4 +67,30 @@
   - `ruff check .` y `ruff format --check .` → limpios.
 - Sin hallazgos fuera del plan.
 
-Pendiente: T4 a T9 (no implementadas, fuera del alcance de esta tarea).
+## T4 — Extraer `_stream_process` en `server.py` — COMPLETADA
+
+- Archivos:
+  - `rocketdoo/gui/server.py`: nueva función a nivel de módulo
+    `_stream_process(websocket, cmd, timeout=600.0)` con el cuerpo exacto que
+    antes vivía en `ws_docker_action` (mismo manejo de
+    `WebSocketDisconnect`/`TimeoutError`/`Exception`, mismo `finally` que mata
+    el proceso y cierra el socket, mismo `\x00exit:{code}` y mismo timeout de
+    600s por línea). `ws_docker_action` ahora valida la acción y, si existe,
+    delega en `await _stream_process(websocket, cmd)`. `/ws/logs/{container_name}`
+    no se tocó.
+  - `tests/test_gui_api.py`: `TestStreamProcess` (websocket falso con
+    `send_text`/`close` async, vía `asyncio.run`: un `print('hi')` produce
+    `["hi", "\x00exit:0"]` y cierra el socket; `raise SystemExit(3)` produce
+    `\x00exit:3`) y `TestDockerActionWebSocket` (`/ws/docker/nope` vía
+    `client.websocket_connect` devuelve `[error] Unknown action: nope` +
+    `\x00exit:1`, regresión de CA13).
+- Validación:
+  - `pytest -q` (suite completa) → 705 passed (702 previos + 3 nuevos).
+  - `ruff check .` y `ruff format --check .` → limpios.
+- Diff puramente mecánico: se movió el cuerpo del `try/except/finally` sin
+  modificar una sola línea de lógica; solo cambió el nivel de indentación al
+  quedar dentro de una función de módulo en lugar de un closure de
+  `create_app`. Nada del comportamiento observable de `/ws/docker/{action}`
+  cambia.
+
+Pendiente: T5 a T9 (no implementadas, fuera del alcance de esta tarea).
