@@ -156,7 +156,7 @@ Dashboard, para que un refresh no la desmonte.
   `pytest tests/test_pack_environment.py tests/test_imports.py` en verde.
   Commit: `REF: acceso a la base de Odoo en core/odoo_db.py`.
 
-- [ ] **T2 — Endpoints `/api/odoo/databases` y `/api/odoo/module-states`.**
+- [x] **T2 — Endpoints `/api/odoo/databases` y `/api/odoo/module-states`.**
   Crea `gui/api/odoo.py` con los dos GET y registra el router en
   `gui/api/__init__.py` (`prefix="/odoo", tags=["odoo"]`).
   Validación: agregar `/api/odoo/databases` a `GET_ENDPOINTS` en
