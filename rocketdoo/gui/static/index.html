@@ -314,7 +314,7 @@ const LogViewer = {
    DOCKER TERMINAL — streaming WebSocket output for compose commands
 ══════════════════════════════════════════════════════════════════════════ */
 const DockerTerminal = {
-  props: { action: String },
+  props: { url: String, label: String },
   emits: ['done', 'close'],
   setup(props, { emit }) {
     const lines    = ref([])
@@ -336,7 +336,7 @@ const DockerTerminal = {
 
     onMounted(() => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      ws = new WebSocket(`${proto}://${location.host}/ws/docker/${props.action}`)
+      ws = new WebSocket(`${proto}://${location.host}${props.url}`)
       ws.onmessage = e => {
         const txt = e.data
         if (txt.startsWith('\x00exit:')) {
@@ -381,14 +381,14 @@ const DockerTerminal = {
         <span v-if="running" v-html="I.spin" class="spin" style="width:13px;height:13px;color:#6D9CFF;display:inline-block;flex-shrink:0;"></span>
         <span v-else-if="exitCode===0" v-html="I.check" style="width:13px;height:13px;color:#22C55E;flex-shrink:0;"></span>
         <span v-else v-html="I.warn" style="width:13px;height:13px;color:#F87171;flex-shrink:0;"></span>
-        <code style="font-size:12px;color:#DDE4F0;flex:1;font-family:monospace;">docker compose {{ action }}</code>
+        <code style="font-size:12px;color:#DDE4F0;flex:1;font-family:monospace;">{{ label }}</code>
         <span v-if="running" style="font-size:11px;color:#6B82A8;">running…</span>
         <span v-else-if="exitCode===0" style="font-size:11px;color:#22C55E;">✓ completed</span>
         <span v-else style="font-size:11px;color:#F87171;">✗ exit {{ exitCode }}</span>
         <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" title="Close terminal">✕</button>
       </div>
       <div ref="el" class="log-term" style="height:320px;">
-        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Connecting to docker compose {{ action }}…</div>
+        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Connecting to {{ label }}…</div>
         <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
       </div>
     </div>
@@ -571,7 +571,7 @@ const Dashboard = {
 
     <!-- Terminal lives OUTSIDE v-else so busy toggling never destroys/remounts it -->
     <div v-if="termAction" style="margin-top:20px;">
-      <DockerTerminal :action="termAction" @done="onTermDone" @close="closeTerminal" />
+      <DockerTerminal :url="'/ws/docker/'+termAction" :label="'docker compose '+termAction" @done="onTermDone" @close="closeTerminal" />
     </div>
   </div>`
 }
