@@ -11,15 +11,18 @@ console = Console()
 @click.command("gui")
 @click.option("--port", default=8070, show_default=True, help="Port to run the GUI server on")
 @click.option("--host", default="127.0.0.1", show_default=True, help="Host address to bind")
-@click.option("--open/--no-open", "auto_open", default=True, show_default=True, help="Open the browser automatically")
+# Not opened by default: under WSL2 the handler is usually a Linux browser
+# rendered through WSLg, not the user's Windows browser, so opening one is
+# more surprising than helpful. The URL is printed to copy instead.
+@click.option("--open/--no-open", "auto_open", default=False, show_default=True, help="Open the browser automatically")
 @click.option("--cwd", default=None, type=click.Path(exists=True), help="Project directory (default: current dir)")
 def gui_command(port, host, auto_open, cwd):
     """Launch the Rocketdoo web GUI.
 
     \b
     Examples:
-      rkd gui                        # Start on 8070 and open the browser
-      rkd gui --no-open              # Start without opening the browser
+      rkd gui                        # Start on default port 8070
+      rkd gui --open                 # Also open a browser on this machine
       rkd gui --port 9090            # Custom port
       rkd gui --cwd /path/to/project # Specify project directory
     """
@@ -33,7 +36,7 @@ def gui_command(port, host, auto_open, cwd):
     from rocketdoo.gui.server import create_app
 
     url = f"http://{host}:{port}"
-    browser_note = "opening automatically" if auto_open else "not opened (--open to change)"
+    browser_note = "opening automatically" if auto_open else "copy the URL above (--open to launch one here)"
 
     console.print()
     console.print(
