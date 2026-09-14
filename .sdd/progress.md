@@ -169,4 +169,53 @@
     proyecto Rocketdoo real): no se pudo ejecutar en este entorno sandbox
     (requiere `rkd up -d` con Postgres real). Ver sección "Pendiente".
 
-Pendiente: T8 y T9.
+## T8 — Botón Update, confirmación, terminal y restart de `web` — COMPLETADA
+
+- Archivos:
+  - `rocketdoo/gui/static/index.html`:
+    - `DockerTerminal.onclose`: si el socket se cierra sin haber recibido nunca
+      el banner `\x00exit:`, ahora setea `exitCode = 1`, agrega la línea
+      `[connection closed unexpectedly]` y emite `done(1)`. Corrige el
+      hallazgo de la revisión del backend (`/ws/odoo/update` puede cerrar sin
+      banner si falta un query param o si el scanner lanza) en el componente
+      compartido, no en cada llamador — el mismo `onclose` que ya usa
+      Dashboard queda protegido de paso, sin cambiar su comportamiento
+      cuando el banner sí llega.
+    - `Modules` declara `components: { DockerTerminal }` y agrega, en
+      `setup()`: `updating` (nombre del módulo en curso o `null`),
+      `updateUrl`/`updateLabel` (computed, arman la URL del WS con
+      `encodeURIComponent` y la etiqueta lógica `odoo -u <modulo> -d <base>`),
+      `canUpdate(m)` (requiere base elegida, `stateOf(m)==='installed'` y
+      ningún otro upgrade en curso), `updateReason(m)` (tooltip para cada uno
+      de esos tres motivos), `startUpdate(m)` (corta si `!canUpdate`, pide
+      `confirm()` nombrando módulo y base y advirtiendo sobre los datos XML
+      sin `noupdate`, y solo entonces setea `updating`), y `onUpdateDone()`
+      (`POST /docker/service/restart {service:'web'}`, `notify()` del
+      resultado, `loadStates()` y recién ahí `updating = null` — el botón
+      queda deshabilitado y la terminal montada durante todo el restart, no
+      solo durante el upgrade).
+    - Plantilla: columna **Actions** con el botón `Update{{ db ? ' ('+db+')':''}}`
+      (icono de spin mientras `updating===m.name`), deshabilitado con
+      `:title="updateReason(m)"` como tooltip nativo, y el `DockerTerminal`
+      montado fuera del `v-if="busy"` de la tabla (mismo patrón que
+      Dashboard), con `:url="updateUrl"`, `:label="updateLabel"`,
+      `@done="onUpdateDone"` y `@close="updating=null"`.
+- Validación:
+  - `pytest -q` (suite completa) → 712 passed, sin cambios.
+  - `ruff check .` y `ruff format --check .` → limpios.
+  - `node --check` sobre el `<script>` extraído del HTML → sin errores de
+    sintaxis.
+  - Manual (CA6, CA7, CA10, CA11, CA12, escenarios E1-E5): **no ejecutada**.
+    Requiere Docker y un proyecto Rocketdoo real (`rkd up -d`, una base con
+    módulos instalados) que no está disponible en este entorno. Ver
+    "Verificación manual" del plan para el checklist completo pendiente.
+- Hallazgo fuera del plan: el `onclose` de `DockerTerminal` no emitía `done`
+  si el socket se cerraba sin banner de exit, lo que habría dejado
+  `updating` (y el botón) colgado para siempre ante el escenario descrito en
+  la revisión del backend. Se corrigió en el componente compartido en lugar
+  de en `onUpdateDone`, siguiendo el mismo criterio que T1 (una sola barrera,
+  no una por llamador).
+
+Pendiente: T9 (documentación) y toda la verificación manual con Docker real
+listada en `.sdd/plan.md` (sección "Verificación manual", ítems CA3-CA13
+relacionados con T6-T8).

@@ -209,7 +209,7 @@ Dashboard, para que un refresh no la desmonte.
   crípticos.
   Commit: `FEAT: selector de base y estado de modulos en la vista Modules`.
 
-- [ ] **T8 — Botón Update, confirmación, terminal y restart de `web`.**
+- [x] **T8 — Botón Update, confirmación, terminal y restart de `web`.**
   Columna **Actions**, habilitación y tooltips (RF5), `confirm()` con módulo,
   base y advertencia de datos XML, montaje de `DockerTerminal` con la URL del
   WebSocket, y `onUpdateDone` → `POST /docker/service/restart {service:'web'}`
