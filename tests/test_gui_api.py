@@ -32,6 +32,7 @@ GET_ENDPOINTS = [
     "/api/instances",
     "/api/workspace",
     "/api/gitman",
+    "/api/odoo/databases",
 ]
 
 # Endpoints that only inspect or tear down state, safe to call on an empty dir.
@@ -94,6 +95,23 @@ class TestServiceStatusEndpoints:
 
     def test_instances_are_empty_without_config(self, client):
         assert client.get("/api/instances").json()["instances"] == []
+
+
+class TestOdooEndpoints:
+    def test_databases_reports_the_reason_without_a_container(self, client):
+        body = client.get("/api/odoo/databases").json()
+        assert body["databases"] == []
+        assert body["error"]
+
+    def test_unknown_database_is_rejected_before_querying_it(self, client, monkeypatch):
+        def _must_not_run(db):
+            raise AssertionError("module_states must not run for an unknown database")
+
+        monkeypatch.setattr("rocketdoo.gui.api.odoo.module_states", _must_not_run)
+
+        body = client.get("/api/odoo/module-states?db=nope").json()
+        assert body["states"] == {}
+        assert body["error"] == "unknown database"
 
 
 class TestInstancesRoundTrip:
