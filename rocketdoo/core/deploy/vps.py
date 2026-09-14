@@ -393,11 +393,17 @@ class VPSDeployer(BaseDeployer):
         Returns:
             CompletedProcess with result
         """
-        # Handle sudo with password authentication
+        # Handle sudo with password authentication. The password never touches
+        # the command string: it travels through the stdin of subprocess.run,
+        # which ssh forwards over the encrypted channel to the remote sudo -S.
+        # This keeps the password out of `ps aux` on both ends and, unlike the
+        # old `echo '{password}' | sudo -S` interpolation, means the password's
+        # content can never alter the structure of the remote command.
+        sudo_input = None
         if use_sudo:
             if self.auth_method == "password" and self.password:
-                # Use echo password | sudo -S for password-based sudo
-                command = f"echo '{self.password}' | sudo -S {command}"
+                command = f"sudo -S -p '' {command}"
+                sudo_input = self.password + "\n"
             else:
                 # Try passwordless sudo or rely on SSH key having sudo access
                 command = f"sudo {command}"
@@ -422,7 +428,7 @@ class VPSDeployer(BaseDeployer):
 
         # Execute
         try:
-            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout, env=env)
+            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout, env=env, input=sudo_input)
             return result
         except FileNotFoundError as e:
             if "sshpass" in str(e):

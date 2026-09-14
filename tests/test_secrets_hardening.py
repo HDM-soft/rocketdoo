@@ -222,3 +222,68 @@ class TestVpsDeployerCallSites:
         args, kwargs = run.calls[0]
         assert "sshpass" not in args
         assert kwargs["env"] is None
+
+
+class TestRunSshCommandSudoStdin:
+    """_run_ssh_command(use_sudo=True) with password auth (T4 / RF-4, RF-5).
+
+    The remote sudo password used to be interpolated into the command string
+    (`echo '{password}' | sudo -S ...`), which put it in ps aux on both ends
+    and let a password containing a quote inject arbitrary shell commands. It
+    now travels through the stdin of subprocess.run instead.
+    """
+
+    MALICIOUS_PASSWORD = "x'; touch /tmp/pwn; '"
+
+    def _deployer(self, tmp_path, password):
+        cfg = _password_vps_deployer_config()
+        cfg["connection"]["password"] = password
+        return vps.VPSDeployer("production", cfg, tmp_path)
+
+    def test_sudo_password_goes_through_stdin_not_argv(self, tmp_path, monkeypatch):
+        deployer = self._deployer(tmp_path, SENTINEL)
+        run = _RecordingRun()
+        monkeypatch.setattr(vps.subprocess, "run", run)
+
+        deployer._run_ssh_command("systemctl restart odoo", use_sudo=True)
+
+        args, kwargs = run.calls[0]
+        assert all(SENTINEL not in item for item in args)
+        assert "echo" not in args[-1]
+        assert args[-1] == "sudo -S -p '' systemctl restart odoo"
+        assert kwargs["input"] == SENTINEL + "\n"
+
+    def test_malicious_password_does_not_alter_remote_command(self, tmp_path, monkeypatch):
+        for password in ("trivial-pass", self.MALICIOUS_PASSWORD):
+            deployer = self._deployer(tmp_path, password)
+            run = _RecordingRun()
+            monkeypatch.setattr(vps.subprocess, "run", run)
+
+            deployer._run_ssh_command("systemctl restart odoo", use_sudo=True)
+
+            args, kwargs = run.calls[0]
+            assert args[-1] == "sudo -S -p '' systemctl restart odoo"
+            assert kwargs["input"] == password + "\n"
+
+    def test_sudo_without_password_auth_falls_back_to_plain_sudo(self, tmp_path, monkeypatch):
+        cfg = _password_vps_deployer_config(connection={"host": "vps.example.com", "user": "deploy", "port": 22})
+        cfg["connection"]["ssh_key"] = "~/.ssh/id_rsa"
+        deployer = vps.VPSDeployer("production", cfg, tmp_path)
+        run = _RecordingRun()
+        monkeypatch.setattr(vps.subprocess, "run", run)
+
+        deployer._run_ssh_command("systemctl restart odoo", use_sudo=True)
+
+        args, kwargs = run.calls[0]
+        assert args[-1] == "sudo systemctl restart odoo"
+        assert kwargs["input"] is None
+
+    def test_without_sudo_input_stays_none(self, tmp_path, monkeypatch):
+        deployer = self._deployer(tmp_path, SENTINEL)
+        run = _RecordingRun()
+        monkeypatch.setattr(vps.subprocess, "run", run)
+
+        deployer._run_ssh_command("echo hi")
+
+        args, kwargs = run.calls[0]
+        assert kwargs["input"] is None
