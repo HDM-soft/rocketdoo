@@ -97,6 +97,7 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
     )
 
     from rocketdoo.gui.api import router as api_router
+    from rocketdoo.gui.api.odoo import build_update_command
 
     app.include_router(api_router, prefix="/api")
 
@@ -115,6 +116,17 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
         await websocket.accept()
         if not cmd:
             await websocket.send_text(f"[error] Unknown action: {action}")
+            await websocket.send_text("\x00exit:1")
+            await websocket.close()
+            return
+        await _stream_process(websocket, cmd)
+
+    @app.websocket("/ws/odoo/update")
+    async def ws_odoo_update(websocket: WebSocket, module: str, db: str):
+        await websocket.accept()
+        cmd, error = build_update_command(module, db)
+        if error:
+            await websocket.send_text(f"[error] {error}")
             await websocket.send_text("\x00exit:1")
             await websocket.close()
             return

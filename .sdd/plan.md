@@ -184,7 +184,7 @@ Dashboard, para que un refresh no la desmonte.
   + `\x00exit:1`. Manual: botón **Build** del Dashboard sigue mostrando el log.
   Commit: `REF: helper unico de streaming de procesos por websocket`.
 
-- [ ] **T5 — Ruta `/ws/odoo/update`.**
+- [x] **T5 — Ruta `/ws/odoo/update`.**
   Usa `build_update_command` + `_stream_process`.
   Validación: `websocket_connect("/ws/odoo/update?module=x&db=y")` en un dir
   vacío → `[error] ...` + `\x00exit:1`; test de que con argumentos inválidos no

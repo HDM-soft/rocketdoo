@@ -93,4 +93,28 @@
   `create_app`. Nada del comportamiento observable de `/ws/docker/{action}`
   cambia.
 
-Pendiente: T5 a T9 (no implementadas, fuera del alcance de esta tarea).
+## T5 — Ruta `/ws/odoo/update` — COMPLETADA
+
+- Archivos:
+  - `rocketdoo/gui/server.py`: `from rocketdoo.gui.api.odoo import
+    build_update_command` (import diferido dentro de `create_app`, mismo
+    estilo que el import de `api_router`) y la ruta
+    `@app.websocket("/ws/odoo/update")`, que acepta el socket primero, arma el
+    comando con `build_update_command(module, db)` y, si hay error, envía
+    `[error] {error}` + `\x00exit:1` y cierra sin lanzar ningún proceso; si no,
+    delega en `_stream_process`.
+  - `tests/test_gui_api.py`: `TestOdooUpdateWebSocket` con dos casos sobre un
+    `project_dir` vacío (sin Docker): argumentos inválidos devuelven
+    `[error] ...` + `\x00exit:1`, y con `asyncio.create_subprocess_exec`
+    monkeypatcheado para lanzar `AssertionError` si se lo llama, la misma
+    ruta no lo invoca (CA9).
+- Validación:
+  - `pytest -q` (suite completa) → 708 passed (705 previos + 3 nuevos:
+    2 de `TestOdooUpdateWebSocket` + 1 parametrización nueva de
+    `tests/test_imports.py` sobre el import diferido agregado).
+  - `ruff check .` y `ruff format --check .` → limpios.
+- Hallazgo fuera del plan: ninguno. El orden "aceptar primero, validar
+  después" del plan se respetó literalmente; no se lanza ningún subproceso
+  cuando `build_update_command` devuelve error.
+
+Pendiente: T6 a T9 (frontend y documentación, fuera del alcance de esta tarea).

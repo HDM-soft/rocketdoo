@@ -225,6 +225,25 @@ class TestDockerActionWebSocket:
             assert ws.receive_text() == "\x00exit:1"
 
 
+class TestOdooUpdateWebSocket:
+    """`/ws/odoo/update` validates before it ever spawns a process (CA9)."""
+
+    def test_invalid_arguments_report_an_error_and_exit(self, client, project_dir):
+        with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text().startswith("[error] ")
+            assert ws.receive_text() == "\x00exit:1"
+
+    def test_invalid_arguments_never_spawn_a_process(self, client, project_dir, monkeypatch):
+        async def _must_not_run(*args, **kwargs):
+            raise AssertionError("build_update_command rejected this; nothing should run")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _must_not_run)
+
+        with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text().startswith("[error] ")
+            assert ws.receive_text() == "\x00exit:1"
+
+
 class TestInstancesRoundTrip:
     """The GUI must be able to save a config its own reader and the deployers accept.
 
