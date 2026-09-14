@@ -462,3 +462,44 @@ class TestVersionIsNotHardcoded:
 
         source = (Path(rocketdoo.__path__[0]) / "gui_cli.py").read_text()
         assert not re.findall(r"v\d+\.\d+\.\d+", source)
+
+
+class TestSpaIsRevalidated:
+    """The SPA is one file with a fixed name, so a stored copy survives upgrades.
+
+    Reported after updating to 3.2.1: the sidebar still showed v3.0.0, the
+    literal removed in #172. The server was serving the right HTML — the browser
+    was not asking for it.
+    """
+
+    def test_the_index_is_served_with_no_cache(self, client):
+        assert client.get("/").headers.get("cache-control") == "no-cache"
+
+    def test_the_spa_fallback_route_too(self, client):
+        """Deep links land on the fallback, not on /."""
+        response = client.get("/dashboard")
+        assert response.status_code == 200
+        assert response.headers.get("cache-control") == "no-cache"
+
+    def test_the_served_html_carries_no_version_literal(self, client):
+        import re
+
+        assert not re.findall(r"v\d+\.\d+\.\d+", client.get("/").text)
+
+
+class TestHealthReportsTheRealVersion:
+    """#172 covered the SPA and the CLI banner but missed this one."""
+
+    def test_health_matches_the_package(self, client):
+        import rocketdoo
+
+        assert client.get("/health").json()["version"] == rocketdoo.__version__
+
+    def test_no_version_literal_in_the_server_module(self):
+        import re
+        from pathlib import Path
+
+        import rocketdoo
+
+        source = (Path(rocketdoo.__path__[0]) / "gui" / "server.py").read_text()
+        assert not re.findall(r'"\d+\.\d+\.\d+"', source)
