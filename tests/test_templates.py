@@ -379,3 +379,45 @@ class TestOdooConfKeys:
             if "=" in line and not line.strip().startswith((";", "#", "["))
         }
         assert active <= known, f"unknown odoo.conf keys: {sorted(active - known)}"
+
+
+class TestDockerfileBullseyeRepos:
+    """Debian 11 left debian-security while its index kept advertising versions.
+
+    bullseye became oldoldstable and its security binaries went away from every
+    mirror, while the index still lists them, so apt resolves against packages
+    whose .deb returns 404 — including git, which the build needs. The Dockerfile
+    drops that repo on bullseye only; elsewhere the security updates are real and
+    must stay.
+    """
+
+    @pytest.fixture
+    def instructions(self):
+        rendered = render("Dockerfile.jinja", **PROJECT_CONTEXT)
+        return "\n".join(line for line in rendered.splitlines() if not line.lstrip().startswith("#"))
+
+    def test_the_security_repo_is_dropped_only_on_bullseye(self, instructions):
+        assert "VERSION_CODENAME" in instructions
+        assert "bullseye" in instructions
+        assert "sed -i '/security/d' /etc/apt/sources.list" in instructions
+
+    def test_the_removal_is_guarded_by_a_conditional(self, instructions):
+        """Unconditional removal would strip real security updates on noble."""
+        sed_at = instructions.index("sed -i '/security/d'")
+        guard_at = instructions.index("VERSION_CODENAME")
+        assert guard_at < sed_at
+
+    def test_it_runs_before_apt_update(self, instructions):
+        """apt update after the edit, or the stale index is used anyway."""
+        assert instructions.index("sed -i '/security/d'") < instructions.index("apt update")
+
+    def test_build_only_deps_tolerate_failure(self, instructions):
+        """libssl-dev and friends compile M2Crypto; python3-m2crypto ships it built."""
+        assert "libssl-dev" in instructions
+        build_deps_line = next(ln for ln in instructions.splitlines() if "libssl-dev" in ln)
+        assert "||" in build_deps_line
+
+    def test_git_is_still_required(self, instructions):
+        """gitman cannot clone without it: its install must NOT be tolerated."""
+        git_line = next(ln for ln in instructions.splitlines() if "apt install -y git" in ln)
+        assert "||" not in git_line
