@@ -17,8 +17,10 @@ router = APIRouter()
 ODOO_SERVICE = "web"  # service name from the docker-compose template
 
 
+# Not `async def`: these call subprocess.run, which would block the event
+# loop. Starlette runs sync handlers in a threadpool instead.
 @router.get("/databases")
-async def get_databases():
+def get_databases():
     databases, error = databases_result()
     if error:
         return {"databases": databases, "error": error}
@@ -26,7 +28,7 @@ async def get_databases():
 
 
 @router.get("/module-states")
-async def get_module_states(db: str):
+def get_module_states(db: str):
     if db not in list_databases():
         return {"states": {}, "error": "unknown database"}
     states, error = module_states(db)
@@ -36,10 +38,11 @@ async def get_module_states(db: str):
 
 
 def _known_modules() -> set[str]:
-    """Module names the Modules view's table can actually show.
+    """Every module name found under addons/.
 
-    Same scanner and addons_path as GET /api/modules, so the Update button
-    never offers a module the validation below would then reject.
+    Same scanner and addons_path as GET /api/modules, but without its
+    `installable` filter: whether a module can be updated is decided by its
+    state in ir_module_module, not by its manifest.
     """
     scanner = ModuleScanner(addons_path=Path.cwd() / "addons")
     return {m.name for m in scanner.scan(force_rescan=True)}
@@ -51,6 +54,12 @@ def build_update_command(module: str, db: str) -> tuple[list[str] | None, str]:
     Validates both by membership in the real lists, never by regex or
     escaping: this is the only barrier between the browser and the Odoo CLI.
     """
+    # A directory literally named "--load-language=es" would otherwise pass
+    # the membership check below and reach the Odoo CLI as a flag. Membership
+    # is still the real barrier; this only closes the one case where an
+    # attacker also controls addons/.
+    if module.startswith("-") or db.startswith("-"):
+        return None, "invalid name"
     if db not in list_databases():
         return None, "unknown database"
     if module not in _known_modules():

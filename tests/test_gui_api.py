@@ -149,11 +149,29 @@ class TestBuildUpdateCommand:
         ]
 
     def test_a_flag_disguised_as_a_module_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        """Rejected because it is a flag, not merely because it does not exist.
+
+        The directory is created on purpose: without it the membership check
+        rejects the name for the wrong reason and the test cannot fail.
+        """
         from rocketdoo.gui.api.odoo import build_update_command
 
+        evil = addons_tree / "--load-language=es"
+        evil.mkdir()
+        (evil / "__manifest__.py").write_text("{'name': 'Evil'}\n")
         self._allow_only(monkeypatch, "dev")
 
         cmd, error = build_update_command("--load-language=es", "dev")
+
+        assert cmd is None
+        assert error
+
+    def test_a_flag_disguised_as_a_database_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        monkeypatch.setattr("rocketdoo.gui.api.odoo.list_databases", lambda *a, **k: ["--load-language=es"])
+
+        cmd, error = build_update_command("sale_extension", "--load-language=es")
 
         assert cmd is None
         assert error

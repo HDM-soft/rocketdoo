@@ -25,7 +25,7 @@ from rich import box
 from rich.console import Console
 from rich.panel import Panel
 
-from rocketdoo.core.odoo_db import db_container, list_databases
+from rocketdoo.core.odoo_db import databases_result, db_container
 from rocketdoo.project_info import get_project_info, project_exists, read_docker_compose
 
 console = Console()
@@ -304,10 +304,16 @@ def pack_environment(no_db, output, db_name):
                 return
         else:
             console.print("[bold]💾 Database backup:[/bold]")
-            available_dbs = list_databases(compose_data)
+            available_dbs, db_list_error = databases_result(compose_data)
 
             if not available_dbs:
-                console.print("  [yellow]⚠[/yellow]  No Odoo databases found.")
+                # An empty list means "none" or "could not ask" (container down,
+                # psql timed out). Saying which one keeps a ZIP from silently
+                # shipping without the dump the user expected.
+                if db_list_error:
+                    console.print(f"  [yellow]⚠[/yellow]  Could not list databases: {db_list_error}")
+                else:
+                    console.print("  [yellow]⚠[/yellow]  No Odoo databases found.")
             else:
                 if db_name and db_name in available_dbs:
                     selected_db = db_name
