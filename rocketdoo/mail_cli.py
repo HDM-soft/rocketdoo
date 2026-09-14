@@ -12,6 +12,12 @@ from rich.panel import Panel
 from rich.table import Table
 
 from rocketdoo.core.compose import compose_path, container_running, run_compose
+from rocketdoo.core.odoo_db import (
+    MAILPIT_SERVER_NAME,
+    databases_result,
+    disable_mailpit_server,
+    enable_mailpit_server,
+)
 
 console = Console()
 
@@ -193,12 +199,86 @@ class MailpitError(RuntimeError):
         self.hint = hint
 
 
-def _enable_mailpit(restart_web: bool = True) -> dict:
+def _resolve_db(db: str | None) -> tuple[str | None, str]:
+    """Resolve which database to target for the ir.mail_server write. Never prompts.
+
+    Returns (db, error): db is None when nothing can be safely targeted, and
+    error explains why. Shared by `_apply_mail_server` (on/off) and `mail
+    status`, so the 0/1/N/--db logic lives in exactly one place.
+    """
+    databases, reason = databases_result()
+    if not databases:
+        return None, reason or "no databases found"
+
+    if db:
+        if db not in databases:
+            return None, f"database '{db}' not found"
+        return db, ""
+
+    if len(databases) == 1:
+        return databases[0], ""
+
+    return None, f"{len(databases)} databases found - re-run with --db NAME"
+
+
+def _connectivity_hint(error: str) -> str:
+    """Hint shown only when the failure is about reaching the database.
+
+    A "which database" error (multiple found, or an unknown --db) is not
+    fixed by starting the project, so it gets no hint.
+    """
+    if error.startswith("database '") or "re-run with --db NAME" in error:
+        return ""
+    return "Start the project with rkd up -d and re-run rkd mail on."
+
+
+def _apply_mail_server(enable: bool, db: str | None) -> dict:
+    """Resolve the target database and write the Mailpit ir.mail_server.
+
+    Never raises and never prompts: the caller may be the GUI.
+    Returns {"db": str | None, "db_error": str, "db_archived": int | None}.
+    """
+    target, error = _resolve_db(db)
+    if not target:
+        return {"db": None, "db_error": error, "db_archived": None}
+
+    if enable:
+        return {"db": target, "db_error": enable_mailpit_server(target), "db_archived": None}
+
+    archived, error = disable_mailpit_server(target)
+    return {"db": target, "db_error": error, "db_archived": archived}
+
+
+def _print_enable_mail_server(report: dict) -> None:
+    if report["db_error"]:
+        console.print(f"[yellow]⚠ mail server not configured: {report['db_error']}[/yellow]")
+        hint = _connectivity_hint(report["db_error"])
+        if hint:
+            console.print(f"[dim]{hint}[/dim]")
+    else:
+        console.print(f'[green]✓[/green] mail server "{MAILPIT_SERVER_NAME}" ready in database {report["db"]}')
+
+
+def _print_disable_mail_server(report: dict) -> None:
+    if report["db_error"]:
+        console.print(f"[yellow]⚠ mail server not configured: {report['db_error']}[/yellow]")
+        hint = _connectivity_hint(report["db_error"])
+        if hint:
+            console.print(f"[dim]{hint}[/dim]")
+    elif report["db_archived"]:
+        console.print(f'[green]✓[/green] mail server "{MAILPIT_SERVER_NAME}" archived in database {report["db"]}')
+    else:
+        console.print(f"[dim]no Rocketdoo mail server found in database {report['db']}[/dim]")
+
+
+def _enable_mailpit(restart_web: bool = True, db: str | None = None) -> dict:
     """Enable Mailpit in docker-compose.yaml and point odoo.conf at it.
 
     Shared by `rkd mail on` and the GUI endpoint so the two cannot drift.
-    Returns a report of what actually changed; callers render their own output.
-    Raises MailpitError when the project cannot support Mailpit at all.
+    Returns a report of what actually changed, plus the outcome of writing
+    the Mailpit ir.mail_server (`db`, `db_error`, `db_archived`); callers
+    render their own output. Raises MailpitError when the project cannot
+    support Mailpit at all.
     """
     compose = compose_path()
     if not compose:
@@ -212,7 +292,18 @@ def _enable_mailpit(restart_web: bool = True) -> dict:
         )
 
     if _is_enabled(content):
-        return {"changed": False, "conf_found": True, "conf_updated": False, "started": False, "restarted": False}
+        # Still write the mail server: this is the documented fix for a
+        # first run that toggled the compose while the db container was
+        # unreachable (RF-1.3). Without it, re-running `rkd mail on` after
+        # `rkd up -d` would never create the record.
+        return {
+            "changed": False,
+            "conf_found": True,
+            "conf_updated": False,
+            "started": False,
+            "restarted": False,
+            **_apply_mail_server(enable=True, db=db),
+        }
 
     compose.write_text(_toggle_compose(content, enable=True))
 
@@ -230,6 +321,8 @@ def _enable_mailpit(restart_web: bool = True) -> dict:
 
     started = run_compose("up", "-d", "mailpit") == 0
 
+    mail_server_report = _apply_mail_server(enable=True, db=db)
+
     restarted = False
     if restart_web and container_running(_WEB_SERVICE):
         run_compose("restart", _WEB_SERVICE)
@@ -241,10 +334,11 @@ def _enable_mailpit(restart_web: bool = True) -> dict:
         "conf_updated": conf_updated,
         "started": started,
         "restarted": restarted,
+        **mail_server_report,
     }
 
 
-def _disable_mailpit(restart_web: bool = True) -> dict:
+def _disable_mailpit(restart_web: bool = True, db: str | None = None) -> dict:
     """Stop Mailpit, comment its block back out and restore odoo.conf SMTP.
 
     Counterpart of _enable_mailpit; same contract.
@@ -258,7 +352,14 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
         raise MailpitError("Mailpit block not found in docker-compose.yaml.")
 
     if not _is_enabled(content):
-        return {"changed": False, "conf_found": True, "conf_updated": False, "restarted": False}
+        # Same reasoning as the mirror branch in _enable_mailpit (RF-2.5).
+        return {
+            "changed": False,
+            "conf_found": True,
+            "conf_updated": False,
+            "restarted": False,
+            **_apply_mail_server(enable=False, db=db),
+        }
 
     run_compose("stop", "mailpit")
     run_compose("rm", "-f", "mailpit")
@@ -274,6 +375,8 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
             conf.write_text(after)
             conf_updated = True
 
+    mail_server_report = _apply_mail_server(enable=False, db=db)
+
     restarted = False
     if restart_web and container_running(_WEB_SERVICE):
         run_compose("restart", _WEB_SERVICE)
@@ -284,6 +387,7 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
         "conf_found": conf is not None,
         "conf_updated": conf_updated,
         "restarted": restarted,
+        **mail_server_report,
     }
 
 
@@ -314,10 +418,11 @@ def mail():
 
 
 @mail.command(name="on")
-def mail_on():
+@click.option("--db", "db", default=None, help="Database to write the mail server to.")
+def mail_on(db):
     """Enable Mailpit for outgoing email testing."""
     try:
-        report = _enable_mailpit()
+        report = _enable_mailpit(db=db)
     except MailpitError as exc:
         console.print(f"\n[yellow]{exc}[/yellow]")
         if exc.hint:
@@ -326,9 +431,9 @@ def mail_on():
         return
 
     if not report["changed"]:
-        console.print(
-            f"\n[green]Mailpit is already enabled.[/green]\n[dim]Web UI \u2192 http://localhost:{_MAILPIT_WEB_PORT}[/dim]\n"
-        )
+        console.print("\n[green]Mailpit is already enabled.[/green]")
+        _print_enable_mail_server(report)
+        console.print(f"[dim]Web UI \u2192 http://localhost:{_MAILPIT_WEB_PORT}[/dim]\n")
         return
 
     console.print()
@@ -355,6 +460,8 @@ def mail_on():
     else:
         console.print("[yellow]\u26a0 Could not start mailpit (is Docker running?)[/yellow]")
 
+    _print_enable_mail_server(report)
+
     if report["restarted"]:
         console.print(f"[green]\u2713[/green] {_WEB_SERVICE} restarted")
 
@@ -373,16 +480,19 @@ def mail_on():
 
 
 @mail.command(name="off")
-def mail_off():
+@click.option("--db", "db", default=None, help="Database to archive the mail server in.")
+def mail_off(db):
     """Disable Mailpit and restore default SMTP settings."""
     try:
-        report = _disable_mailpit()
+        report = _disable_mailpit(db=db)
     except MailpitError as exc:
         console.print(f"\n[yellow]{exc}[/yellow]\n")
         return
 
     if not report["changed"]:
-        console.print("\n[dim]Mailpit is already disabled.[/dim]\n")
+        console.print("\n[dim]Mailpit is already disabled.[/dim]")
+        _print_disable_mail_server(report)
+        console.print()
         return
 
     console.print()
@@ -397,6 +507,8 @@ def mail_off():
         console.print("[green]\u2713[/green] odoo.conf already had the defaults")
     else:
         console.print("[yellow]\u26a0 odoo.conf not found[/yellow]")
+
+    _print_disable_mail_server(report)
 
     if report["restarted"]:
         console.print(f"[green]\u2713[/green] {_WEB_SERVICE} restarted")
