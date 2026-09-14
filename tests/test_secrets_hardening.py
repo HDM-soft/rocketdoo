@@ -9,6 +9,7 @@ no VPS or Docker daemon required.
 
 import subprocess
 
+from rocketdoo.core.deploy import vps
 from rocketdoo.core.instance import deployer_docker, deployer_native, ssh_utils
 
 SENTINEL = "RKD-SENTINEL-PASSWORD"
@@ -147,3 +148,77 @@ class TestNativeInstanceCallSites:
         args, kwargs = run.calls[0]
         assert all(SENTINEL not in item for item in args)
         assert kwargs["env"]["SSHPASS"] == SENTINEL
+
+
+def _password_vps_deployer_config(**overrides):
+    cfg = {
+        "connection": {
+            "host": "vps.example.com",
+            "user": "deploy",
+            "port": 22,
+            "password": SENTINEL,
+        },
+        "deployment_type": "docker",
+        "docker": {
+            "container_name": "odoo",
+            "compose_path": "/opt/odoo",
+            "addons_mount": "/mnt/extra-addons",
+        },
+    }
+    cfg.update(overrides)
+    return cfg
+
+
+class TestVpsDeployerCallSites:
+    """The 3 sshpass call sites in core/deploy/vps.py: _run_ssh_command,
+    _upload_directory, _upload_file_scp.
+    """
+
+    def _deployer(self, tmp_path):
+        return vps.VPSDeployer("production", _password_vps_deployer_config(), tmp_path)
+
+    def test_run_ssh_command_passes_sshpass_env(self, tmp_path, monkeypatch):
+        deployer = self._deployer(tmp_path)
+        run = _RecordingRun()
+        monkeypatch.setattr(vps.subprocess, "run", run)
+
+        deployer._run_ssh_command("echo hi")
+
+        args, kwargs = run.calls[0]
+        assert all(SENTINEL not in item for item in args)
+        assert kwargs["env"]["SSHPASS"] == SENTINEL
+
+    def test_upload_directory_passes_sshpass_env(self, tmp_path, monkeypatch):
+        deployer = self._deployer(tmp_path)
+        run = _RecordingRun()
+        monkeypatch.setattr(vps.subprocess, "run", run)
+
+        deployer._upload_directory(tmp_path / "module", "/mnt/extra-addons/module")
+
+        args, kwargs = run.calls[0]
+        assert all(SENTINEL not in item for item in args)
+        assert kwargs["env"]["SSHPASS"] == SENTINEL
+
+    def test_upload_file_scp_passes_sshpass_env(self, tmp_path, monkeypatch):
+        deployer = self._deployer(tmp_path)
+        run = _RecordingRun()
+        monkeypatch.setattr(vps.subprocess, "run", run)
+
+        deployer._upload_file_scp(tmp_path / "module.zip", "/mnt/extra-addons/module.zip")
+
+        args, kwargs = run.calls[0]
+        assert all(SENTINEL not in item for item in args)
+        assert kwargs["env"]["SSHPASS"] == SENTINEL
+
+    def test_ssh_key_method_still_has_no_sshpass_env(self, tmp_path, monkeypatch):
+        cfg = _password_vps_deployer_config(connection={"host": "vps.example.com", "user": "deploy", "port": 22})
+        cfg["connection"]["ssh_key"] = "~/.ssh/id_rsa"
+        deployer = vps.VPSDeployer("production", cfg, tmp_path)
+        run = _RecordingRun()
+        monkeypatch.setattr(vps.subprocess, "run", run)
+
+        deployer._run_ssh_command("echo hi")
+
+        args, kwargs = run.calls[0]
+        assert "sshpass" not in args
+        assert kwargs["env"] is None
