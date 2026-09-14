@@ -171,8 +171,8 @@ class NativeInstanceDeployer:
             return True
 
         self._ssh(f"sudo mkdir -p {self.remote_addons} && sudo chown {self.user} {self.remote_addons}")
-        cmd = build_rsync_cmd(self.auth, self.port, self.user, self.host, f"{addons_dir}/", f"{self.remote_addons}/")
-        result = subprocess.run(cmd)
+        cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, f"{addons_dir}/", f"{self.remote_addons}/")
+        result = subprocess.run(cmd, env=env)
         return result.returncode == 0
 
     def _enable_service(self) -> bool:
@@ -181,8 +181,8 @@ class NativeInstanceDeployer:
     # ─── helpers ─────────────────────────────────────────────────────────────
 
     def _ssh(self, command: str, timeout: int = 300) -> bool:
-        cmd = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
-        return subprocess.run(cmd, timeout=timeout).returncode == 0
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
+        return subprocess.run(cmd, timeout=timeout, env=env).returncode == 0
 
     def _show_plan(self):
         console.print("\n[bold]DRY-RUN — Steps that would be executed:[/bold]")

@@ -140,7 +140,7 @@ class DockerInstanceDeployer:
     def _read_remote_pg_pass(self) -> str | None:
         """Return odoo_pg_pass from a previous deploy, or None if unavailable."""
         remote_file = f"{self.remote_path}/{self.env}/odoo_pg_pass"
-        cmd = build_ssh_cmd(
+        cmd, env = build_ssh_cmd(
             self.auth,
             self.port,
             self.user,
@@ -148,7 +148,7 @@ class DockerInstanceDeployer:
             f"cat {remote_file} 2>/dev/null",
         )
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, env=env)
         except (subprocess.SubprocessError, OSError):
             return None
         return result.stdout.strip() or None
@@ -228,12 +228,12 @@ class DockerInstanceDeployer:
     # ─── SSH / transfer helpers ───────────────────────────────────────────────
 
     def _ssh(self, command: str, agent_forward: bool = False, timeout: int = 600) -> bool:
-        cmd = build_ssh_cmd(self.auth, self.port, self.user, self.host, command, agent_forward=agent_forward)
-        return subprocess.run(cmd, timeout=timeout).returncode == 0
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command, agent_forward=agent_forward)
+        return subprocess.run(cmd, timeout=timeout, env=env).returncode == 0
 
     def _rsync(self, local: str, remote: str, extra_opts: list[str] | None = None) -> bool:
-        cmd = build_rsync_cmd(self.auth, self.port, self.user, self.host, local, remote, extra_opts)
-        return subprocess.run(cmd).returncode == 0
+        cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, local, remote, extra_opts)
+        return subprocess.run(cmd, env=env).returncode == 0
 
     # ─── deployment steps ────────────────────────────────────────────────────
 
