@@ -399,11 +399,17 @@ class VPSDeployer(BaseDeployer):
         # This keeps the password out of `ps aux` on both ends and, unlike the
         # old `echo '{password}' | sudo -S` interpolation, means the password's
         # content can never alter the structure of the remote command.
+        # The password goes to sudo's stdin, so a remote command that reads
+        # stdin itself cannot be run with use_sudo=True: it would consume the
+        # password line. Today none of the callers do (the only two are
+        # `mkdir` and `systemctl restart`).
         sudo_input = None
         if use_sudo:
             if self.auth_method == "password" and self.password:
                 command = f"sudo -S -p '' {command}"
-                sudo_input = self.password + "\n"
+                # Only the first line reaches sudo; a multi-line password would
+                # leave the rest in the remote command's stdin.
+                sudo_input = self.password.splitlines()[0] + "\n" if self.password else None
             else:
                 # Try passwordless sudo or rely on SSH key having sudo access
                 command = f"sudo {command}"

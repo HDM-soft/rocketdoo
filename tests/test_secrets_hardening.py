@@ -404,6 +404,8 @@ _SINK_NAMES = {
     "check_output",  # subprocess.*
     "system",
     "popen",  # os.*
+    "create_subprocess_exec",
+    "create_subprocess_shell",  # asyncio.*, used by gui/server.py
     "_ssh",
     "_run_ssh_command",
     "_rsync",  # deployer helpers
@@ -498,6 +500,12 @@ def _violations_in_function(func: ast.AST) -> list[tuple[int, str]]:
                     violations += [(value.lineno, name) for name in _sensitive_refs(value.value)]
         elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
             violations += [(node.lineno, name) for name in _sensitive_refs(node.right)]
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            # "echo '" + password + "' | sudo -S " is the T4 bug written with
+            # concatenation instead of an f-string.
+            violations += [(node.lineno, name) for name in _sensitive_refs(node)]
+        elif isinstance(node, ast.Call) and _called_name(node.func) == "append":
+            violations += [(node.lineno, name) for arg in node.args for name in _sensitive_refs(arg)]
         elif isinstance(node, ast.Call) and _called_name(node.func) == "format":
             for arg in (*node.args, *(kw.value for kw in node.keywords)):
                 violations += [(node.lineno, name) for name in _sensitive_refs(arg)]
@@ -511,9 +519,20 @@ def test_no_secret_reaches_subprocess_argv_construction():
     every function in rocketdoo/ (never tests/, which hard-codes fixture
     passwords on purpose) that launches a process, directly or through the
     local ssh/rsync helpers, and fails if a credential-looking value is used
-    to build the command outside of sshpass_wrap()/input=/env=. This is what
-    would have caught each of T3-T5's bugs before they needed a dedicated
-    test, and it is meant to catch the next one the same way.
+    to build the command outside of sshpass_wrap()/input=/env=.
+
+    It is a net for the obvious shape, NOT a guarantee. It matches on
+    identifier names, and only inside a function that itself calls a sink, so
+    all of these get through:
+
+      - the secret read through a subscript of a literal key
+        (`conn["password"]`) or renamed first (`pw = self.password`)
+      - the command built in a helper that does not launch anything itself
+      - a sink reached under a name not in _SINK_NAMES
+
+    Closing those needs real dataflow analysis, which is a bigger machine than
+    the bug it guards. Reviewing a diff that touches a deploy path is still the
+    actual control; this only makes the careless version fail loudly.
 
     Verified to actually fail: temporarily reverted the T4 fix in vps.py
     (`command = f"echo '{self.password}' | sudo -S {command}"`) and confirmed
@@ -529,3 +548,71 @@ def test_no_secret_reaches_subprocess_argv_construction():
                 violations.append(f"{path.relative_to(ROCKETDOO_ROOT.parent)}:{lineno} references '{name}'")
 
     assert not violations, "Credential-looking value reachable from a subprocess argv:\n" + "\n".join(violations)
+
+
+class TestAuthMethodDecidesSshpass:
+    """RF-7: the method picks the auth, not the truthiness of a stray key.
+
+    ssh_prefix() keyed on auth["method"]; after T2 the call sites pass a
+    password straight to sshpass_wrap, so a dict carrying both a key and a
+    password must still take the key path.
+    """
+
+    def test_ssh_key_ignores_a_stray_password(self):
+        from rocketdoo.core.instance.ssh_utils import build_ssh_cmd
+
+        auth = {"method": "ssh_key", "key_path": "/tmp/k", "password": "stray"}
+        cmd, env = build_ssh_cmd(auth, 22, "u", "h", "echo hi")
+
+        assert "sshpass" not in cmd
+        assert not (env and "SSHPASS" in env)
+
+    def test_password_method_uses_the_environment(self):
+        from rocketdoo.core.instance.ssh_utils import build_ssh_cmd
+
+        auth = {"method": "password", "key_path": None, "password": "s3cr3t"}
+        cmd, env = build_ssh_cmd(auth, 22, "u", "h", "echo hi")
+
+        assert cmd[:2] == ["sshpass", "-e"]
+        assert not any("s3cr3t" in str(a) for a in cmd)
+        assert env["SSHPASS"] == "s3cr3t"
+
+    def test_rsync_follows_the_same_rule(self):
+        from rocketdoo.core.instance.ssh_utils import build_rsync_cmd
+
+        auth = {"method": "ssh_key", "key_path": "/tmp/k", "password": "stray"}
+        cmd, env = build_rsync_cmd(auth, 22, "u", "h", "/src", "/dst")
+
+        assert "sshpass" not in cmd
+        assert not (env and "SSHPASS" in env)
+
+
+class TestMultilinePasswordDoesNotLeakIntoRemoteStdin:
+    """M1: sudo reads one line; the rest would land in the remote command."""
+
+    def test_only_the_first_line_is_sent(self, tmp_path):
+        from unittest.mock import patch
+
+        from rocketdoo.core.deploy.vps import VPSDeployer
+
+        cfg = {
+            "connection": {"host": "h", "user": "u", "password": "first\nsecond"},
+            "deployment_type": "docker",
+        }
+        deployer = VPSDeployer("prod", cfg, tmp_path)
+        seen = {}
+
+        def _run(cmd, **kw):
+            seen["input"] = kw.get("input")
+
+            class R:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return R()
+
+        with patch("rocketdoo.core.deploy.vps.subprocess.run", _run):
+            deployer._run_ssh_command("systemctl restart odoo", use_sudo=True)
+
+        assert seen["input"] == "first\n"

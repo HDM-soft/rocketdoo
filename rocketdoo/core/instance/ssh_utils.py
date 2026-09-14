@@ -102,7 +102,10 @@ def build_ssh_cmd(
         f"{user}@{host}",
         command,
     ]
-    return sshpass_wrap(auth["password"], argv)
+    # Keyed on the method, as ssh_prefix() was: a dict built by hand without
+    # a "password" key should not silently fall through to key auth.
+    password = auth["password"] if auth["method"] == "password" else None
+    return sshpass_wrap(password, argv)
 
 
 def build_rsync_cmd(
@@ -120,4 +123,7 @@ def build_rsync_cmd(
         local,
         f"{user}@{host}:{remote}",
     ]
-    return sshpass_wrap(auth["password"], argv)
+    # Keyed on the method, as ssh_prefix() was: a dict built by hand without
+    # a "password" key should not silently fall through to key auth.
+    password = auth["password"] if auth["method"] == "password" else None
+    return sshpass_wrap(password, argv)
