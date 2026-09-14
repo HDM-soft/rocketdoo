@@ -390,6 +390,10 @@ rkd mail open    # Open http://localhost:8025 in your browser
 
 Mailpit is toggled by commenting/uncommenting its service block in `docker-compose.yaml` using special markers (`# rkd:mailpit`). When enabled, Odoo's SMTP configuration is automatically updated to route emails through Mailpit.
 
+`rkd mail on`/`off` also write a `Mailpit (rkd)` record straight into the project's `ir.mail_server` table (Odoo's technical settings, *Outgoing Mail Servers*), so emails are captured with no extra manual setup. `on` creates or reactivates that record with `sequence = 1`; `off` archives it (never deletes it), leaving any of your own mail servers untouched. With a single database this is automatic; with more than one, pass `--db NAME` to `on`, `off`, or `status` — with several databases and no `--db`, nothing is written or read and the command tells you to re-run with it. If the `db` container isn't reachable (project stopped, Docker not running), the rest of the command still runs and it reports the reason; re-running `rkd mail on` once the project is up fixes it.
+
+`rkd mail status` shows this record's state (active, archived, not created yet, or not checked, with the reason) plus any other active `ir.mail_server` in the database. **A `sequence = 1` on the Mailpit record does not guarantee it captures every email**: Odoo's server selection filters by `from_filter` before it sorts by sequence, so a server you (or a restored production dump) already have, with a `from_filter` matching the sender, can still win even with a higher sequence number. `mail status` warns loudly when another active server has `sequence <= 1` (it can win the sequence tie-break outright), and with a softer note whenever any other server is active at all, since `from_filter` can override sequence regardless.
+
 ---
 
 #### `rkd traefik` — Traefik Reverse Proxy
