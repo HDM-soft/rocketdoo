@@ -2274,6 +2274,12 @@ const App = {
       deploy:'Deploy', setup:'Setup', pack:'Pack', help:'Help'
     }
 
+    // Read from the server: hardcoding it here left the sidebar showing
+    // 3.0.0 long after the package had moved on.
+    const rkdVersion = ref('')
+    onMounted(async () => {
+      try { rkdVersion.value = (await api.get('/version')).version || '' } catch (e) { }
+    })
     const darkMode = ref(localStorage.getItem('rkd-theme') !== 'light')
     function toggleTheme() {
       darkMode.value = !darkMode.value
@@ -2292,7 +2298,7 @@ const App = {
       if (!darkMode.value) document.documentElement.classList.add('light')
       init()
     })
-    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme }
+    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion }
   },
   template: `
   <div class="layout">
@@ -2303,7 +2309,7 @@ const App = {
           <span v-html="I.rocket" style="width:18px;height:18px;color:white;"></span>
         </div>
         <div>
-          <div class="logo-text">RKD <span class="v3-badge">v3</span></div>
+          <div class="logo-text">RKD <span class="v3-badge">{{ rkdVersion ? 'v'+rkdVersion : 'v3' }}</span></div>
           <div class="logo-sub">Rocketdoo</div>
         </div>
       </div>
@@ -2325,7 +2331,7 @@ const App = {
 
       <div class="sidebar-footer">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <span style="color:#4D6A92;">Rocketdoo GUI v3.0.0</span>
+          <span style="color:#4D6A92;">Rocketdoo GUI<span v-if="rkdVersion"> v{{ rkdVersion }}</span></span>
           <button @click="toggleTheme" class="btn btn-ghost btn-sm"
                   :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
                   style="padding:3px 8px;border-radius:6px;">

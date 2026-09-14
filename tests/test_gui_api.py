@@ -424,3 +424,41 @@ def test_the_app_honours_the_port_it_was_created_with():
     client = fastapi_testclient.TestClient(create_app(port=9090))
     response = client.get("/api/workspace", headers={"Origin": "http://localhost:9090"})
     assert response.headers.get("access-control-allow-origin") == "http://localhost:9090"
+
+
+class TestVersionIsNotHardcoded:
+    """The sidebar showed v3.0.0 long after the package had moved on.
+
+    It was written by hand in four places (the SPA title, the logo badge, the
+    sidebar footer and the FastAPI app), so every release silently drifted.
+    """
+
+    def test_the_endpoint_reports_the_installed_version(self, client):
+        import rocketdoo
+
+        assert client.get("/api/version").json()["version"] == rocketdoo.__version__
+
+    def test_the_app_reports_the_installed_version(self):
+        import rocketdoo
+        from rocketdoo.gui.server import create_app
+
+        assert create_app().version == rocketdoo.__version__
+
+    def test_the_spa_does_not_hardcode_a_version_number(self):
+        """Guards against someone pasting a literal back in."""
+        import re
+
+        from rocketdoo.gui.server import STATIC_DIR
+
+        html = (STATIC_DIR / "index.html").read_text()
+        literals = re.findall(r"v\d+\.\d+\.\d+", html)
+        assert not literals, f"hardcoded versions in the SPA: {literals}"
+
+    def test_the_cli_banner_does_not_hardcode_a_version(self):
+        import re
+        from pathlib import Path
+
+        import rocketdoo
+
+        source = (Path(rocketdoo.__path__[0]) / "gui_cli.py").read_text()
+        assert not re.findall(r"v\d+\.\d+\.\d+", source)

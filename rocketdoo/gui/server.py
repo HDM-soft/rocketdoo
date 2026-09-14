@@ -5,6 +5,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from rocketdoo import __version__
+
 STATIC_DIR = Path(__file__).parent / "static"
 
 DEFAULT_PORT = 8070
@@ -80,7 +82,7 @@ def local_origins(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> list[str
 def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
     app = FastAPI(
         title="Rocketdoo GUI",
-        version="3.0.0",
+        version=__version__,
         docs_url="/api/docs",
         redoc_url=None,
     )
@@ -95,6 +97,11 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.get("/api/version")
+    def get_version():
+        """The installed rocketdoo version, so the SPA stops hardcoding it."""
+        return {"version": __version__}
 
     from rocketdoo.gui.api import router as api_router
     from rocketdoo.gui.api.odoo import build_update_command

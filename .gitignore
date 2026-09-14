@@ -6,3 +6,6 @@ venv/*
 CLAUDE.md
 .claude/
 build/
+
+# SDD planning artifacts: our workflow, not part of Rocketdoo
+.sdd/
