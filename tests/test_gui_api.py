@@ -114,6 +114,68 @@ class TestOdooEndpoints:
         assert body["error"] == "unknown database"
 
 
+class TestBuildUpdateCommand:
+    """`build_update_command` is the only barrier between the browser and the
+    Odoo CLI: it must reject by list membership, never by regex or escaping.
+    """
+
+    def _allow_only(self, monkeypatch, *databases):
+        monkeypatch.setattr("rocketdoo.gui.api.odoo.list_databases", lambda: list(databases))
+
+    def test_the_argv_matches_ca8_exactly(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("sale_extension", "dev")
+
+        assert error == ""
+        assert cmd == [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "web",
+            "odoo",
+            "-d",
+            "dev",
+            "-u",
+            "sale_extension",
+            "--stop-after-init",
+            "--log-level=info",
+        ]
+
+    def test_a_flag_disguised_as_a_module_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("--load-language=es", "dev")
+
+        assert cmd is None
+        assert error
+
+    def test_a_module_outside_addons_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("not_a_real_module", "dev")
+
+        assert cmd is None
+        assert error
+
+    def test_a_database_outside_the_list_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("sale_extension", "unknown")
+
+        assert cmd is None
+        assert error
+
+
 class TestInstancesRoundTrip:
     """The GUI must be able to save a config its own reader and the deployers accept.
 
