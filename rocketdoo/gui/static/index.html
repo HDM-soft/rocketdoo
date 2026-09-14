@@ -314,7 +314,7 @@ const LogViewer = {
    DOCKER TERMINAL — streaming WebSocket output for compose commands
 ══════════════════════════════════════════════════════════════════════════ */
 const DockerTerminal = {
-  props: { action: String },
+  props: { url: String, label: String },
   emits: ['done', 'close'],
   setup(props, { emit }) {
     const lines    = ref([])
@@ -336,7 +336,7 @@ const DockerTerminal = {
 
     onMounted(() => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      ws = new WebSocket(`${proto}://${location.host}/ws/docker/${props.action}`)
+      ws = new WebSocket(`${proto}://${location.host}${props.url}`)
       ws.onmessage = e => {
         const txt = e.data
         if (txt.startsWith('\x00exit:')) {
@@ -355,6 +355,14 @@ const DockerTerminal = {
         running.value = false
         if (raf) { cancelAnimationFrame(raf); raf = null }
         if (pending.length) flush()
+        // Some server-side failures (missing query param, unhandled exception)
+        // close the socket without ever sending the \x00exit: banner — without
+        // this, callers waiting on @done would be stuck forever.
+        if (exitCode.value === null) {
+          exitCode.value = 1
+          lines.value.push('[connection closed unexpectedly]')
+          emit('done', 1)
+        }
       }
       ws.onerror = () => {
         running.value = false
@@ -381,14 +389,14 @@ const DockerTerminal = {
         <span v-if="running" v-html="I.spin" class="spin" style="width:13px;height:13px;color:#6D9CFF;display:inline-block;flex-shrink:0;"></span>
         <span v-else-if="exitCode===0" v-html="I.check" style="width:13px;height:13px;color:#22C55E;flex-shrink:0;"></span>
         <span v-else v-html="I.warn" style="width:13px;height:13px;color:#F87171;flex-shrink:0;"></span>
-        <code style="font-size:12px;color:#DDE4F0;flex:1;font-family:monospace;">docker compose {{ action }}</code>
+        <code style="font-size:12px;color:#DDE4F0;flex:1;font-family:monospace;">{{ label }}</code>
         <span v-if="running" style="font-size:11px;color:#6B82A8;">running…</span>
         <span v-else-if="exitCode===0" style="font-size:11px;color:#22C55E;">✓ completed</span>
         <span v-else style="font-size:11px;color:#F87171;">✗ exit {{ exitCode }}</span>
         <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" title="Close terminal">✕</button>
       </div>
       <div ref="el" class="log-term" style="height:320px;">
-        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Connecting to docker compose {{ action }}…</div>
+        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Connecting to {{ label }}…</div>
         <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
       </div>
     </div>
@@ -571,7 +579,7 @@ const Dashboard = {
 
     <!-- Terminal lives OUTSIDE v-else so busy toggling never destroys/remounts it -->
     <div v-if="termAction" style="margin-top:20px;">
-      <DockerTerminal :action="termAction" @done="onTermDone" @close="closeTerminal" />
+      <DockerTerminal :url="'/ws/docker/'+termAction" :label="'docker compose '+termAction" @done="onTermDone" @close="closeTerminal" />
     </div>
   </div>`
 }
@@ -685,6 +693,7 @@ const Containers = {
    MODULES
 ══════════════════════════════════════════════════════════════════════════ */
 const Modules = {
+  components: { DockerTerminal },
   setup() {
     // ── Local addons ─────────────────────────────────────────────────────
     const mods     = ref([])
@@ -704,6 +713,78 @@ const Modules = {
       } catch(e) { notify('Scan failed','err') }
       finally { busy.value = false }
       loadGitman()
+    }
+
+    // ── Databases & module states ────────────────────────────────────────
+    const dbs     = ref([])
+    const dbError = ref('')
+    const db      = ref('')
+    const states  = ref({})
+
+    async function loadDbs() {
+      try {
+        const r = await api.get('/odoo/databases')
+        dbs.value = r.databases || []
+        dbError.value = r.error || ''
+      } catch(e) { dbs.value = []; dbError.value = e.message }
+      const saved = localStorage.getItem('rkd-db')
+      db.value = dbs.value.includes(saved) ? saved : (dbs.value[0] || '')
+    }
+
+    async function loadStates() {
+      if (!db.value) { states.value = {}; return }
+      try {
+        const r = await api.get('/odoo/module-states?db='+encodeURIComponent(db.value))
+        states.value = r.states || {}
+        if (r.error) notify('Module states: '+r.error, 'err')
+      } catch(e) { states.value = {} }
+    }
+
+    function stateOf(m) { return states.value[m.name] || '—' }
+    function stateBadgeClass(s) {
+      if (s === 'installed') return 'badge-green'
+      if (s && s.startsWith('to ')) return 'badge-yellow'
+      return 'badge-gray'
+    }
+
+    watch(db, v => {
+      if (v) localStorage.setItem('rkd-db', v)
+      loadStates()
+    })
+
+    // ── Module update ─────────────────────────────────────────────────────
+    const updating = ref(null) // name of the module currently updating, or null
+    const updateUrl   = computed(() => updating.value
+      ? '/ws/odoo/update?module='+encodeURIComponent(updating.value)+'&db='+encodeURIComponent(db.value)
+      : '')
+    const updateLabel = computed(() => `odoo -u ${updating.value} -d ${db.value}`)
+
+    function canUpdate(m) {
+      return !!db.value && stateOf(m) === 'installed' && !updating.value
+    }
+    function updateReason(m) {
+      if (updating.value) return 'Another update is already running'
+      if (!db.value) return 'No database selected'
+      if (stateOf(m) !== 'installed') return "Module is not installed — 'odoo -u' on it would be a no-op"
+      return ''
+    }
+    function startUpdate(m) {
+      if (!canUpdate(m)) return
+      const ok = confirm(
+        `Update module "${m.name}" on database "${db.value}"?\n\n` +
+        `This runs 'odoo -u ${m.name}', which reapplies XML data without noupdate="1" ` +
+        `and can overwrite records you edited by hand.`
+      )
+      if (!ok) return
+      updating.value = m.name
+    }
+    async function onUpdateDone() {
+      try {
+        const r = await api.post('/docker/service/restart', { service: 'web' })
+        notify(r.ok ? 'web restarted' : (r.stderr || 'Restart failed'), r.ok ? 'ok' : 'err')
+      } catch(e) { notify(e.message, 'err') }
+      await loadStates()
+      updating.value = null
     }
 
     // ── Gitman repos ──────────────────────────────────────────────────────
@@ -786,9 +867,11 @@ const Modules = {
     }
 
     watch(all, load)
-    onActivated(load)
+    onActivated(() => { load(); loadDbs() })
     return {
       mods, busy, all, q, filtered, load,
+      dbs, dbError, db, states, stateOf, stateBadgeClass,
+      updating, updateUrl, updateLabel, canUpdate, updateReason, startUpdate, onUpdateDone,
       gitSources, gitExists, gitBusy, gitSaving, rebuildBusy, gitForm, gitDirty,
       addGitRepo, editGitRepo, deleteGitRepo, autoName, confirmGitForm,
       saveGitman, rebuildDocker, initGitman, I
@@ -799,6 +882,13 @@ const Modules = {
     <div class="page-header">
       <div><div class="page-title">Modules</div><div class="page-sub">Local addons and external Gitman repositories</div></div>
       <div style="display:flex;gap:10px;align-items:center;">
+        <div v-if="dbs.length" style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:11px;color:#6B82A8;">DB</label>
+          <select v-model="db" class="input" style="width:auto;padding:5px 8px;font-size:12px;">
+            <option v-for="d in dbs" :key="d" :value="d">{{ d }}</option>
+          </select>
+        </div>
+        <div v-else style="font-size:12px;color:#F87171;" :title="dbError">{{ dbError || 'No databases found' }}</div>
         <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#5577A2;cursor:pointer;">
           <input type="checkbox" v-model="all" style="accent-color:#1A3DCC;"> Show all
         </label>
@@ -830,7 +920,7 @@ const Modules = {
       <div v-else class="card-flat">
         <table class="table">
           <thead>
-            <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>Depends</th></tr>
+            <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>State</th><th>Depends</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="m in filtered" :key="m.name">
@@ -841,12 +931,24 @@ const Modules = {
               <td style="font-family:monospace;font-size:11px;color:#6B82A8;">{{ m.path }}</td>
               <td style="font-size:12px;color:#6B82A8;">{{ m.version||'—' }}</td>
               <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?'Installable':'Disabled' }}</span></td>
+              <td><span class="badge" :class="stateBadgeClass(stateOf(m))">{{ stateOf(m) }}</span></td>
               <td style="font-size:11px;color:#5577A2;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
+              <td style="text-align:right;">
+                <button @click="startUpdate(m)" class="btn btn-ghost btn-sm" :disabled="!canUpdate(m)" :title="updateReason(m)">
+                  <span v-html="updating===m.name?I.spin:I.refresh" :class="updating===m.name?'spin':''"></span>
+                  Update{{ db ? ' ('+db+')' : '' }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
       </div>
     </template>
+
+    <!-- Terminal lives OUTSIDE v-if="busy" so a refresh never destroys/remounts it -->
+    <div v-if="updating" style="margin-top:20px;">
+      <DockerTerminal :url="updateUrl" :label="updateLabel" @done="onUpdateDone" @close="updating=null" />
+    </div>
 
     <!-- ── External Repos (Gitman) ────────────────────────────────────── -->
     <div style="margin-top:36px;padding-top:24px;border-top:1px solid #151E45;">
@@ -2172,6 +2274,12 @@ const App = {
       deploy:'Deploy', setup:'Setup', pack:'Pack', help:'Help'
     }
 
+    // Read from the server: hardcoding it here left the sidebar showing
+    // 3.0.0 long after the package had moved on.
+    const rkdVersion = ref('')
+    onMounted(async () => {
+      try { rkdVersion.value = (await api.get('/version')).version || '' } catch (e) { }
+    })
     const darkMode = ref(localStorage.getItem('rkd-theme') !== 'light')
     function toggleTheme() {
       darkMode.value = !darkMode.value
@@ -2190,7 +2298,7 @@ const App = {
       if (!darkMode.value) document.documentElement.classList.add('light')
       init()
     })
-    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme }
+    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion }
   },
   template: `
   <div class="layout">
@@ -2201,7 +2309,7 @@ const App = {
           <span v-html="I.rocket" style="width:18px;height:18px;color:white;"></span>
         </div>
         <div>
-          <div class="logo-text">RKD <span class="v3-badge">v3</span></div>
+          <div class="logo-text">RKD <span class="v3-badge">{{ rkdVersion ? 'v'+rkdVersion : 'v3' }}</span></div>
           <div class="logo-sub">Rocketdoo</div>
         </div>
       </div>
@@ -2223,7 +2331,7 @@ const App = {
 
       <div class="sidebar-footer">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <span style="color:#4D6A92;">Rocketdoo GUI v3.0.0</span>
+          <span style="color:#4D6A92;">Rocketdoo GUI<span v-if="rkdVersion"> v{{ rkdVersion }}</span></span>
           <button @click="toggleTheme" class="btn btn-ghost btn-sm"
                   :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
                   style="padding:3px 8px;border-radius:6px;">

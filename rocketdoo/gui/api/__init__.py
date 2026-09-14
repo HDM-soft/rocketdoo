@@ -6,6 +6,7 @@ from .gitman import router as gitman_router
 from .instances import router as instances_router
 from .mail import router as mail_router
 from .modules import router as modules_router
+from .odoo import router as odoo_router
 from .pack_ops import router as pack_router
 from .project import router as project_router
 from .setup import router as setup_router
@@ -17,6 +18,7 @@ router.include_router(workspace_router, prefix="/workspace", tags=["workspace"])
 router.include_router(project_router, prefix="/project", tags=["project"])
 router.include_router(docker_router, prefix="/docker", tags=["docker"])
 router.include_router(modules_router, prefix="/modules", tags=["modules"])
+router.include_router(odoo_router, prefix="/odoo", tags=["odoo"])
 router.include_router(gitman_router, prefix="/gitman", tags=["gitman"])
 router.include_router(mail_router, prefix="/mail", tags=["mail"])
 router.include_router(traefik_router, prefix="/traefik", tags=["traefik"])

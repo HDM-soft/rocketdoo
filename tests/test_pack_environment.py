@@ -138,3 +138,52 @@ class TestPackedProjectKeepsSecretsOut:
 
         entries = {ln.strip() for ln in content.splitlines() if ln.strip() and not ln.startswith("#")}
         assert {pat for pat, _ in SENSITIVE_ENTRIES} <= entries
+
+
+class TestPackDatabaseListing:
+    """Covers the branch T1 refactored, which `--no-db` never reaches.
+
+    The existing tests all pass `--no-db`, which returns before the database
+    listing runs, so the code moved into `core/odoo_db.py` had no coverage
+    from this side.
+    """
+
+    def _run_pack(self, monkeypatch, databases, error=""):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        calls = []
+
+        def _databases_result(*a, **kw):
+            calls.append(True)
+            return databases, error
+
+        monkeypatch.setattr("rocketdoo.pack_environment.databases_result", _databases_result)
+        monkeypatch.setattr("rocketdoo.pack_environment.db_container", lambda *a, **k: "db-packdemo")
+        # Without this the run stops at the "container is not running" prompt
+        # and never reaches the listing branch under test.
+        monkeypatch.setattr("rocketdoo.pack_environment._is_container_running", lambda *a, **k: True)
+
+        result = CliRunner().invoke(main, ["pack"])
+        return result, calls
+
+    def test_no_databases_says_so(self, packable_project, monkeypatch):
+        result, _ = self._run_pack(monkeypatch, [])
+        assert result.exit_code == 0, result.output
+        assert "No Odoo databases found" in result.output
+
+    def test_an_unreachable_container_is_not_reported_as_empty(self, packable_project, monkeypatch):
+        """A timeout must not read as "this project has no databases".
+
+        Otherwise pack ships a ZIP without the dump the user expected.
+        """
+        result, _ = self._run_pack(monkeypatch, [], error="command timed out")
+        assert result.exit_code == 0, result.output
+        assert "Could not list databases" in result.output
+        assert "timed out" in result.output
+
+    def test_the_listing_is_read_through_core_odoo_db(self, packable_project, monkeypatch):
+        """Guards the T1 refactor: pack must keep using the shared helper."""
+        _, calls = self._run_pack(monkeypatch, [])
+        assert calls, "pack did not go through core.odoo_db.databases_result"

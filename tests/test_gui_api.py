@@ -10,6 +10,9 @@ endpoint reporting "no compose file" is a pass, one blowing up or reporting a
 missing helper is not.
 """
 
+import asyncio
+import sys
+
 import pytest
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
@@ -32,6 +35,7 @@ GET_ENDPOINTS = [
     "/api/instances",
     "/api/workspace",
     "/api/gitman",
+    "/api/odoo/databases",
 ]
 
 # Endpoints that only inspect or tear down state, safe to call on an empty dir.
@@ -94,6 +98,168 @@ class TestServiceStatusEndpoints:
 
     def test_instances_are_empty_without_config(self, client):
         assert client.get("/api/instances").json()["instances"] == []
+
+
+class TestOdooEndpoints:
+    def test_databases_reports_the_reason_without_a_container(self, client):
+        body = client.get("/api/odoo/databases").json()
+        assert body["databases"] == []
+        assert body["error"]
+
+    def test_unknown_database_is_rejected_before_querying_it(self, client, monkeypatch):
+        def _must_not_run(db):
+            raise AssertionError("module_states must not run for an unknown database")
+
+        monkeypatch.setattr("rocketdoo.gui.api.odoo.module_states", _must_not_run)
+
+        body = client.get("/api/odoo/module-states?db=nope").json()
+        assert body["states"] == {}
+        assert body["error"] == "unknown database"
+
+
+class TestBuildUpdateCommand:
+    """`build_update_command` is the only barrier between the browser and the
+    Odoo CLI: it must reject by list membership, never by regex or escaping.
+    """
+
+    def _allow_only(self, monkeypatch, *databases):
+        monkeypatch.setattr("rocketdoo.gui.api.odoo.list_databases", lambda: list(databases))
+
+    def test_the_argv_matches_ca8_exactly(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("sale_extension", "dev")
+
+        assert error == ""
+        assert cmd == [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "web",
+            "odoo",
+            "-d",
+            "dev",
+            "-u",
+            "sale_extension",
+            "--stop-after-init",
+            "--log-level=info",
+        ]
+
+    def test_a_flag_disguised_as_a_module_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        """Rejected because it is a flag, not merely because it does not exist.
+
+        The directory is created on purpose: without it the membership check
+        rejects the name for the wrong reason and the test cannot fail.
+        """
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        evil = addons_tree / "--load-language=es"
+        evil.mkdir()
+        (evil / "__manifest__.py").write_text("{'name': 'Evil'}\n")
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("--load-language=es", "dev")
+
+        assert cmd is None
+        assert error
+
+    def test_a_flag_disguised_as_a_database_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        monkeypatch.setattr("rocketdoo.gui.api.odoo.list_databases", lambda *a, **k: ["--load-language=es"])
+
+        cmd, error = build_update_command("sale_extension", "--load-language=es")
+
+        assert cmd is None
+        assert error
+
+    def test_a_module_outside_addons_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("not_a_real_module", "dev")
+
+        assert cmd is None
+        assert error
+
+    def test_a_database_outside_the_list_is_rejected(self, project_dir, addons_tree, monkeypatch):
+        from rocketdoo.gui.api.odoo import build_update_command
+
+        self._allow_only(monkeypatch, "dev")
+
+        cmd, error = build_update_command("sale_extension", "unknown")
+
+        assert cmd is None
+        assert error
+
+
+class TestStreamProcess:
+    """`_stream_process` is the single implementation shared by every
+    websocket route that runs a CLI command and streams its output.
+    """
+
+    class _FakeWebSocket:
+        def __init__(self):
+            self.sent = []
+            self.closed = False
+
+        async def send_text(self, text):
+            self.sent.append(text)
+
+        async def close(self):
+            self.closed = True
+
+    def test_streams_output_and_reports_a_clean_exit(self):
+        from rocketdoo.gui.server import _stream_process
+
+        ws = self._FakeWebSocket()
+        asyncio.run(_stream_process(ws, [sys.executable, "-c", "print('hi')"]))
+
+        assert ws.sent == ["hi", "\x00exit:0"]
+        assert ws.closed is True
+
+    def test_reports_a_non_zero_exit_code(self):
+        from rocketdoo.gui.server import _stream_process
+
+        ws = self._FakeWebSocket()
+        asyncio.run(_stream_process(ws, [sys.executable, "-c", "raise SystemExit(3)"]))
+
+        assert ws.sent[-1] == "\x00exit:3"
+
+
+class TestDockerActionWebSocket:
+    """Regression coverage for `/ws/docker/{action}` after extracting
+    `_stream_process` (CA13): an unknown action must still error out without
+    ever touching `_stream_process`.
+    """
+
+    def test_an_unknown_action_reports_error_and_exit(self, client):
+        with client.websocket_connect("/ws/docker/nope") as ws:
+            assert ws.receive_text() == "[error] Unknown action: nope"
+            assert ws.receive_text() == "\x00exit:1"
+
+
+class TestOdooUpdateWebSocket:
+    """`/ws/odoo/update` validates before it ever spawns a process (CA9)."""
+
+    def test_invalid_arguments_report_an_error_and_exit(self, client, project_dir):
+        with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text().startswith("[error] ")
+            assert ws.receive_text() == "\x00exit:1"
+
+    def test_invalid_arguments_never_spawn_a_process(self, client, project_dir, monkeypatch):
+        async def _must_not_run(*args, **kwargs):
+            raise AssertionError("build_update_command rejected this; nothing should run")
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", _must_not_run)
+
+        with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text().startswith("[error] ")
+            assert ws.receive_text() == "\x00exit:1"
 
 
 class TestInstancesRoundTrip:
@@ -258,3 +424,41 @@ def test_the_app_honours_the_port_it_was_created_with():
     client = fastapi_testclient.TestClient(create_app(port=9090))
     response = client.get("/api/workspace", headers={"Origin": "http://localhost:9090"})
     assert response.headers.get("access-control-allow-origin") == "http://localhost:9090"
+
+
+class TestVersionIsNotHardcoded:
+    """The sidebar showed v3.0.0 long after the package had moved on.
+
+    It was written by hand in four places (the SPA title, the logo badge, the
+    sidebar footer and the FastAPI app), so every release silently drifted.
+    """
+
+    def test_the_endpoint_reports_the_installed_version(self, client):
+        import rocketdoo
+
+        assert client.get("/api/version").json()["version"] == rocketdoo.__version__
+
+    def test_the_app_reports_the_installed_version(self):
+        import rocketdoo
+        from rocketdoo.gui.server import create_app
+
+        assert create_app().version == rocketdoo.__version__
+
+    def test_the_spa_does_not_hardcode_a_version_number(self):
+        """Guards against someone pasting a literal back in."""
+        import re
+
+        from rocketdoo.gui.server import STATIC_DIR
+
+        html = (STATIC_DIR / "index.html").read_text()
+        literals = re.findall(r"v\d+\.\d+\.\d+", html)
+        assert not literals, f"hardcoded versions in the SPA: {literals}"
+
+    def test_the_cli_banner_does_not_hardcode_a_version(self):
+        import re
+        from pathlib import Path
+
+        import rocketdoo
+
+        source = (Path(rocketdoo.__path__[0]) / "gui_cli.py").read_text()
+        assert not re.findall(r"v\d+\.\d+\.\d+", source)
