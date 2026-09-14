@@ -66,6 +66,40 @@ class TestResolveEnvRef:
         assert ssh_manager.resolve_env_ref("prefix-${VAR}") == "prefix-${VAR}"
 
 
+class TestSshpassWrap:
+    def test_password_moves_to_env_not_argv(self):
+        argv, env = ssh_manager.sshpass_wrap("secret", ["ssh", "host"])
+        assert argv == ["sshpass", "-e", "ssh", "host"]
+        assert env["SSHPASS"] == "secret"
+        assert "secret" not in argv
+
+    def test_none_password_returns_argv_untouched(self):
+        argv, env = ssh_manager.sshpass_wrap(None, ["ssh", "host"])
+        assert argv == ["ssh", "host"]
+        assert env is None
+
+    def test_empty_password_returns_argv_untouched(self):
+        argv, env = ssh_manager.sshpass_wrap("", ["ssh", "host"])
+        assert argv == ["ssh", "host"]
+        assert env is None
+
+    def test_special_characters_are_preserved_in_env_only(self):
+        password = "p'a;s$(w)ord"
+        argv, env = ssh_manager.sshpass_wrap(password, ["ssh", "host"])
+        assert env["SSHPASS"] == password
+        assert all(password not in item for item in argv)
+
+    def test_does_not_mutate_the_input_list(self):
+        original = ["ssh", "host"]
+        ssh_manager.sshpass_wrap("secret", original)
+        assert original == ["ssh", "host"]
+
+    def test_env_inherits_the_parent_environment(self, monkeypatch):
+        monkeypatch.setenv("PATH", "/usr/bin")
+        _, env = ssh_manager.sshpass_wrap("secret", ["ssh", "host"])
+        assert env["PATH"] == "/usr/bin"
+
+
 class TestCheckSshpass:
     def test_true_when_present(self, monkeypatch):
         monkeypatch.setattr(ssh_manager.shutil, "which", lambda name: "/usr/bin/sshpass")

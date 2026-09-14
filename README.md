@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "3.2.0"
+   - "3.2.1"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -435,7 +435,7 @@ rkd instance status                  # Show configured environments
 - Stage: 2 workers, `log_level = info`, 1.5 GB memory limit
 - Production: 4 workers, `log_level = warn`, 2.5 GB memory limit, `proxy_mode = True`, `list_db = False`
 
-> **Note:** Docker deployment requires a running SSH agent with the relevant keys loaded (`ssh-add -l`). Password authentication requires `sshpass` installed on your local machine.
+> **Note:** Docker deployment requires a running SSH agent with the relevant keys loaded (`ssh-add -l`). Password authentication requires `sshpass` installed on your local machine; the password itself travels through the `SSHPASS` environment variable (`sshpass -e`), never as a command-line argument visible to other processes on the same host.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 
