@@ -97,10 +97,46 @@ def _toggle_compose(content: str, enable: bool) -> str:
     return "".join(out)
 
 
+# Written when the file has no smtp_* keys at all. Odoo rewrites odoo.conf the
+# first time a database is created from the web UI and drops every commented
+# line, including the ones the scaffold ships, so on a used project there is
+# nothing left to replace.
+_MAILPIT_SMTP_BLOCK = (
+    "smtp_server = mailpit\n",
+    f"smtp_port = {_MAILPIT_SMTP_PORT}\n",
+    "smtp_ssl = False\n",
+)
+
+
+def _insert_after_options(lines: list[str], block: tuple[str, ...]) -> list[str]:
+    """Put `block` at the end of the [options] section, or of the file.
+
+    Everything after [options] belongs to it until another section starts, so
+    appending before the next header keeps the keys where Odoo reads them.
+    """
+    in_options = False
+    for index, line in enumerate(lines):
+        header = line.strip()
+        if header.startswith("[") and header.endswith("]"):
+            if in_options:
+                return lines[:index] + list(block) + lines[index:]
+            in_options = header == "[options]"
+
+    if not in_options:
+        # No [options] header at all: create one rather than write orphan keys.
+        return lines + ["\n[options]\n", *block]
+
+    tail = lines[:]
+    if tail and not tail[-1].endswith("\n"):
+        tail[-1] += "\n"
+    return tail + list(block)
+
+
 def _toggle_smtp(content: str, enable: bool) -> str:
     """Update SMTP settings in odoo.conf for mailpit on/off."""
     lines = content.splitlines(keepends=True)
     out = []
+    found = False
 
     for line in lines:
         stripped = line.strip()
@@ -115,6 +151,8 @@ def _toggle_smtp(content: str, enable: bool) -> str:
         if key not in _SMTP_KEYS:
             out.append(line)
             continue
+
+        found = True
 
         if enable:
             if key == "smtp_server":
@@ -134,6 +172,9 @@ def _toggle_smtp(content: str, enable: bool) -> str:
                 out.append("; smtp_ssl = False\n")
             else:
                 out.append(f"; {normalized}\n")
+
+    if enable and not found:
+        out = _insert_after_options(out, _MAILPIT_SMTP_BLOCK)
 
     return "".join(out)
 
@@ -171,15 +212,21 @@ def _enable_mailpit(restart_web: bool = True) -> dict:
         )
 
     if _is_enabled(content):
-        return {"changed": False, "conf_updated": False, "started": False, "restarted": False}
+        return {"changed": False, "conf_found": True, "conf_updated": False, "started": False, "restarted": False}
 
     compose.write_text(_toggle_compose(content, enable=True))
 
     conf = _odoo_conf_path()
     conf_updated = False
     if conf:
-        conf.write_text(_toggle_smtp(conf.read_text(), enable=True))
-        conf_updated = True
+        # Compared, not assumed: the caller reports this to the user, and it
+        # used to claim the SMTP settings had been written even when nothing
+        # changed.
+        before = conf.read_text()
+        after = _toggle_smtp(before, enable=True)
+        if after != before:
+            conf.write_text(after)
+            conf_updated = True
 
     started = run_compose("up", "-d", "mailpit") == 0
 
@@ -188,7 +235,13 @@ def _enable_mailpit(restart_web: bool = True) -> dict:
         run_compose("restart", _WEB_SERVICE)
         restarted = True
 
-    return {"changed": True, "conf_updated": conf_updated, "started": started, "restarted": restarted}
+    return {
+        "changed": True,
+        "conf_found": conf is not None,
+        "conf_updated": conf_updated,
+        "started": started,
+        "restarted": restarted,
+    }
 
 
 def _disable_mailpit(restart_web: bool = True) -> dict:
@@ -205,7 +258,7 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
         raise MailpitError("Mailpit block not found in docker-compose.yaml.")
 
     if not _is_enabled(content):
-        return {"changed": False, "conf_updated": False, "restarted": False}
+        return {"changed": False, "conf_found": True, "conf_updated": False, "restarted": False}
 
     run_compose("stop", "mailpit")
     run_compose("rm", "-f", "mailpit")
@@ -215,15 +268,23 @@ def _disable_mailpit(restart_web: bool = True) -> dict:
     conf = _odoo_conf_path()
     conf_updated = False
     if conf:
-        conf.write_text(_toggle_smtp(conf.read_text(), enable=False))
-        conf_updated = True
+        before = conf.read_text()
+        after = _toggle_smtp(before, enable=False)
+        if after != before:
+            conf.write_text(after)
+            conf_updated = True
 
     restarted = False
     if restart_web and container_running(_WEB_SERVICE):
         run_compose("restart", _WEB_SERVICE)
         restarted = True
 
-    return {"changed": True, "conf_updated": conf_updated, "restarted": restarted}
+    return {
+        "changed": True,
+        "conf_found": conf is not None,
+        "conf_updated": conf_updated,
+        "restarted": restarted,
+    }
 
 
 @click.group(name="mail")
@@ -284,6 +345,8 @@ def mail_on():
     console.print("[green]\u2713[/green] docker-compose.yaml updated")
     if report["conf_updated"]:
         console.print(f"[green]\u2713[/green] odoo.conf \u2192 smtp_server = mailpit, smtp_port = {_MAILPIT_SMTP_PORT}")
+    elif report["conf_found"]:
+        console.print("[green]\u2713[/green] odoo.conf already pointed at mailpit")
     else:
         console.print("[yellow]\u26a0 odoo.conf not found \u2014 update SMTP settings manually[/yellow]")
 
@@ -330,6 +393,8 @@ def mail_off():
     console.print("[green]\u2713[/green] docker-compose.yaml updated")
     if report["conf_updated"]:
         console.print("[green]\u2713[/green] odoo.conf SMTP settings restored to defaults")
+    elif report["conf_found"]:
+        console.print("[green]\u2713[/green] odoo.conf already had the defaults")
     else:
         console.print("[yellow]\u26a0 odoo.conf not found[/yellow]")
 
