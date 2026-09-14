@@ -7,7 +7,10 @@ instead, both at the command-builder level and at each real call site, with
 no VPS or Docker daemon required.
 """
 
+import ast
+import re
 import subprocess
+from pathlib import Path
 
 from rocketdoo.core.deploy import vps
 from rocketdoo.core.instance import deployer_docker, deployer_native, ssh_utils
@@ -337,3 +340,192 @@ class TestRunSshCommandSudoStdin:
 
         args, kwargs = run.calls[0]
         assert kwargs["input"] is None
+
+
+class TestNoSecretInConsoleOutput:
+    """RF-9(b): the sentinel must never reach the captured console output.
+
+    This is the scenario named in the spec's audit example: someone adds a
+    `console.print(f"...{self.password}...")` to a deployer. The argv/env
+    assertions above would stay green (the process launch is still clean),
+    so this needs its own runtime check with `capsys`.
+    """
+
+    def test_vps_deployer(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(vps.subprocess, "run", _RecordingRun())
+        deployer = vps.VPSDeployer("production", _password_vps_deployer_config(), tmp_path)
+
+        deployer._run_ssh_command("systemctl restart odoo", use_sudo=True)
+        deployer._upload_directory(tmp_path / "module", "/mnt/extra-addons/module")
+        deployer._upload_file_scp(tmp_path / "module.zip", "/mnt/extra-addons/module.zip")
+
+        assert SENTINEL not in capsys.readouterr().out
+
+    def test_docker_instance_deployer(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        monkeypatch.setattr(deployer_docker.subprocess, "run", _RecordingRun())
+        deployer = deployer_docker.DockerInstanceDeployer("stage", _password_vps_config(), tmp_path)
+
+        deployer._ssh("echo hi")
+        deployer._rsync("/local/", "/remote/")
+        deployer._read_remote_pg_pass()
+
+        assert SENTINEL not in capsys.readouterr().out
+
+    def test_native_instance_deployer(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        monkeypatch.setattr(deployer_native.subprocess, "run", _RecordingRun())
+        cfg = _password_vps_config(admin_passwd=SENTINEL)
+        deployer = deployer_native.NativeInstanceDeployer("stage", cfg, tmp_path)
+
+        deployer._configure_odoo()
+        deployer._ssh("echo hi")
+
+        assert SENTINEL not in capsys.readouterr().out
+
+
+# ─── structural guard: a new call site must be caught without a new test ───
+
+ROCKETDOO_ROOT = Path(__file__).resolve().parent.parent / "rocketdoo"
+
+# Matches an identifier that looks like it holds a credential: password,
+# passwd, secret or token, in any case, as a substring (admin_passwd,
+# self._sshpass_password and INSTANCE_STAGE_PASSWORD must all match).
+_SENSITIVE_NAME_RE = re.compile(r"password|passwd|secret|token", re.IGNORECASE)
+
+# Anything that launches a child process, plus the local helpers that build
+# the ssh/rsync argv passed to one. Matched by the called name only (not by
+# module), so `subprocess.run(...)` and `self._ssh(...)` are both covered.
+_SINK_NAMES = {
+    "run",
+    "Popen",
+    "call",
+    "check_call",
+    "check_output",  # subprocess.*
+    "system",
+    "popen",  # os.*
+    "_ssh",
+    "_run_ssh_command",
+    "_rsync",  # deployer helpers
+    "build_ssh_cmd",
+    "build_rsync_cmd",  # ssh_utils command builders
+}
+
+# The only two channels a secret is allowed to travel through once it is
+# about to reach a sink: subprocess's own `input=`/`env=` keywords, and the
+# first argument of sshpass_wrap() (which moves it into `env["SSHPASS"]`).
+_SAFE_KEYWORDS = {"input", "env"}
+_SELF_PROTECTING_BUILDERS = {"sshpass_wrap", "build_ssh_cmd", "build_rsync_cmd"}
+
+
+def _called_name(func_node: ast.AST) -> str | None:
+    if isinstance(func_node, ast.Name):
+        return func_node.id
+    if isinstance(func_node, ast.Attribute):
+        return func_node.attr
+    return None
+
+
+def _identifier(node: ast.AST) -> str | None:
+    return _called_name(node) if isinstance(node, (ast.Name, ast.Attribute)) else None
+
+
+def _is_sensitive(node: ast.AST) -> bool:
+    name = _identifier(node)
+    return bool(name and _SENSITIVE_NAME_RE.search(name))
+
+
+def _sensitive_refs(node: ast.AST) -> list[str]:
+    return [
+        _identifier(child) for child in ast.walk(node) if isinstance(child, (ast.Name, ast.Attribute)) and _is_sensitive(child)
+    ]
+
+
+def _safe_node_ids(func: ast.AST) -> set[int]:
+    """Node ids that a secret is deliberately routed through and must be skipped."""
+    safe: set[int] = set()
+    assigns_by_name: dict[str, list[ast.AST]] = {}
+    for node in ast.walk(func):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names = [target.id]
+                else:
+                    names = [elt.id for elt in getattr(target, "elts", []) if isinstance(elt, ast.Name)]
+                for name in names:
+                    assigns_by_name.setdefault(name, []).append(node.value)
+
+    for node in ast.walk(func):
+        if not isinstance(node, ast.Call):
+            continue
+        if _called_name(node.func) == "sshpass_wrap" and node.args:
+            safe.add(id(node.args[0]))
+        for kw in node.keywords:
+            if kw.arg not in _SAFE_KEYWORDS or kw.value is None:
+                continue
+            if isinstance(kw.value, ast.Name):
+                for value in assigns_by_name.get(kw.value.id, []):
+                    if isinstance(value, ast.Call) and _called_name(value.func) in _SELF_PROTECTING_BUILDERS:
+                        continue  # already covered by its own sshpass_wrap() call
+                    safe.add(id(value))
+            else:
+                safe.add(id(kw.value))
+    return safe
+
+
+def _walk_pruned(node: ast.AST, safe_ids: set[int]):
+    if id(node) in safe_ids:
+        return
+    yield node
+    for child in ast.iter_child_nodes(node):
+        yield from _walk_pruned(child, safe_ids)
+
+
+def _violations_in_function(func: ast.AST) -> list[tuple[int, str]]:
+    if not any(isinstance(n, ast.Call) and _called_name(n.func) in _SINK_NAMES for n in ast.walk(func)):
+        return []
+
+    safe_ids = _safe_node_ids(func)
+    violations = []
+    for node in _walk_pruned(func, safe_ids):
+        if isinstance(node, (ast.List, ast.Tuple)):
+            for elt in node.elts:
+                if isinstance(elt, (ast.Name, ast.Attribute)) and _is_sensitive(elt):
+                    violations.append((elt.lineno, _identifier(elt)))
+        elif isinstance(node, ast.JoinedStr):
+            for value in node.values:
+                if isinstance(value, ast.FormattedValue):
+                    violations += [(value.lineno, name) for name in _sensitive_refs(value.value)]
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
+            violations += [(node.lineno, name) for name in _sensitive_refs(node.right)]
+        elif isinstance(node, ast.Call) and _called_name(node.func) == "format":
+            for arg in (*node.args, *(kw.value for kw in node.keywords)):
+                violations += [(node.lineno, name) for name in _sensitive_refs(arg)]
+    return violations
+
+
+def test_no_secret_reaches_subprocess_argv_construction():
+    """Structural guard (RF-9/RF-10/CA-9): catches a *new* call site.
+
+    Rather than re-checking the call sites already covered above, this walks
+    every function in rocketdoo/ (never tests/, which hard-codes fixture
+    passwords on purpose) that launches a process, directly or through the
+    local ssh/rsync helpers, and fails if a credential-looking value is used
+    to build the command outside of sshpass_wrap()/input=/env=. This is what
+    would have caught each of T3-T5's bugs before they needed a dedicated
+    test, and it is meant to catch the next one the same way.
+
+    Verified to actually fail: temporarily reverted the T4 fix in vps.py
+    (`command = f"echo '{self.password}' | sudo -S {command}"`) and confirmed
+    this test turned red before restoring it.
+    """
+    violations = []
+    for path in sorted(ROCKETDOO_ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for func in ast.walk(tree):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for lineno, name in _violations_in_function(func):
+                violations.append(f"{path.relative_to(ROCKETDOO_ROOT.parent)}:{lineno} references '{name}'")
+
+    assert not violations, "Credential-looking value reachable from a subprocess argv:\n" + "\n".join(violations)
