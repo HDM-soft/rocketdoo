@@ -413,3 +413,205 @@ class TestDisableMailpitWritesTheMailServer:
 
         assert report["changed"] is False
         assert calls == [(False, None)]
+
+
+class TestOutranksMailpit:
+    """CA-15: mechanical priority check, independent of from_filter."""
+
+    def test_active_with_sequence_at_or_below_mailpit_outranks(self):
+        import rocketdoo.mail_cli as mail_cli
+
+        assert mail_cli._outranks_mailpit({"active": True, "sequence": 1}) is True
+        assert mail_cli._outranks_mailpit({"active": True, "sequence": 0}) is True
+
+    def test_active_with_a_higher_sequence_does_not_outrank(self):
+        import rocketdoo.mail_cli as mail_cli
+
+        assert mail_cli._outranks_mailpit({"active": True, "sequence": 10}) is False
+
+    def test_an_archived_server_never_outranks(self):
+        import rocketdoo.mail_cli as mail_cli
+
+        assert mail_cli._outranks_mailpit({"active": False, "sequence": 1}) is False
+
+
+class TestMailpitServerLine:
+    """CA-14: the four states of the Mailpit row. CA-16: self-exclusion from 'others'."""
+
+    def _mailpit_row(self, mail_cli, active, sequence=1):
+        return {
+            "id": 1,
+            "name": mail_cli.MAILPIT_SERVER_NAME,
+            "sequence": sequence,
+            "smtp_host": mail_cli.MAILPIT_SMTP_HOST,
+            "active": active,
+        }
+
+    def _other_row(self, name="Prod SMTP", sequence=10, active=True):
+        return {"id": 2, "name": name, "sequence": sequence, "smtp_host": "smtp.prod.example.com", "active": active}
+
+    def test_active(self, monkeypatch):
+        import rocketdoo.mail_cli as mail_cli
+
+        monkeypatch.setattr(mail_cli, "mail_servers", lambda db: ([self._mailpit_row(mail_cli, active=True)], ""))
+
+        line, style, others = mail_cli._mailpit_server_line("dev", "")
+
+        assert line == "Active (sequence 1) in dev"
+        assert style == "green"
+        assert others == []
+
+    def test_archived(self, monkeypatch):
+        import rocketdoo.mail_cli as mail_cli
+
+        monkeypatch.setattr(mail_cli, "mail_servers", lambda db: ([self._mailpit_row(mail_cli, active=False)], ""))
+
+        line, style, others = mail_cli._mailpit_server_line("dev", "")
+
+        assert line == "Archived in dev"
+        assert style == "dim"
+        assert others == []
+
+    def test_not_created(self, monkeypatch):
+        import rocketdoo.mail_cli as mail_cli
+
+        monkeypatch.setattr(mail_cli, "mail_servers", lambda db: ([], ""))
+
+        line, style, others = mail_cli._mailpit_server_line("dev", "")
+
+        assert line == "Not created — run rkd mail on"
+        assert style == "dim"
+        assert others == []
+
+    def test_not_checked_on_a_query_error(self, monkeypatch):
+        import rocketdoo.mail_cli as mail_cli
+
+        monkeypatch.setattr(mail_cli, "mail_servers", lambda db: ([], "permission denied"))
+
+        line, style, others = mail_cli._mailpit_server_line("dev", "")
+
+        assert line == "Not checked — permission denied"
+        assert style == "dim"
+        assert others == []
+
+    def test_not_checked_without_a_resolved_database(self, monkeypatch):
+        import rocketdoo.mail_cli as mail_cli
+
+        def _boom(db):
+            raise AssertionError("must not query without a resolved database")
+
+        monkeypatch.setattr(mail_cli, "mail_servers", _boom)
+
+        line, style, others = mail_cli._mailpit_server_line(None, "no database container configured")
+
+        assert line == "Not checked — no database container configured"
+        assert style == "dim"
+        assert others == []
+
+    def test_mailpit_is_never_listed_as_another_server(self, monkeypatch):
+        import rocketdoo.mail_cli as mail_cli
+
+        other = self._other_row()
+        monkeypatch.setattr(mail_cli, "mail_servers", lambda db: ([self._mailpit_row(mail_cli, active=True), other], ""))
+
+        _, _, others = mail_cli._mailpit_server_line("dev", "")
+
+        assert others == [other]
+
+
+class TestFormatOtherServers:
+    def test_no_servers_reads_none(self):
+        import rocketdoo.mail_cli as mail_cli
+
+        assert mail_cli._format_other_servers([]) == "None"
+
+    def test_servers_are_named_with_their_sequence(self):
+        import rocketdoo.mail_cli as mail_cli
+
+        others = [{"name": "Prod SMTP", "sequence": 10}, {"name": "Odoo Online", "sequence": 20}]
+        assert mail_cli._format_other_servers(others) == '"Prod SMTP" (sequence 10), "Odoo Online" (sequence 20)'
+
+
+class TestMailStatusCommand:
+    """CA-17: mail status never fails on a database error, and warns about conflicts."""
+
+    def test_a_database_error_lands_in_the_row_without_crashing(self, monkeypatch):
+        from click.testing import CliRunner
+        from rich.console import Console
+
+        import rocketdoo.mail_cli as mail_cli
+
+        monkeypatch.setattr(mail_cli, "console", Console(width=200))
+        monkeypatch.setattr(mail_cli, "compose_path", lambda *a, **k: None)
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "no database container configured"))
+
+        result = CliRunner().invoke(mail_cli.mail, ["status"])
+        output = " ".join(result.output.split())
+
+        assert result.exit_code == 0
+        assert "no database container configured" in output
+        assert "Mailpit mail server" in output
+
+    def test_a_server_that_outranks_mailpit_triggers_the_strong_warning(self, monkeypatch):
+        from click.testing import CliRunner
+        from rich.console import Console
+
+        import rocketdoo.mail_cli as mail_cli
+
+        monkeypatch.setattr(mail_cli, "console", Console(width=200))
+        monkeypatch.setattr(mail_cli, "compose_path", lambda *a, **k: None)
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
+        monkeypatch.setattr(
+            mail_cli,
+            "mail_servers",
+            lambda db: (
+                [
+                    self._mailpit_row(mail_cli),
+                    {"id": 2, "name": "Prod SMTP", "sequence": 1, "smtp_host": "smtp.prod.example.com", "active": True},
+                ],
+                "",
+            ),
+        )
+
+        result = CliRunner().invoke(mail_cli.mail, ["status"])
+        output = " ".join(result.output.split())
+
+        assert result.exit_code == 0
+        assert "has priority over Mailpit" in output
+
+    def test_other_active_servers_without_priority_show_the_soft_caveat(self, monkeypatch):
+        from click.testing import CliRunner
+        from rich.console import Console
+
+        import rocketdoo.mail_cli as mail_cli
+
+        monkeypatch.setattr(mail_cli, "console", Console(width=200))
+        monkeypatch.setattr(mail_cli, "compose_path", lambda *a, **k: None)
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
+        monkeypatch.setattr(
+            mail_cli,
+            "mail_servers",
+            lambda db: (
+                [
+                    self._mailpit_row(mail_cli),
+                    {"id": 2, "name": "Prod SMTP", "sequence": 10, "smtp_host": "smtp.prod.example.com", "active": True},
+                ],
+                "",
+            ),
+        )
+
+        result = CliRunner().invoke(mail_cli.mail, ["status"])
+        output = " ".join(result.output.split())
+
+        assert result.exit_code == 0
+        assert "from_filter" in output
+        assert "has priority over Mailpit" not in output
+
+    def _mailpit_row(self, mail_cli):
+        return {
+            "id": 1,
+            "name": mail_cli.MAILPIT_SERVER_NAME,
+            "sequence": 1,
+            "smtp_host": mail_cli.MAILPIT_SMTP_HOST,
+            "active": True,
+        }

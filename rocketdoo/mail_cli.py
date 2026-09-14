@@ -13,10 +13,13 @@ from rich.table import Table
 
 from rocketdoo.core.compose import compose_path, container_running, run_compose
 from rocketdoo.core.odoo_db import (
+    MAILPIT_SEQUENCE,
     MAILPIT_SERVER_NAME,
+    MAILPIT_SMTP_HOST,
     databases_result,
     disable_mailpit_server,
     enable_mailpit_server,
+    mail_servers,
 )
 
 console = Console()
@@ -247,6 +250,58 @@ def _apply_mail_server(enable: bool, db: str | None) -> dict:
 
     archived, error = disable_mailpit_server(target)
     return {"db": target, "db_error": error, "db_archived": archived}
+
+
+def _is_mailpit_server(server: dict) -> bool:
+    """True when `server` is one `enable_mailpit_server`/`disable_mailpit_server` would touch."""
+    return server["name"] == MAILPIT_SERVER_NAME and server["smtp_host"] == MAILPIT_SMTP_HOST
+
+
+def _outranks_mailpit(server: dict) -> bool:
+    """True when Odoo may pick `server` over the Rocketdoo one by sequence.
+
+    Not a guarantee either way: `_find_mail_server` filters by `from_filter`
+    before it sorts by sequence, so a server with a higher sequence than
+    Mailpit can still win if its `from_filter` matches the sender. That case
+    is covered by a separate, softer caveat in `mail status` (RF-3.5).
+    """
+    return server["active"] and server["sequence"] <= MAILPIT_SEQUENCE
+
+
+def _other_active_servers(servers: list[dict]) -> list[dict]:
+    """Active servers other than the Rocketdoo one, for the 'Other active' row."""
+    return [s for s in servers if s["active"] and not _is_mailpit_server(s)]
+
+
+def _mailpit_server_line(db: str | None, error: str) -> tuple[str, str, list[dict]]:
+    """Mailpit row text, its Rich style, and the other active servers in `db`.
+
+    Never raises: an unresolved `db` (from `_resolve_db`) or a failed query
+    becomes text in the row (RF-3.6), styled the same as "nothing to worry
+    about yet" so a stopped project does not read as an error.
+    """
+    if not db:
+        return f"Not checked — {error}", "dim", []
+
+    servers, query_error = mail_servers(db)
+    if query_error:
+        return f"Not checked — {query_error}", "dim", []
+
+    matches = [s for s in servers if _is_mailpit_server(s)]
+    active = next((s for s in matches if s["active"]), None)
+    others = _other_active_servers(servers)
+
+    if active:
+        return f"Active (sequence {active['sequence']}) in {db}", "green", others
+    if matches:
+        return f"Archived in {db}", "dim", others
+    return "Not created — run rkd mail on", "dim", others
+
+
+def _format_other_servers(others: list[dict]) -> str:
+    if not others:
+        return "None"
+    return ", ".join(f'"{s["name"]}" (sequence {s["sequence"]})' for s in others)
 
 
 def _print_enable_mail_server(report: dict) -> None:
@@ -518,7 +573,8 @@ def mail_off(db):
 
 
 @mail.command(name="status")
-def mail_status():
+@click.option("--db", "db", default=None, help="Database to check the mail server in.")
+def mail_status(db):
     """Show current Mailpit status."""
     compose = compose_path()
 
@@ -532,6 +588,9 @@ def mail_status():
         enabled = configured and _is_enabled(content)
         running = enabled and container_running("mailpit")
 
+    target, error = _resolve_db(db)
+    mailpit_line, mailpit_style, others = _mailpit_server_line(target, error)
+
     table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
     table.add_column("Key", style="cyan bold", width=22)
     table.add_column("Value")
@@ -544,10 +603,21 @@ def mail_status():
         table.add_row("Web UI", f"[cyan underline]http://localhost:{_MAILPIT_WEB_PORT}[/cyan underline]")
         table.add_row("SMTP", f"localhost:{_MAILPIT_SMTP_PORT}")
 
+    table.add_row("Mailpit mail server", f"[{mailpit_style}]{mailpit_line}[/{mailpit_style}]")
+    table.add_row("Other active servers", _format_other_servers(others))
+
     console.print()
     console.print(
         Panel(table, title="[bold cyan]Mailpit Status[/bold cyan]", border_style="cyan", box=box.ROUNDED, padding=(1, 2))
     )
+
+    outranking = [s for s in others if _outranks_mailpit(s)]
+    if outranking:
+        names = ", ".join(f'"{s["name"]}"' for s in outranking)
+        console.print(f"[yellow]⚠ {names} has priority over Mailpit[/yellow]")
+    elif others:
+        console.print("[dim]Odoo may still pick one of them if its from_filter matches the sender.[/dim]")
+
     console.print()
 
 
