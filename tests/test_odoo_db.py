@@ -110,3 +110,161 @@ class TestModuleStates:
         odoo_db.module_states("dev")
         assert seen["argv"][:4] == ["docker", "exec", "proj-db-1", "psql"]
         assert "dev" in seen["argv"]
+
+
+class TestMailServers:
+    def test_parses_the_rows(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(
+            monkeypatch,
+            subprocess.CompletedProcess([], 0, "1\tMailpit (rkd)\t1\tmailpit\tt\n2\tProd SMTP\t10\tsmtp.example.com\tf\n", ""),
+        )
+        servers, error = odoo_db.mail_servers("dev")
+        assert error == ""
+        assert servers == [
+            {"id": 1, "name": "Mailpit (rkd)", "sequence": 1, "smtp_host": "mailpit", "active": True},
+            {"id": 2, "name": "Prod SMTP", "sequence": 10, "smtp_host": "smtp.example.com", "active": False},
+        ]
+
+    def test_a_malformed_row_is_discarded(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(
+            monkeypatch,
+            subprocess.CompletedProcess([], 0, "1\tMailpit (rkd)\t1\tmailpit\tt\nnot\tenough\tfields\n", ""),
+        )
+        servers, error = odoo_db.mail_servers("dev")
+        assert error == ""
+        assert len(servers) == 1
+        assert servers[0]["id"] == 1
+
+    def test_propagates_the_psql_error(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(
+            monkeypatch,
+            subprocess.CompletedProcess([], 1, "", 'relation "ir_mail_server" does not exist'),
+        )
+        servers, error = odoo_db.mail_servers("dev")
+        assert servers == []
+        assert "ir_mail_server" in error
+
+    def test_reports_a_missing_docker_binary(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(monkeypatch, FileNotFoundError("docker"))
+        assert odoo_db.mail_servers("dev") == ([], "docker not found")
+
+
+class TestEnableMailpitServer:
+    def test_the_sql_has_the_seven_columns_and_values(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        seen = {}
+
+        def _run(argv, **kw):
+            seen["argv"] = argv
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        monkeypatch.setattr(odoo_db.subprocess, "run", _run)
+        error = odoo_db.enable_mailpit_server("dev")
+        assert error == ""
+
+        sql = seen["argv"][-1]
+        for column in (
+            "name",
+            "smtp_host",
+            "smtp_port",
+            "smtp_encryption",
+            "smtp_authentication",
+            "sequence",
+            "active",
+        ):
+            assert column in sql
+        assert "'Mailpit (rkd)'" in sql
+        assert "'mailpit'" in sql
+        assert "1025" in sql
+        assert "'none'" in sql
+        assert "'login'" in sql
+
+    def test_the_database_is_not_interpolated_in_the_sql(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        seen = {}
+
+        def _run(argv, **kw):
+            seen["argv"] = argv
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        monkeypatch.setattr(odoo_db.subprocess, "run", _run)
+        odoo_db.enable_mailpit_server("dev")
+
+        assert seen["argv"][seen["argv"].index("-d") + 1] == "dev"
+        assert "dev" not in seen["argv"][-1]
+
+    def test_is_idempotent_across_two_runs(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        seen = []
+
+        def _run(argv, **kw):
+            seen.append(argv)
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        monkeypatch.setattr(odoo_db.subprocess, "run", _run)
+        odoo_db.enable_mailpit_server("dev")
+        odoo_db.enable_mailpit_server("dev")
+        assert seen[0] == seen[1]
+
+    def test_propagates_the_psql_error(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(monkeypatch, subprocess.CompletedProcess([], 1, "", "permission denied"))
+        assert odoo_db.enable_mailpit_server("dev") == "permission denied"
+
+
+class TestDisableMailpitServer:
+    def test_the_sql_is_an_update_with_both_conditions(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        seen = {}
+
+        def _run(argv, **kw):
+            seen["argv"] = argv
+            return subprocess.CompletedProcess([], 0, "1\n", "")
+
+        monkeypatch.setattr(odoo_db.subprocess, "run", _run)
+        odoo_db.disable_mailpit_server("dev")
+
+        sql = seen["argv"][-1]
+        assert sql.strip().upper().startswith("UPDATE")
+        assert "SET active = false" in sql
+        assert "name = 'Mailpit (rkd)'" in sql
+        assert "smtp_host = 'mailpit'" in sql
+
+    def test_no_sql_emitted_by_the_module_contains_delete(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        seen = []
+
+        def _run(argv, **kw):
+            seen.append(argv[-1])
+            return subprocess.CompletedProcess([], 0, "1\n", "")
+
+        monkeypatch.setattr(odoo_db.subprocess, "run", _run)
+        odoo_db.enable_mailpit_server("dev")
+        odoo_db.disable_mailpit_server("dev")
+        for sql in seen:
+            assert "DELETE" not in sql.upper()
+
+    def test_counts_the_archived_rows(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(monkeypatch, subprocess.CompletedProcess([], 0, "1\n2\n", ""))
+        count, error = odoo_db.disable_mailpit_server("dev")
+        assert count == 2
+        assert error == ""
+
+    def test_zero_rows_is_not_an_error(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(monkeypatch, subprocess.CompletedProcess([], 0, "", ""))
+        count, error = odoo_db.disable_mailpit_server("dev")
+        assert count == 0
+        assert error == ""
+
+    def test_propagates_the_psql_error(self, monkeypatch):
+        monkeypatch.setattr(odoo_db, "db_container", lambda compose_data=None: "proj-db-1")
+        _patch_run(monkeypatch, subprocess.CompletedProcess([], 1, "", "permission denied"))
+        count, error = odoo_db.disable_mailpit_server("dev")
+        assert count == 0
+        assert error == "permission denied"
