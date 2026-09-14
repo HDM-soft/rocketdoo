@@ -47,4 +47,24 @@
   - `ruff check .` y `ruff format --check .` → limpios.
 - Sin hallazgos fuera del plan.
 
-Pendiente: T3 a T9 (no implementadas, fuera del alcance de esta tarea).
+## T3 — `build_update_command` con validación por pertenencia — COMPLETADA
+
+- Archivos:
+  - `rocketdoo/gui/api/odoo.py`: agrega `ODOO_SERVICE = "web"`,
+    `_known_modules()` (mismo `ModuleScanner` y `addons_path` que
+    `GET /api/modules`, para que el botón nunca ofrezca un módulo que la
+    validación después rechace) y `build_update_command(module, db)`, que
+    valida `db` contra `list_databases()` y `module` contra
+    `_known_modules()` por pertenencia — nunca por regex ni por escape — y
+    arma el argv exacto de CA8.
+  - `tests/test_gui_api.py`: `TestBuildUpdateCommand` con `addons_tree` +
+    monkeypatch de `list_databases`: argv exacto (con `-T` y
+    `--log-level=info`), `module="--load-language=es"` rechazado,
+    módulo fuera de `addons/` rechazado, `db` fuera de la lista rechazada.
+- Validación:
+  - `pytest tests/test_gui_api.py -q` → 48 passed.
+  - `pytest -q` (suite completa) → 702 passed (697 previos + 5 nuevos).
+  - `ruff check .` y `ruff format --check .` → limpios.
+- Sin hallazgos fuera del plan.
+
+Pendiente: T4 a T9 (no implementadas, fuera del alcance de esta tarea).

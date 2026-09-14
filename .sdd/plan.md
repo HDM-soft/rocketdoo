@@ -165,7 +165,7 @@ Dashboard, para que un refresh no la desmonte.
   y que no invoca `module_states` (monkeypatch que falla si se lo llama).
   Commit: `FEAT: endpoints de bases y estados de modulos en la GUI`.
 
-- [ ] **T3 — `build_update_command` con validación por pertenencia.**
+- [x] **T3 — `build_update_command` con validación por pertenencia.**
   En `gui/api/odoo.py`: `_known_modules()` + `build_update_command()`.
   Validación: tests en `tests/test_gui_api.py` con `addons_tree` y monkeypatch
   de `list_databases`: (a) el argv es exactamente el de CA8, con `-T` y
