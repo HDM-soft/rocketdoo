@@ -217,7 +217,7 @@ Dashboard, para que un refresh no la desmonte.
   Validación: manual, escenarios E1 a E5 de la spec.
   Commit: `FEAT: boton de actualizar modulo en la GUI`.
 
-- [ ] **T9 — Documentación.**
+- [x] **T9 — Documentación.**
   `CLAUDE.md`: agregar a la tabla de vistas de la GUI que Modules actualiza
   módulos; agregar `GET /api/odoo/databases`, `GET /api/odoo/module-states` y
   `WS /ws/odoo/update` a la lista de la API; agregar `core/odoo_db.py` al árbol

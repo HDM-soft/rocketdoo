@@ -219,3 +219,29 @@
 Pendiente: T9 (documentación) y toda la verificación manual con Docker real
 listada en `.sdd/plan.md` (sección "Verificación manual", ítems CA3-CA13
 relacionados con T6-T8).
+
+## T9 — Documentación — COMPLETADA
+- Archivos: `CLAUDE.md`
+- Cambios: `core/odoo_db.py` en el árbol y en archivos clave; los tres endpoints
+  nuevos en la lista de la API; la vista Modules describe el botón y el estado;
+  limitación de módulos anidados registrada.
+- Validación: revisión de lectura, sin cambios de código.
+
+## Verificación manual — COMPLETADA (hilo principal)
+Ejecutada contra un proyecto real (`odoo:18.0` + `postgres:16`, base `dev`,
+módulo `demo_mod` instalado):
+
+| Criterio | Resultado |
+|---|---|
+| CA1 `/api/odoo/databases` | `{"databases": ["dev"]}` |
+| CA5 `/api/odoo/module-states?db=dev` | 706 módulos, `demo_mod: installed` |
+| CA2 base desconocida | `{"states": {}, "error": "unknown database"}` |
+| CA10 upgrade real por WS | 26 líneas streameadas, `exit 0`, log legible |
+| CA9 validación por WS | flag disfrazado / base inexistente / módulo inexistente → `[error]` + `exit:1` |
+| E3 fallo real (XML roto) | `exit 255`, traceback visible en el stream |
+| CA11 restart de `web` | `ok: true`, contenedor reiniciado |
+| Odoo vivo durante el upgrade | siguió sirviendo, HTTP 200 |
+| SPA | HTTP 200, `node --check` sin errores |
+
+Pendiente de verificación humana: la interacción visual en el navegador
+(selector, tooltip del botón deshabilitado, confirm, badges de estado).
