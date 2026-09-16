@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "3.3.0"
+   - "3.4.0"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -450,11 +450,18 @@ rkd instance status                  # Show configured environments
 Rocketdoo v3 includes a professional web-based management interface, accessible from your browser just like Odoo — no installation of additional tools required.
 
 ```bash
-rkd gui                  # Launch GUI on http://localhost:8070
-rkd gui --open           # Also open the browser automatically
+rkd gui                  # Launch GUI, prints a tokenized URL to open
+rkd gui --open           # Also open that same URL in the browser automatically
 rkd gui --port 9090      # Use a custom port
 rkd gui --cwd /my/proj   # Point to a specific project directory
 ```
+
+`rkd gui` prints a URL of the form `http://127.0.0.1:8070/?token=<session-token>` —
+use that exact URL, not a bare `http://localhost:8070`. Every API and WebSocket
+call requires this session token (generated fresh on each `rkd gui` start), so
+opening the GUI without it shows a message asking you to use the printed URL
+instead of the project's data. `--open` already opens the correct, tokenized
+URL for you.
 
 The GUI provides a complete visual interface for all Rocketdoo v3 features:
 
@@ -473,7 +480,10 @@ Additional interface features:
 - Real-time log streaming via WebSocket
 - Runs entirely from the installed package — no Node.js or build step required
 
-> The GUI server runs locally and is bound to `127.0.0.1` by default, so it is only accessible from your own machine.
+> The GUI server runs locally and is bound to `127.0.0.1` by default, so it is only accessible
+> from your own machine. The session token adds a second layer on top of that: even another
+> process running as your own user on the same machine cannot call the API without it. See
+> [SECURITY.md](SECURITY.md) for the full threat model.
 
 ---
 
