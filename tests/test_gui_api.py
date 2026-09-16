@@ -17,6 +17,8 @@ import pytest
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
+from starlette.websockets import WebSocketDisconnect  # noqa: E402
+
 from rocketdoo.gui.server import create_app  # noqa: E402
 
 
@@ -509,3 +511,67 @@ class TestHealthReportsTheRealVersion:
 
         source = (Path(rocketdoo.__path__[0]) / "gui" / "server.py").read_text()
         assert not re.findall(r'"\d+\.\d+\.\d+"', source)
+
+
+class TestSessionToken:
+    """The token gate itself (#142's T11): T8-T10 only made `client` send it.
+
+    `no_token_client` deliberately carries no default header, so each test
+    controls exactly what credential (if any) travels with the request.
+    """
+
+    @pytest.fixture
+    def app(self, project_dir):
+        return create_app()
+
+    @pytest.fixture
+    def no_token_client(self, app):
+        return fastapi_testclient.TestClient(app)
+
+    def test_rest_without_token_is_rejected(self, no_token_client):
+        assert no_token_client.get("/api/project").status_code == 401
+
+    def test_rest_with_an_invalid_token_is_rejected(self, no_token_client):
+        response = no_token_client.get("/api/project", headers={"X-RKD-Token": "not-the-token"})
+        assert response.status_code == 401
+
+    def test_rest_with_the_valid_header_token_is_accepted(self, app, no_token_client):
+        headers = {"X-RKD-Token": app.state.rkd_token}
+        assert no_token_client.get("/api/project", headers=headers).status_code == 200
+
+    def test_rest_with_the_valid_query_token_is_accepted(self, app, no_token_client):
+        response = no_token_client.get(f"/api/project?token={app.state.rkd_token}")
+        assert response.status_code == 200
+
+    def test_post_endpoints_are_gated_too(self, no_token_client):
+        assert no_token_client.post("/api/mail/off").status_code == 401
+
+    @pytest.mark.parametrize("path", ["/", "/health", "/some/spa/route"])
+    def test_public_paths_need_no_token(self, no_token_client, path):
+        assert no_token_client.get(path).status_code == 200
+
+    @pytest.mark.parametrize(
+        "ws_path",
+        ["/ws/docker/bogus", "/ws/logs/some-container", "/ws/odoo/update?module=m&db=d"],
+    )
+    def test_every_websocket_route_rejects_a_missing_token(self, no_token_client, ws_path):
+        """Rejected in the middleware, before the handler runs — no Docker involved."""
+        with pytest.raises(WebSocketDisconnect):
+            with no_token_client.websocket_connect(ws_path):
+                pass
+
+    def test_websocket_rejects_an_invalid_token(self, no_token_client):
+        with pytest.raises(WebSocketDisconnect):
+            with no_token_client.websocket_connect("/ws/docker/bogus?token=not-the-token"):
+                pass
+
+    def test_websocket_connects_with_the_valid_token(self, app, no_token_client):
+        url = f"/ws/docker/bogus?token={app.state.rkd_token}"
+        with no_token_client.websocket_connect(url) as websocket:
+            assert websocket.receive_text() == "[error] Unknown action: bogus"
+
+    def test_two_apps_never_share_a_token(self, project_dir):
+        assert create_app().state.rkd_token != create_app().state.rkd_token
+
+    def test_the_generated_token_is_not_a_short_guess(self, app):
+        assert len(app.state.rkd_token) >= 32
