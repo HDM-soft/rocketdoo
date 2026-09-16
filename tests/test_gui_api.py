@@ -22,8 +22,13 @@ from rocketdoo.gui.server import create_app  # noqa: E402
 
 @pytest.fixture
 def client(project_dir):
-    """A TestClient whose working directory is an empty project dir."""
-    return fastapi_testclient.TestClient(create_app())
+    """A TestClient whose working directory is an empty project dir.
+
+    Sends the app's own session token by default: these tests exercise the
+    endpoints, not the token gate itself (that is #142's T11).
+    """
+    app = create_app()
+    return fastapi_testclient.TestClient(app, headers={"X-RKD-Token": app.state.rkd_token})
 
 
 GET_ENDPOINTS = [
@@ -421,7 +426,8 @@ def test_the_app_honours_the_port_it_was_created_with():
     """`rkd gui --port N` passes N through, so CORS matches the real URL."""
     from rocketdoo.gui.server import create_app
 
-    client = fastapi_testclient.TestClient(create_app(port=9090))
+    app = create_app(port=9090)
+    client = fastapi_testclient.TestClient(app, headers={"X-RKD-Token": app.state.rkd_token})
     response = client.get("/api/workspace", headers={"Origin": "http://localhost:9090"})
     assert response.headers.get("access-control-allow-origin") == "http://localhost:9090"
 
