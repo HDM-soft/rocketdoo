@@ -426,10 +426,12 @@ _LOCAL_SINK_NAMES = {
 def _is_sink_call(node: ast.Call) -> bool:
     """Whether this call launches a process.
 
-    Known gap: `from subprocess import run` then a bare `run(...)` is not
-    matched, because requiring the module qualifier is what keeps uvicorn.run
-    from producing a false positive. Nothing in the package imports it that
-    way; if that changes, add the name to _BARE_SINK_METHODS.
+    Known gap: a qualified sink reached under another name -- `from
+    subprocess import run` with a bare `run(...)`, or `import subprocess as
+    sp` with `sp.run(...)` -- is not matched, because requiring a known
+    module qualifier is what keeps uvicorn.run from producing a false
+    positive. Nothing in the package does either; if that changes, add the
+    name to _BARE_SINK_METHODS or the alias to _STDLIB_SINK_MODULES.
     """
     name = _called_name(node.func)
     if name in _LOCAL_SINK_NAMES or name in _BARE_SINK_METHODS:
@@ -555,7 +557,7 @@ def test_no_secret_reaches_subprocess_argv_construction():
       - the secret read through a subscript of a literal key
         (`conn["password"]`) or renamed first (`pw = self.password`)
       - the command built in a helper that does not launch anything itself
-      - a sink reached under a name not in _STDLIB_SINK_METHODS/_LOCAL_SINK_NAMES
+      - a sink reached under a name not in _QUALIFIED_SINK_METHODS/_LOCAL_SINK_NAMES
 
     Closing those needs real dataflow analysis, which is a bigger machine than
     the bug it guards. Reviewing a diff that touches a deploy path is still the

@@ -6,6 +6,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.datastructures import Headers, QueryParams
+from starlette.routing import get_route_path
 
 from rocketdoo import __version__
 
@@ -89,12 +90,20 @@ class TokenAuthMiddleware:
 
     @staticmethod
     def _protected(scope) -> bool:
-        path = scope["path"]
+        # get_route_path, not scope["path"]: the router strips root_path before
+        # matching, so mounting this app under a prefix would make the two
+        # diverge and every protected route would answer unauthenticated.
+        path = get_route_path(scope)
         return (path.startswith("/api/") or path.startswith("/ws/")) and scope.get("method") != "OPTIONS"
 
     def _authorized(self, scope) -> bool:
         provided = Headers(scope=scope).get("x-rkd-token") or QueryParams(scope["query_string"]).get("token")
-        return bool(provided) and secrets.compare_digest(provided, self.token)
+        # isascii() first: compare_digest raises TypeError on non-ASCII strings,
+        # and the value is entirely attacker-controlled. Without this a crafted
+        # header answers 500 with a traceback instead of 401.
+        if not provided or not provided.isascii():
+            return False
+        return secrets.compare_digest(provided, self.token)
 
     @staticmethod
     async def _reject(scope, receive, send):
@@ -127,6 +136,9 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT, token: str | N
         title="Rocketdoo GUI",
         version=__version__,
         docs_url="/api/docs",
+        # Under /api so the token middleware covers it: on its default path it
+        # served the full route inventory to anyone on the host.
+        openapi_url="/api/openapi.json",
         redoc_url=None,
     )
 

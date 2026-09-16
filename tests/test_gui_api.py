@@ -575,3 +575,85 @@ class TestSessionToken:
 
     def test_the_generated_token_is_not_a_short_guess(self, app):
         assert len(app.state.rkd_token) >= 32
+
+
+class TestTokenMiddlewareEdges:
+    """Ways the middleware could answer without a token, found in review."""
+
+    @pytest.fixture
+    def untokened(self, project_dir):
+        """A client that sends no token, unlike the module-wide `client`."""
+        from rocketdoo.gui.server import create_app
+
+        return fastapi_testclient.TestClient(create_app())
+
+    def _probe(self, app, path, headers=None, query=b"", root_path=""):
+        """Drive the app over raw ASGI: httpx rejects non-ASCII headers itself."""
+        import asyncio
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "raw_path": path.encode(),
+            "query_string": query,
+            "headers": headers or [],
+            "root_path": root_path,
+            "app": app,
+            "scheme": "http",
+            "server": ("test", 80),
+            "client": ("c", 1),
+            "http_version": "1.1",
+        }
+        seen = {}
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            if message["type"] == "http.response.start":
+                seen["status"] = message["status"]
+
+        asyncio.run(app(scope, receive, send))
+        return seen.get("status")
+
+    def test_a_non_ascii_token_is_rejected_not_a_crash(self):
+        """compare_digest raises TypeError on non-ASCII, and the value is attacker-controlled."""
+        from rocketdoo.gui.server import create_app
+
+        app = create_app()
+        status = self._probe(app, "/api/project", [(b"x-rkd-token", "tokén".encode("latin-1"))])
+
+        assert status == 401, "a crafted header must answer 401, not 500"
+
+    def test_a_non_ascii_token_in_the_query_is_rejected(self):
+        from rocketdoo.gui.server import create_app
+
+        app = create_app()
+        status = self._probe(app, "/api/project", query="token=tokén".encode("latin-1"))
+
+        assert status == 401
+
+    def test_a_mounted_app_still_requires_the_token(self):
+        """The router strips root_path before matching; the guard must too.
+
+        Reading scope["path"] instead made every route answer unauthenticated
+        once the app was mounted under a prefix — failing open, silently.
+        """
+        from rocketdoo.gui.server import create_app
+
+        app = create_app()
+        status = self._probe(app, "/prefix/api/project", root_path="/prefix")
+
+        assert status == 401
+
+    def test_the_route_inventory_is_not_public(self, untokened):
+        """openapi_url defaulted outside /api and served all 47 paths."""
+        response = untokened.get("/openapi.json")
+
+        assert "text/html" in response.headers.get("content-type", "")
+        assert "/api/instances/deploy" not in response.text
+
+    def test_the_schema_under_api_needs_the_token(self, untokened, client):
+        assert untokened.get("/api/openapi.json").status_code == 401
+        assert client.get("/api/openapi.json").status_code == 200

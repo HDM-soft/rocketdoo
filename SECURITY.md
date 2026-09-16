@@ -63,10 +63,15 @@ distinto:
 
 1. **CORS restringido a los orígenes propios de la GUI (3.2.0).** Antes, `allow_origins=["*"]`
    con `allow_credentials=True` dejaba que cualquier página que el desarrollador visitara en su
-   navegador mientras `rkd gui` corría pudiera leer `/api/workspace` o disparar
-   `POST /api/docker/down` por su cuenta. `local_origins()` ahora solo permite el propio origen
-   de la GUI. **Cubre**: una web maliciosa o comprometida usando el navegador de la víctima como
-   proxy hacia la API local.
+   navegador mientras `rkd gui` corría pudiera **leer** la respuesta de `/api/workspace` — es
+   decir, exfiltrar rutas de su disco. `local_origins()` ahora solo permite el propio origen de
+   la GUI. **Cubre**: la lectura de respuestas por una web ajena.
+
+   **Lo que CORS no cubre, y conviene tener claro**: la política gobierna si el navegador deja
+   *leer* la respuesta, no si la petición se *envía*. Un `POST /api/docker/down` sin cuerpo ni
+   cabeceras propias es una petición simple: no dispara preflight y el servidor la ejecuta
+   igual, aunque el atacante nunca vea el resultado. Ese escenario —un CSRF a ciegas— lo cierra
+   el token, no CORS.
 2. **Secretos fuera del `argv` (3.2.1).** El password del VPS viaja por la variable de entorno
    `SSHPASS` del subproceso `sshpass` (nunca como argumento de línea de comandos), el `sudo`
    remoto lo recibe por `stdin`, y el `odoo.conf` con `admin_passwd` se escribe vía `stdin` en
@@ -77,14 +82,23 @@ distinto:
 3. **Token de sesión efímero para la GUI (esta versión).** `create_app()` genera un token con
    `secrets.token_urlsafe(32)` en cada arranque; un middleware ASGI exige ese token (header
    `X-RKD-Token` o query param `token`) en todo `/api/*` y `/ws/*`, HTTP y WebSocket por igual.
-   **Cubre**: otro proceso local (no un navegador — CORS ya lo frena) que descubra el puerto
-   8070 abierto y le hable directo, sin pasar por ningún navegador ni respetar CORS.
+   **Cubre** dos cosas: otro proceso local que descubra el puerto abierto y le hable directo
+   sin pasar por un navegador; y el CSRF a ciegas del punto 1, porque una web ajena no conoce
+   el token y su petición se rechaza antes de ejecutarse.
 
-Ninguna de las tres reemplaza a las otras: CORS frena a un navegador ajeno, el token frena a un
-proceso local ajeno, y el manejo de secretos frena a quien solo puede observar procesos (locales
-o remotos) pero no leer la memoria del proceso ni el disco.
+Ninguna de las tres reemplaza a las otras, pero no son capas equivalentes: **el token es la más
+fuerte**, porque actúa antes de ejecutar y no depende de que el atacante respete nada. CORS solo
+limita lo que un navegador deja leer, y el manejo de secretos protege de quien puede observar la
+lista de procesos pero no leer el disco ni la memoria.
 
 ## Lo que esto NO cubre
+
+**`rkd gui --open` expone el token en la lista de procesos.** `webbrowser.open()` resuelve en
+Linux a `Popen(["xdg-open", url])`, así que la URL completa —token incluido— queda como
+argumento de ese proceso y es legible con `ps aux` mientras dura. Es el mismo canal que la
+defensa 2 cierra para los passwords de VPS, y acá se acepta a conciencia: `--open` es opt-in,
+viene desactivado por defecto, y el comando lo advierte al usarlo. Sin `--open`, el token solo
+aparece en la terminal que corre `rkd gui`.
 
 Riesgos residuales aceptados, documentados en lugar de prometidos como resueltos:
 

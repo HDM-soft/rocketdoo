@@ -56,6 +56,15 @@ def gui_command(port, host, auto_open, cwd):
     console.print()
 
     if auto_open:
+        # The tokenised URL becomes an argument of the browser helper process
+        # (webbrowser resolves to Popen(["xdg-open", url]) on Linux), so it is
+        # briefly visible in `ps aux` to any local user. Same channel #142
+        # closed for VPS passwords, here as an accepted trade-off of an opt-in
+        # flag: documented in SECURITY.md rather than silently accepted.
+        console.print("[dim]  note: --open passes the tokenised URL to the browser helper,[/dim]")
+        console.print("[dim]        which makes it briefly visible in the process list.[/dim]")
+        console.print()
+
         import threading
         import time
         import webbrowser
