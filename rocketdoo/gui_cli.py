@@ -38,13 +38,12 @@ def gui_command(port, host, auto_open, cwd):
     # Built first so the panel below can show the real, tokenized URL.
     app = create_app(host=host, port=port)
     url = f"http://{host}:{port}/?token={app.state.rkd_token}"
-    browser_note = "opening automatically" if auto_open else "copy the URL above (--open to launch one here)"
+    browser_note = "opening automatically" if auto_open else "not opened (--open to launch one here)"
 
     console.print()
     console.print(
         Panel(
             f"[bold white]Rocketdoo GUI[/bold white] [dim]v{__version__}[/dim]\n\n"
-            f"  [dim]URL:[/dim]      [bold cyan]{url}[/bold cyan]\n"
             f"  [dim]Browser:[/dim]  {browser_note}\n"
             f"  [dim]Stop:[/dim]     [bold]Ctrl+C[/bold] (this terminal stays busy while the server runs)",
             title="[bold blue]RKD GUI[/bold blue]",
@@ -53,6 +52,11 @@ def gui_command(port, host, auto_open, cwd):
             padding=(1, 2),
         )
     )
+    # Outside the panel and unwrapped: the tokenised URL is long, and inside a
+    # bordered box Rich splits it across lines, which breaks copy-paste — the
+    # one thing the user has to do with it.
+    console.print("\n  Open this URL (it carries the session token):\n")
+    console.print(f"  [bold cyan]{url}[/bold cyan]", soft_wrap=True, highlight=False)
     console.print()
 
     if auto_open:
