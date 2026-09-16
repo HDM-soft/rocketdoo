@@ -161,11 +161,28 @@ html.light ::-webkit-scrollbar-thumb:hover { background: #4A6080; }
 <script>
 const { createApp, ref, computed, onMounted, onActivated, onUnmounted, watch, nextTick } = Vue
 
+/* ── Session token ───────────────────────────────────────────────────────── */
+// `rkd gui` prints the URL with `?token=...`; kept in the URL (not stripped
+// after reading it) so a page refresh or a duplicated tab keeps working.
+const TOKEN = new URLSearchParams(location.search).get('token') || ''
+const authError = ref(!TOKEN)
+
+function wsUrl(path) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const sep = path.includes('?') ? '&' : '?'
+  return `${proto}://${location.host}${path}${sep}token=${TOKEN}`
+}
+
 /* ── API ─────────────────────────────────────────────────────────────────── */
 const api = {
-  async get(p) { const r = await fetch('/api'+p); return r.json() },
+  async get(p) {
+    const r = await fetch('/api'+p, { headers: { 'X-RKD-Token': TOKEN } })
+    if (r.status === 401) authError.value = true
+    return r.json()
+  },
   async post(p, b={}) {
-    const r = await fetch('/api'+p, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b) })
+    const r = await fetch('/api'+p, { method:'POST', headers:{'Content-Type':'application/json','X-RKD-Token':TOKEN}, body: JSON.stringify(b) })
+    if (r.status === 401) authError.value = true
     return r.json()
   }
 }
@@ -265,8 +282,7 @@ const LogViewer = {
       pending = []
       lines.value = []
       live.value = true
-      const proto = location.protocol==='https:'?'wss':'ws'
-      ws = new WebSocket(`${proto}://${location.host}/ws/logs/${props.name}`)
+      ws = new WebSocket(wsUrl(`/ws/logs/${props.name}`))
       ws.onmessage = e => {
         pending.push(e.data)
         if (!raf) raf = requestAnimationFrame(flush)
@@ -335,8 +351,7 @@ const DockerTerminal = {
     }
 
     onMounted(() => {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      ws = new WebSocket(`${proto}://${location.host}${props.url}`)
+      ws = new WebSocket(wsUrl(props.url))
       ws.onmessage = e => {
         const txt = e.data
         if (txt.startsWith('\x00exit:')) {
@@ -2298,10 +2313,20 @@ const App = {
       if (!darkMode.value) document.documentElement.classList.add('light')
       init()
     })
-    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion }
+    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion, authError }
   },
   template: `
-  <div class="layout">
+  <div v-if="authError" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div class="card" style="max-width:460px;text-align:center;">
+      <span v-html="I.warn" style="width:32px;height:32px;color:#FCD34D;display:inline-block;margin-bottom:12px;"></span>
+      <h2 style="font-size:16px;margin-bottom:8px;">Session token required</h2>
+      <p style="color:#8CA0C4;font-size:13px;line-height:1.6;">
+        This page has no valid session token. Open the URL printed by <code>rkd gui</code>
+        in the terminal it is running from — it ends with <code>?token=...</code>.
+      </p>
+    </div>
+  </div>
+  <div v-else class="layout">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="logo-area">

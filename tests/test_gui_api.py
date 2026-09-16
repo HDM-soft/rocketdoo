@@ -17,13 +17,20 @@ import pytest
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
+from starlette.websockets import WebSocketDisconnect  # noqa: E402
+
 from rocketdoo.gui.server import create_app  # noqa: E402
 
 
 @pytest.fixture
 def client(project_dir):
-    """A TestClient whose working directory is an empty project dir."""
-    return fastapi_testclient.TestClient(create_app())
+    """A TestClient whose working directory is an empty project dir.
+
+    Sends the app's own session token by default: these tests exercise the
+    endpoints, not the token gate itself (that is #142's T11).
+    """
+    app = create_app()
+    return fastapi_testclient.TestClient(app, headers={"X-RKD-Token": app.state.rkd_token})
 
 
 GET_ENDPOINTS = [
@@ -421,7 +428,8 @@ def test_the_app_honours_the_port_it_was_created_with():
     """`rkd gui --port N` passes N through, so CORS matches the real URL."""
     from rocketdoo.gui.server import create_app
 
-    client = fastapi_testclient.TestClient(create_app(port=9090))
+    app = create_app(port=9090)
+    client = fastapi_testclient.TestClient(app, headers={"X-RKD-Token": app.state.rkd_token})
     response = client.get("/api/workspace", headers={"Origin": "http://localhost:9090"})
     assert response.headers.get("access-control-allow-origin") == "http://localhost:9090"
 
@@ -503,3 +511,149 @@ class TestHealthReportsTheRealVersion:
 
         source = (Path(rocketdoo.__path__[0]) / "gui" / "server.py").read_text()
         assert not re.findall(r'"\d+\.\d+\.\d+"', source)
+
+
+class TestSessionToken:
+    """The token gate itself (#142's T11): T8-T10 only made `client` send it.
+
+    `no_token_client` deliberately carries no default header, so each test
+    controls exactly what credential (if any) travels with the request.
+    """
+
+    @pytest.fixture
+    def app(self, project_dir):
+        return create_app()
+
+    @pytest.fixture
+    def no_token_client(self, app):
+        return fastapi_testclient.TestClient(app)
+
+    def test_rest_without_token_is_rejected(self, no_token_client):
+        assert no_token_client.get("/api/project").status_code == 401
+
+    def test_rest_with_an_invalid_token_is_rejected(self, no_token_client):
+        response = no_token_client.get("/api/project", headers={"X-RKD-Token": "not-the-token"})
+        assert response.status_code == 401
+
+    def test_rest_with_the_valid_header_token_is_accepted(self, app, no_token_client):
+        headers = {"X-RKD-Token": app.state.rkd_token}
+        assert no_token_client.get("/api/project", headers=headers).status_code == 200
+
+    def test_rest_with_the_valid_query_token_is_accepted(self, app, no_token_client):
+        response = no_token_client.get(f"/api/project?token={app.state.rkd_token}")
+        assert response.status_code == 200
+
+    def test_post_endpoints_are_gated_too(self, no_token_client):
+        assert no_token_client.post("/api/mail/off").status_code == 401
+
+    @pytest.mark.parametrize("path", ["/", "/health", "/some/spa/route"])
+    def test_public_paths_need_no_token(self, no_token_client, path):
+        assert no_token_client.get(path).status_code == 200
+
+    @pytest.mark.parametrize(
+        "ws_path",
+        ["/ws/docker/bogus", "/ws/logs/some-container", "/ws/odoo/update?module=m&db=d"],
+    )
+    def test_every_websocket_route_rejects_a_missing_token(self, no_token_client, ws_path):
+        """Rejected in the middleware, before the handler runs — no Docker involved."""
+        with pytest.raises(WebSocketDisconnect):
+            with no_token_client.websocket_connect(ws_path):
+                pass
+
+    def test_websocket_rejects_an_invalid_token(self, no_token_client):
+        with pytest.raises(WebSocketDisconnect):
+            with no_token_client.websocket_connect("/ws/docker/bogus?token=not-the-token"):
+                pass
+
+    def test_websocket_connects_with_the_valid_token(self, app, no_token_client):
+        url = f"/ws/docker/bogus?token={app.state.rkd_token}"
+        with no_token_client.websocket_connect(url) as websocket:
+            assert websocket.receive_text() == "[error] Unknown action: bogus"
+
+    def test_two_apps_never_share_a_token(self, project_dir):
+        assert create_app().state.rkd_token != create_app().state.rkd_token
+
+    def test_the_generated_token_is_not_a_short_guess(self, app):
+        assert len(app.state.rkd_token) >= 32
+
+
+class TestTokenMiddlewareEdges:
+    """Ways the middleware could answer without a token, found in review."""
+
+    @pytest.fixture
+    def untokened(self, project_dir):
+        """A client that sends no token, unlike the module-wide `client`."""
+        from rocketdoo.gui.server import create_app
+
+        return fastapi_testclient.TestClient(create_app())
+
+    def _probe(self, app, path, headers=None, query=b"", root_path=""):
+        """Drive the app over raw ASGI: httpx rejects non-ASCII headers itself."""
+        import asyncio
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "raw_path": path.encode(),
+            "query_string": query,
+            "headers": headers or [],
+            "root_path": root_path,
+            "app": app,
+            "scheme": "http",
+            "server": ("test", 80),
+            "client": ("c", 1),
+            "http_version": "1.1",
+        }
+        seen = {}
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            if message["type"] == "http.response.start":
+                seen["status"] = message["status"]
+
+        asyncio.run(app(scope, receive, send))
+        return seen.get("status")
+
+    def test_a_non_ascii_token_is_rejected_not_a_crash(self):
+        """compare_digest raises TypeError on non-ASCII, and the value is attacker-controlled."""
+        from rocketdoo.gui.server import create_app
+
+        app = create_app()
+        status = self._probe(app, "/api/project", [(b"x-rkd-token", "tokén".encode("latin-1"))])
+
+        assert status == 401, "a crafted header must answer 401, not 500"
+
+    def test_a_non_ascii_token_in_the_query_is_rejected(self):
+        from rocketdoo.gui.server import create_app
+
+        app = create_app()
+        status = self._probe(app, "/api/project", query="token=tokén".encode("latin-1"))
+
+        assert status == 401
+
+    def test_a_mounted_app_still_requires_the_token(self):
+        """The router strips root_path before matching; the guard must too.
+
+        Reading scope["path"] instead made every route answer unauthenticated
+        once the app was mounted under a prefix — failing open, silently.
+        """
+        from rocketdoo.gui.server import create_app
+
+        app = create_app()
+        status = self._probe(app, "/prefix/api/project", root_path="/prefix")
+
+        assert status == 401
+
+    def test_the_route_inventory_is_not_public(self, untokened):
+        """openapi_url defaulted outside /api and served all 47 paths."""
+        response = untokened.get("/openapi.json")
+
+        assert "text/html" in response.headers.get("content-type", "")
+        assert "/api/instances/deploy" not in response.text
+
+    def test_the_schema_under_api_needs_the_token(self, untokened, client):
+        assert untokened.get("/api/openapi.json").status_code == 401
+        assert client.get("/api/openapi.json").status_code == 200

@@ -1,9 +1,12 @@
 import asyncio
+import secrets
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.datastructures import Headers, QueryParams
+from starlette.routing import get_route_path
 
 from rocketdoo import __version__
 
@@ -62,6 +65,55 @@ async def _stream_process(websocket: WebSocket, cmd: list[str], timeout: float =
             pass
 
 
+class TokenAuthMiddleware:
+    """Require the session token on every /api and /ws request.
+
+    CORS only constrains browsers; any local process can reach 127.0.0.1 and
+    drive Docker or the filesystem through this API. The token raises that bar
+    to "processes that can read the terminal running rkd gui". ASGI middleware
+    is used instead of a FastAPI dependency because the 3 websocket routes are
+    plain ASGI routes on `app`, outside the router, and a dependency cannot
+    reach them; a `BaseHTTPMiddleware` cannot either, since it never sees the
+    `websocket` scope.
+    """
+
+    def __init__(self, app, token: str):
+        self.app = app
+        self.token = token
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket") and self._protected(scope):
+            if not self._authorized(scope):
+                await self._reject(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+    @staticmethod
+    def _protected(scope) -> bool:
+        # get_route_path, not scope["path"]: the router strips root_path before
+        # matching, so mounting this app under a prefix would make the two
+        # diverge and every protected route would answer unauthenticated.
+        path = get_route_path(scope)
+        return (path.startswith("/api/") or path.startswith("/ws/")) and scope.get("method") != "OPTIONS"
+
+    def _authorized(self, scope) -> bool:
+        provided = Headers(scope=scope).get("x-rkd-token") or QueryParams(scope["query_string"]).get("token")
+        # isascii() first: compare_digest raises TypeError on non-ASCII strings,
+        # and the value is entirely attacker-controlled. Without this a crafted
+        # header answers 500 with a traceback instead of 401.
+        if not provided or not provided.isascii():
+            return False
+        return secrets.compare_digest(provided, self.token)
+
+    @staticmethod
+    async def _reject(scope, receive, send):
+        if scope["type"] == "websocket":
+            await send({"type": "websocket.close", "code": 1008})
+        else:
+            response = JSONResponse({"detail": "Unauthorized"}, status_code=401)
+            await response(scope, receive, send)
+
+
 def local_origins(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> list[str]:
     """Browser origins allowed to call this API.
 
@@ -79,13 +131,25 @@ def local_origins(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> list[str
     return origins
 
 
-def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT) -> FastAPI:
+def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT, token: str | None = None) -> FastAPI:
     app = FastAPI(
         title="Rocketdoo GUI",
         version=__version__,
         docs_url="/api/docs",
+        # Under /api so the token middleware covers it: on its default path it
+        # served the full route inventory to anyone on the host.
+        openapi_url="/api/openapi.json",
         redoc_url=None,
     )
+
+    # Generated even if the caller passes nothing: there is no way to end up
+    # with an unprotected API by omission.
+    app.state.rkd_token = token or secrets.token_urlsafe(32)
+
+    # Added before CORSMiddleware so it ends up as the inner layer: CORS stays
+    # the outermost middleware and keeps handling preflight and headers
+    # exactly as before, unaffected by the token check.
+    app.add_middleware(TokenAuthMiddleware, token=app.state.rkd_token)
 
     # Not allow_origins=["*"]: with allow_credentials=True Starlette echoes the
     # caller's Origin back, so any site the user visited while `rkd gui` was
