@@ -533,6 +533,15 @@ deploy — no manual step needed.
 
 ---
 
+### Security
+
+Rocketdoo is a local, single-user development tool, not a hardened multi-user
+service. See [SECURITY.md](SECURITY.md) for the threat model: what the GUI
+exposes, where credentials live on disk, and the residual risks that are
+accepted rather than solved.
+
+---
+
 ### Technical Support
 
 - If you have any questions or issues with our development environment, you can contact us and submit your inquiry or support ticket by clicking on the link below.
