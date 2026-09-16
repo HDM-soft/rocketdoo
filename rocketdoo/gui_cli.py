@@ -35,7 +35,9 @@ def gui_command(port, host, auto_open, cwd):
 
     from rocketdoo.gui.server import create_app
 
-    url = f"http://{host}:{port}"
+    # Built first so the panel below can show the real, tokenized URL.
+    app = create_app(host=host, port=port)
+    url = f"http://{host}:{port}/?token={app.state.rkd_token}"
     browser_note = "opening automatically" if auto_open else "copy the URL above (--open to launch one here)"
 
     console.print()
@@ -64,7 +66,6 @@ def gui_command(port, host, auto_open, cwd):
 
         threading.Thread(target=_open, daemon=True).start()
 
-    # host/port reach the app so CORS can allow exactly the origin the user
-    # will open, and nothing else.
-    app = create_app(host=host, port=port)
+    # log_level="error" also keeps the token out of an access log: the query
+    # string would otherwise be recorded on every request.
     uvicorn.run(app, host=host, port=port, log_level="error")
