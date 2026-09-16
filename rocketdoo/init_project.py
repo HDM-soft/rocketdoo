@@ -284,7 +284,7 @@ def init_project(profile: str | None = None):
     db_version = questionary.select("PostgreSQL version:", choices=db_versions, default=release.postgres_recommended).ask()
 
     # Ask for the master password
-    admin_passwd = click.prompt("Odoo master password", default="admin", hide_input=False)
+    admin_passwd = click.prompt("Odoo master password", default="admin", hide_input=True)
 
     restart_policy = questionary.select(
         "\n♻️  How would you like to restart the environment?",

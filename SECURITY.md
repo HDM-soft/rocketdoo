@@ -86,10 +86,19 @@ distinto:
    sin pasar por un navegador; y el CSRF a ciegas del punto 1, porque una web ajena no conoce
    el token y su petición se rechaza antes de ejecutarse.
 
-Ninguna de las tres reemplaza a las otras, pero no son capas equivalentes: **el token es la más
+4. **El master password no se tipea a la vista (#190).** Los dos wizards que lo piden ocultan
+   lo que se escribe: `rkd init` con `hide_input=True` y `rkd instance init` con `password=True`.
+   Este último ofrece un password generado al azar como default y ya no lo muestra en el texto
+   del prompt (`show_default=False`): lo imprime después, y solo si el usuario aceptó el default,
+   que es el único caso en que necesita verlo. **Cubre** poco del modelo de amenazas —el valor
+   termina en claro en `config/odoo.conf` y en `.rkd/instance.yaml` de todos modos— y sí un
+   escenario concreto: la terminal compartida en un pair, un stream o una captura de pantalla.
+
+Ninguna de las cuatro reemplaza a las otras, pero no son capas equivalentes: **el token es la más
 fuerte**, porque actúa antes de ejecutar y no depende de que el atacante respete nada. CORS solo
-limita lo que un navegador deja leer, y el manejo de secretos protege de quien puede observar la
-lista de procesos pero no leer el disco ni la memoria.
+limita lo que un navegador deja leer, el manejo de secretos protege de quien puede observar la
+lista de procesos pero no leer el disco ni la memoria, y ocultar el prompt solo protege de quien
+mira la pantalla.
 
 ## Lo que esto NO cubre
 
@@ -119,9 +128,6 @@ Riesgos residuales aceptados, documentados en lugar de prometidos como resueltos
   `deploy.yaml`/`instance.yaml` del usuario se interpolan en comandos SSH sin sanitizar; están
   fuera de alcance porque son configuración que el propio usuario escribe, no entrada de un
   tercero.
-- **El wizard de instancias no oculta el password al tipearlo.** `Prompt.ask("Odoo master
-  password", ...)` en `core/instance/config_manager.py` no usa `password=True`: el valor queda
-  visible en pantalla y en el scrollback de la terminal mientras se configura.
 - **`traceback.format_exc()` se devuelve por HTTP.** `gui/api/setup.py` incluye el traceback
   completo en la respuesta de error de `/api/setup/*`, que puede revelar rutas absolutas del
   sistema de archivos a quien tenga el token (o, antes de esta versión, a cualquiera).

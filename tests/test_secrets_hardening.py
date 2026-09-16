@@ -645,3 +645,63 @@ class TestMultilinePasswordDoesNotLeakIntoRemoteStdin:
             deployer._run_ssh_command("systemctl restart odoo", use_sudo=True)
 
         assert seen["input"] == "first\n"
+
+
+# ─── structural guard: a credential prompt must never echo what is typed (#190) ───
+
+# A prompt asking for a credential VALUE, as opposed to one asking for the
+# name of an env variable that holds it, a key path or a config file. Those
+# are not secrets and must stay visible.
+_CREDENTIAL_PROMPT_RE = re.compile(r"password|passwd|secret", re.IGNORECASE)
+_NOT_A_CREDENTIAL_RE = re.compile(r"variable|name|path|file|env", re.IGNORECASE)
+
+# (called name, keyword that suppresses the echo) for every prompt helper the
+# codebase uses. click.prompt defaults to hide_input=False and rich's
+# Prompt.ask to password=False, so an omitted keyword is a violation.
+_PROMPT_HIDE_KEYWORD = {
+    "prompt": "hide_input",
+    "ask": "password",
+}
+
+
+def _prompt_text(node: ast.Call) -> str | None:
+    if not node.args:
+        return None
+    first = node.args[0]
+    return first.value if isinstance(first, ast.Constant) and isinstance(first.value, str) else None
+
+
+def _hides_input(node: ast.Call, keyword: str) -> bool:
+    for kw in node.keywords:
+        if kw.arg == keyword:
+            return isinstance(kw.value, ast.Constant) and kw.value.value is True
+    return False
+
+
+def test_no_prompt_asks_for_a_credential_in_the_clear():
+    """Typing the Odoo master password must not leave it in the scrollback.
+
+    Guards both wizards at once: `rkd init` (click.prompt) and `rkd instance
+    init` (rich Prompt.ask). A new prompt asking for a credential anywhere in
+    the package fails here without needing its own test.
+    """
+    offenders = []
+    for path in sorted(ROCKETDOO_ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = _called_name(node.func)
+            keyword = _PROMPT_HIDE_KEYWORD.get(name)
+            if keyword is None:
+                continue
+            text = _prompt_text(node)
+            if text is None or not _CREDENTIAL_PROMPT_RE.search(text):
+                continue
+            if _NOT_A_CREDENTIAL_RE.search(text):
+                continue
+            if not _hides_input(node, keyword):
+                rel = path.relative_to(ROCKETDOO_ROOT.parent)
+                offenders.append(f"{rel}:{node.lineno}: {text!r} without {keyword}=True")
+
+    assert not offenders, "credential prompts echo what is typed:\n" + "\n".join(offenders)
