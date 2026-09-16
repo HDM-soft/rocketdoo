@@ -94,7 +94,14 @@ distinto:
    termina en claro en `config/odoo.conf` y en `.rkd/instance.yaml` de todos modos— y sí un
    escenario concreto: la terminal compartida en un pair, un stream o una captura de pantalla.
 
-Ninguna de las cuatro reemplaza a las otras, pero no son capas equivalentes: **el token es la más
+5. **El traceback no sale del servidor (#191).** `/api/setup/init` devolvía
+   `traceback.format_exc()` en el cuerpo de la respuesta: rutas absolutas del filesystem del
+   desarrollador y la estructura interna del paquete, para quien tuviera el token — y antes del
+   punto 3, para cualquiera. Ahora se registra con `logger.exception()` y queda en la terminal
+   que corre `rkd gui`, que es donde el desarrollador ya está mirando. **Cubre** la fuga de
+   información; no cubre el `str(e)`, que sigue viajando a propósito (ver riesgos residuales).
+
+Ninguna de las cinco reemplaza a las otras, pero no son capas equivalentes: **el token es la más
 fuerte**, porque actúa antes de ejecutar y no depende de que el atacante respete nada. CORS solo
 limita lo que un navegador deja leer, el manejo de secretos protege de quien puede observar la
 lista de procesos pero no leer el disco ni la memoria, y ocultar el prompt solo protege de quien
@@ -128,9 +135,11 @@ Riesgos residuales aceptados, documentados en lugar de prometidos como resueltos
   `deploy.yaml`/`instance.yaml` del usuario se interpolan en comandos SSH sin sanitizar; están
   fuera de alcance porque son configuración que el propio usuario escribe, no entrada de un
   tercero.
-- **`traceback.format_exc()` se devuelve por HTTP.** `gui/api/setup.py` incluye el traceback
-  completo en la respuesta de error de `/api/setup/*`, que puede revelar rutas absolutas del
-  sistema de archivos a quien tenga el token (o, antes de esta versión, a cualquiera).
+- **El mensaje de error del wizard puede contener una ruta.** `/api/setup/init` devuelve
+  `str(e)`, y una excepción de archivo trae la ruta que falló (`'/home/<usuario>/.ssh/...'`).
+  Se acepta: es la ruta que el propio usuario pidió en la petición, y sin ella el error deja de
+  ser accionable. El traceback completo, que además revela dónde está instalado el paquete, ya
+  no viaja (#191).
 - **`sequence = 1` de Mailpit no garantiza capturar el correo.** Un `ir.mail_server` propio con
   `from_filter` coincidente puede ganarle a Mailpit en la selección de servidor de Odoo,
   independientemente de la `sequence`. Ver la sección de `rkd mail` en `CLAUDE.md`/`README.md`.
