@@ -397,16 +397,18 @@ _SENSITIVE_NAME_RE = re.compile(r"password|passwd|secret|token", re.IGNORECASE)
 # rather than by method name alone: a bare-name match on "run" or "call" also
 # fires on unrelated calls like `uvicorn.run(...)`, which is not a sink.
 _STDLIB_SINK_MODULES = {"subprocess", "os", "asyncio"}
-_STDLIB_SINK_METHODS = {
-    "run",
+
+# Names common enough to collide with unrelated calls (uvicorn.run, a local
+# call()), so they only count when qualified by one of the modules above.
+_QUALIFIED_SINK_METHODS = {"run", "call", "check_call", "system", "popen"}
+
+# Names that belong to no other API worth worrying about: matched bare, so a
+# `from asyncio import create_subprocess_exec` still counts.
+_BARE_SINK_METHODS = {
     "Popen",
-    "call",
-    "check_call",
-    "check_output",  # subprocess.*
-    "system",
-    "popen",  # os.*
+    "check_output",
     "create_subprocess_exec",
-    "create_subprocess_shell",  # asyncio.*, used by gui/server.py
+    "create_subprocess_shell",
 }
 
 # Local helpers that build the ssh/rsync argv passed to a sink, or launch one
@@ -422,10 +424,17 @@ _LOCAL_SINK_NAMES = {
 
 
 def _is_sink_call(node: ast.Call) -> bool:
+    """Whether this call launches a process.
+
+    Known gap: `from subprocess import run` then a bare `run(...)` is not
+    matched, because requiring the module qualifier is what keeps uvicorn.run
+    from producing a false positive. Nothing in the package imports it that
+    way; if that changes, add the name to _BARE_SINK_METHODS.
+    """
     name = _called_name(node.func)
-    if name in _LOCAL_SINK_NAMES:
+    if name in _LOCAL_SINK_NAMES or name in _BARE_SINK_METHODS:
         return True
-    if name not in _STDLIB_SINK_METHODS or not isinstance(node.func, ast.Attribute):
+    if name not in _QUALIFIED_SINK_METHODS or not isinstance(node.func, ast.Attribute):
         return False
     base = node.func.value
     return isinstance(base, ast.Name) and base.id in _STDLIB_SINK_MODULES
