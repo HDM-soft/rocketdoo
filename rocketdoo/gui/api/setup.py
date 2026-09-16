@@ -4,6 +4,7 @@ Replicates the logic of init_project.py accepting a JSON body instead of
 questionary prompts, so the frontend can drive the full wizard.
 """
 
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +12,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -161,6 +163,12 @@ async def init_project(body: InitRequest):
         return {"ok": True, "project_name": project_name}
 
     except Exception as e:
-        import traceback
-
-        return {"ok": False, "error": str(e), "detail": traceback.format_exc()}
+        # The traceback stays on the server: it carries absolute filesystem
+        # paths and the package layout, and the developer running `rkd gui`
+        # reads it in their own terminal.
+        logger.exception("setup/init failed")
+        return {
+            "ok": False,
+            "error": str(e),
+            "detail": "Full traceback in the terminal running `rkd gui`.",
+        }

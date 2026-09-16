@@ -10,8 +10,10 @@ endpoint reporting "no compose file" is a pass, one blowing up or reporting a
 missing helper is not.
 """
 
+import ast
 import asyncio
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +22,16 @@ fastapi_testclient = pytest.importorskip("fastapi.testclient")
 from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
 from rocketdoo.gui.server import create_app  # noqa: E402
+
+ROCKETDOO_ROOT = Path(__file__).resolve().parent.parent / "rocketdoo"
+
+
+def _called_name(func_node):
+    if isinstance(func_node, ast.Attribute):
+        return func_node.attr
+    if isinstance(func_node, ast.Name):
+        return func_node.id
+    return None
 
 
 @pytest.fixture
@@ -657,3 +669,48 @@ class TestTokenMiddlewareEdges:
     def test_the_schema_under_api_needs_the_token(self, untokened, client):
         assert untokened.get("/api/openapi.json").status_code == 401
         assert client.get("/api/openapi.json").status_code == 200
+
+
+class TestNoTracebackOverHTTP:
+    """A traceback must stay on the server (#191).
+
+    `/api/setup/init` used to return `traceback.format_exc()` in the response
+    body, handing whoever held the token the absolute paths of the developer's
+    filesystem and the package layout. The traceback is now logged where the
+    developer already is: the terminal running `rkd gui`.
+    """
+
+    def test_a_failing_setup_does_not_return_the_traceback(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        body = {
+            "project_name": "demo",
+            "odoo_version": "18.0",
+            "db_version": "16",
+            "admin_passwd": "x",
+            "odoo_port": 8069,
+            "vsc_port": 8888,
+            "use_private_repos": True,
+            "ssh_key_name": "no_such_key_anywhere",
+        }
+        payload = client.post("/api/setup/init", json=body).json()
+
+        assert payload["ok"] is False
+        assert "Traceback" not in payload.get("detail", "")
+        assert "rocketdoo/gui/api" not in payload.get("detail", "")
+
+    def test_no_gui_module_sends_a_traceback_to_the_client(self):
+        """Structural guard: a new endpoint reintroducing this fails here.
+
+        `logger.exception()` already records the traceback, so no module under
+        `gui/` needs `format_exc` at all; banning the name outright is both
+        simpler and stricter than trying to tell apart where its result goes.
+        """
+        gui_root = ROCKETDOO_ROOT / "gui"
+        offenders = []
+        for path in sorted(gui_root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and _called_name(node.func) == "format_exc":
+                    offenders.append(f"{path.relative_to(ROCKETDOO_ROOT.parent)}:{node.lineno}")
+
+        assert not offenders, "traceback.format_exc() under gui/:\n" + "\n".join(offenders)
