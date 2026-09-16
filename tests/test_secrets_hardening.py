@@ -393,25 +393,54 @@ ROCKETDOO_ROOT = Path(__file__).resolve().parent.parent / "rocketdoo"
 # self._sshpass_password and INSTANCE_STAGE_PASSWORD must all match).
 _SENSITIVE_NAME_RE = re.compile(r"password|passwd|secret|token", re.IGNORECASE)
 
-# Anything that launches a child process, plus the local helpers that build
-# the ssh/rsync argv passed to one. Matched by the called name only (not by
-# module), so `subprocess.run(...)` and `self._ssh(...)` are both covered.
-_SINK_NAMES = {
-    "run",
+# Process-launching methods from stdlib modules. Matched by (module, method)
+# rather than by method name alone: a bare-name match on "run" or "call" also
+# fires on unrelated calls like `uvicorn.run(...)`, which is not a sink.
+_STDLIB_SINK_MODULES = {"subprocess", "os", "asyncio"}
+
+# Names common enough to collide with unrelated calls (uvicorn.run, a local
+# call()), so they only count when qualified by one of the modules above.
+_QUALIFIED_SINK_METHODS = {"run", "call", "check_call", "system", "popen"}
+
+# Names that belong to no other API worth worrying about: matched bare, so a
+# `from asyncio import create_subprocess_exec` still counts.
+_BARE_SINK_METHODS = {
     "Popen",
-    "call",
-    "check_call",
-    "check_output",  # subprocess.*
-    "system",
-    "popen",  # os.*
+    "check_output",
     "create_subprocess_exec",
-    "create_subprocess_shell",  # asyncio.*, used by gui/server.py
+    "create_subprocess_shell",
+}
+
+# Local helpers that build the ssh/rsync argv passed to a sink, or launch one
+# directly on `self`. Their names are specific enough to match bare, unlike
+# the generic stdlib methods above.
+_LOCAL_SINK_NAMES = {
     "_ssh",
     "_run_ssh_command",
-    "_rsync",  # deployer helpers
+    "_rsync",
     "build_ssh_cmd",
-    "build_rsync_cmd",  # ssh_utils command builders
+    "build_rsync_cmd",
 }
+
+
+def _is_sink_call(node: ast.Call) -> bool:
+    """Whether this call launches a process.
+
+    Known gap: a qualified sink reached under another name -- `from
+    subprocess import run` with a bare `run(...)`, or `import subprocess as
+    sp` with `sp.run(...)` -- is not matched, because requiring a known
+    module qualifier is what keeps uvicorn.run from producing a false
+    positive. Nothing in the package does either; if that changes, add the
+    name to _BARE_SINK_METHODS or the alias to _STDLIB_SINK_MODULES.
+    """
+    name = _called_name(node.func)
+    if name in _LOCAL_SINK_NAMES or name in _BARE_SINK_METHODS:
+        return True
+    if name not in _QUALIFIED_SINK_METHODS or not isinstance(node.func, ast.Attribute):
+        return False
+    base = node.func.value
+    return isinstance(base, ast.Name) and base.id in _STDLIB_SINK_MODULES
+
 
 # The only two channels a secret is allowed to travel through once it is
 # about to reach a sink: subprocess's own `input=`/`env=` keywords, and the
@@ -484,7 +513,7 @@ def _walk_pruned(node: ast.AST, safe_ids: set[int]):
 
 
 def _violations_in_function(func: ast.AST) -> list[tuple[int, str]]:
-    if not any(isinstance(n, ast.Call) and _called_name(n.func) in _SINK_NAMES for n in ast.walk(func)):
+    if not any(isinstance(n, ast.Call) and _is_sink_call(n) for n in ast.walk(func)):
         return []
 
     safe_ids = _safe_node_ids(func)
@@ -528,7 +557,7 @@ def test_no_secret_reaches_subprocess_argv_construction():
       - the secret read through a subscript of a literal key
         (`conn["password"]`) or renamed first (`pw = self.password`)
       - the command built in a helper that does not launch anything itself
-      - a sink reached under a name not in _SINK_NAMES
+      - a sink reached under a name not in _QUALIFIED_SINK_METHODS/_LOCAL_SINK_NAMES
 
     Closing those needs real dataflow analysis, which is a bigger machine than
     the bug it guards. Reviewing a diff that touches a deploy path is still the
