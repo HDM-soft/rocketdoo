@@ -174,9 +174,7 @@ class InstanceConfigManager:
         db_version = Prompt.ask("PostgreSQL version", default="16")
         db_user = Prompt.ask("DB user", default=f"odoo_{env}")
         generated_passwd = _random_password()
-        admin_passwd = Prompt.ask(
-            "Odoo master password", password=True, show_default=False, default=generated_passwd
-        )
+        admin_passwd = Prompt.ask("Odoo master password", password=True, show_default=False, default=generated_passwd)
         if admin_passwd == generated_passwd:
             console.print(f"Generated master password: [bold]{generated_passwd}[/bold]")
         use_enterprise = Confirm.ask("Use Odoo Enterprise?", default=False)
