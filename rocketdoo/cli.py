@@ -10,6 +10,7 @@ from rich.table import Table
 from rich.text import Text
 
 from rocketdoo import __version__
+from rocketdoo.core.addons_path import missing_entries as missing_addons_paths
 from rocketdoo.core.gitignore_manager import missing_entries
 from rocketdoo.core.models.profiles import ProfileCatalog, get_golden_path
 from rocketdoo.deploy_cli import deploy, deploy_config, deploy_init, deploy_run, list_modules, validate_modules
@@ -475,6 +476,26 @@ def info():
             Panel(
                 warn,
                 title="[bold yellow]Secrets at risk[/bold yellow]",
+                border_style="yellow",
+                box=box.ROUNDED,
+                padding=(1, 1),
+            )
+        )
+
+    # Warn if addons_path does not cover every module under addons/
+    gaps = missing_addons_paths(Path.cwd())
+    if gaps:
+        warn = Text()
+        warn.append("⚠️  addons_path is missing these directories:\n\n", style="bold yellow")
+        for path in gaps:
+            warn.append(f"   {path}\n", style="bold")
+        warn.append("\n💡 Fix it with: ", style="dim")
+        warn.append("rkd up", style="bold cyan")
+        console.print()
+        console.print(
+            Panel(
+                warn,
+                title="[bold yellow]addons_path out of date[/bold yellow]",
                 border_style="yellow",
                 box=box.ROUNDED,
                 padding=(1, 1),

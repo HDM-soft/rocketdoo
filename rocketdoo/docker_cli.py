@@ -1,8 +1,11 @@
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import click
+
+from rocketdoo.core.addons_path import ensure_addons_path
 
 
 def ensure_docker_installed():
@@ -27,6 +30,9 @@ def docker():
 def up(detached, extra_args):
     """Equivalent to: docker compose up"""
     ensure_docker_installed()
+    action, changes = ensure_addons_path(Path.cwd())
+    if action == "updated":
+        click.echo(f"[rkd] addons_path updated: {', '.join(changes)}")
     cmd = ["docker", "compose", "up"]
     if detached:
         cmd.append("-d")

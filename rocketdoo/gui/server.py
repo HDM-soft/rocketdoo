@@ -167,6 +167,7 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT, token: str | N
         """The installed rocketdoo version, so the SPA stops hardcoding it."""
         return {"version": __version__}
 
+    from rocketdoo.core.addons_path import ensure_addons_path
     from rocketdoo.gui.api import router as api_router
     from rocketdoo.gui.api.odoo import build_update_command
 
@@ -195,6 +196,9 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT, token: str | N
     @app.websocket("/ws/odoo/update")
     async def ws_odoo_update(websocket: WebSocket, module: str, db: str):
         await websocket.accept()
+        action, changes = ensure_addons_path(Path.cwd())
+        if action == "updated":
+            await websocket.send_text(f"[rkd] addons_path updated: {', '.join(changes)}")
         cmd, error = build_update_command(module, db)
         if error:
             await websocket.send_text(f"[error] {error}")

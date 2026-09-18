@@ -57,6 +57,20 @@ def _parse_addons_path(lines: list[str]) -> tuple[int | None, list[str]]:
     return None, []
 
 
+def missing_entries(project_root: Path | str) -> list[str]:
+    """Discovered directories the project's addons_path does not list yet.
+
+    Read-only counterpart of ensure_addons_path(), for callers that report
+    without writing, mirroring gitignore_manager.missing_entries().
+    """
+    odoo_conf = Path(project_root) / "config" / "odoo.conf"
+    if not odoo_conf.exists():
+        return []
+
+    _, current_paths = _parse_addons_path(odoo_conf.read_text().splitlines())
+    return [path for path in discover(project_root) if path not in current_paths]
+
+
 def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
     """Merge discover() into config/odoo.conf's addons_path line.
 

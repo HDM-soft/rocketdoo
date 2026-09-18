@@ -6,6 +6,8 @@ addons/ to container paths, and ensure_addons_path()'s promise that merging
 into config/odoo.conf never touches anything but the addons_path line.
 """
 
+from click.testing import CliRunner
+
 from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT, discover, ensure_addons_path
 
 ODOO_CONF_TEMPLATE = """[options]
@@ -193,3 +195,75 @@ class TestEnsureAddonsPathUpdated:
         _write_conf(tmp_path)
         action, _ = ensure_addons_path(str(tmp_path))
         assert action == "updated"
+
+
+class TestUpSyncsAddonsPathFirst:
+    """`rkd up` (RF2) must leave addons_path in sync before docker ever runs."""
+
+    def test_addons_path_is_updated_before_docker_compose_is_invoked(self, tmp_path, monkeypatch):
+        from rocketdoo import docker_cli
+
+        monkeypatch.chdir(tmp_path)
+        _module(tmp_path / "addons", "oca/mod")
+        conf = _write_conf(tmp_path)
+        monkeypatch.setattr(docker_cli, "ensure_docker_installed", lambda: None)
+
+        conf_seen_by_docker = {}
+
+        def fake_run(cmd, *args, **kwargs):
+            conf_seen_by_docker["addons_path"] = conf.read_text()
+
+        monkeypatch.setattr(docker_cli.subprocess, "run", fake_run)
+
+        result = CliRunner().invoke(docker_cli.up, [])
+
+        assert result.exit_code == 0
+        assert f"{CONTAINER_ADDONS_ROOT}/oca" in conf_seen_by_docker["addons_path"]
+        assert "addons_path updated" in result.output
+
+    def test_stays_silent_when_addons_path_is_already_up_to_date(self, tmp_path, monkeypatch):
+        from rocketdoo import docker_cli
+
+        monkeypatch.chdir(tmp_path)
+        _write_conf(tmp_path)
+        monkeypatch.setattr(docker_cli, "ensure_docker_installed", lambda: None)
+        monkeypatch.setattr(docker_cli.subprocess, "run", lambda *a, **k: None)
+
+        result = CliRunner().invoke(docker_cli.up, [])
+
+        assert result.exit_code == 0
+        assert "addons_path" not in result.output
+
+
+class TestInfoWarnsWithoutWriting:
+    """`rkd info` (RF2) only reads: it must never call ensure_addons_path()."""
+
+    def _minimal_project(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text("FROM odoo:18.0\n")
+        (tmp_path / "docker-compose.yaml").write_text("services: {}\n")
+        return _write_conf(tmp_path)
+
+    def test_warns_about_a_nested_module_and_leaves_odoo_conf_untouched(self, tmp_path, monkeypatch):
+        from rocketdoo import cli
+
+        monkeypatch.chdir(tmp_path)
+        conf = self._minimal_project(tmp_path)
+        _module(tmp_path / "addons", "oca/mod")
+        before = conf.read_text()
+
+        result = CliRunner().invoke(cli.info, [])
+
+        assert result.exit_code == 0
+        assert f"{CONTAINER_ADDONS_ROOT}/oca" in result.output
+        assert conf.read_text() == before
+
+    def test_says_nothing_when_addons_path_already_covers_everything(self, tmp_path, monkeypatch):
+        from rocketdoo import cli
+
+        monkeypatch.chdir(tmp_path)
+        self._minimal_project(tmp_path)
+
+        result = CliRunner().invoke(cli.info, [])
+
+        assert result.exit_code == 0
+        assert "addons_path" not in result.output
