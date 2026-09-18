@@ -6,9 +6,55 @@ addons/ to container paths, and ensure_addons_path()'s promise that merging
 into config/odoo.conf never touches anything but the addons_path line.
 """
 
+import os
+import subprocess
+
+import pytest
 from click.testing import CliRunner
 
 from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT, discover, ensure_addons_path
+
+
+def _compose(root, *args, timeout, check=True):
+    result = subprocess.run(
+        ["docker", "compose", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    if check:
+        assert result.returncode == 0, f"docker compose {' '.join(args)}\n{result.stderr[-2000:]}"
+    return result
+
+
+def _set_addons_path(root, value):
+    conf = root / "config" / "odoo.conf"
+    lines = conf.read_text().splitlines()
+    for index, line in enumerate(lines):
+        if line.strip().startswith("addons_path"):
+            lines[index] = f"addons_path = {value}"
+    conf.write_text("\n".join(lines) + "\n")
+
+
+def _module_state(root, database, module):
+    """The module's state in ir_module_module, or None if Odoo never saw it."""
+    result = _compose(
+        root,
+        "exec",
+        "-T",
+        "db",
+        "psql",
+        "-U",
+        "root",
+        "-d",
+        database,
+        "-tAc",
+        f"SELECT state FROM ir_module_module WHERE name = '{module}';",
+        timeout=120,
+    )
+    return result.stdout.strip() or None
+
 
 ODOO_CONF_TEMPLATE = """[options]
 addons_path = {addons_path}
@@ -267,3 +313,77 @@ class TestInfoWarnsWithoutWriting:
 
         assert result.exit_code == 0
         assert "addons_path" not in result.output
+
+
+@pytest.mark.docker
+@pytest.mark.slow
+class TestAgainstRealOdoo:
+    """The only authority on whether Odoo sees a nested module.
+
+    Odoo does not fail when a module passed to -i is not on the addons_path:
+    it logs "Modules loaded" and exits 0 with the module simply absent. That
+    silent no-op is why these assertions read ir_module_module instead of the
+    exit code, which stays 0 either way.
+    """
+
+    MODULE = "rkd_probe"
+
+    @pytest.fixture(scope="class")
+    @classmethod
+    def project(cls, tmp_path_factory, docker_available):
+        if not docker_available:
+            pytest.skip("Docker daemon not available")
+
+        from rocketdoo.init_project import init_from_profile
+        from rocketdoo.scaffold import scaffold_project
+
+        root = tmp_path_factory.mktemp("rkdci")
+        cwd = os.getcwd()
+        os.chdir(root)
+        try:
+            scaffold_project()
+            init_from_profile("odoo18-ce")
+        finally:
+            os.chdir(cwd)
+
+        nested = root / "addons" / "oca" / cls.MODULE
+        nested.mkdir(parents=True)
+        (nested / "__manifest__.py").write_text(
+            f'{{"name": "{cls.MODULE}", "version": "18.0.1.0.0", "depends": ["base"], "installable": True}}\n'
+        )
+        (nested / "__init__.py").write_text("")
+
+        _compose(root, "build", "web", timeout=1800)
+        _compose(root, "up", "-d", "db", timeout=300)
+        try:
+            yield root
+        finally:
+            _compose(root, "down", "-v", timeout=300, check=False)
+
+    def _install(self, root, database):
+        _compose(
+            root,
+            "run",
+            "--rm",
+            "-T",
+            "web",
+            "odoo",
+            "-d",
+            database,
+            "-i",
+            self.MODULE,
+            "--stop-after-init",
+            "--without-demo=all",
+            timeout=1800,
+        )
+        return _module_state(root, database, self.MODULE)
+
+    def test_nested_module_is_invisible_without_the_fix(self, project):
+        """Control: this is the bug the fix exists for."""
+        _set_addons_path(project, CONTAINER_ADDONS_ROOT)
+        assert self._install(project, "probe_before") is None
+
+    def test_nested_module_installs_after_ensure_addons_path(self, project):
+        action, _ = ensure_addons_path(project)
+        assert action == "updated"
+        assert self._install(project, "probe_after") == "installed"
