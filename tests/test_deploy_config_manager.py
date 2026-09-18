@@ -164,3 +164,45 @@ class TestTemplates:
     def test_unknown_template_falls_back_to_basic(self, manager):
         manager.create_from_template("does-not-exist")
         assert manager.validate(manager.load()) == []
+
+
+class TestValidateExitCode:
+    """`rkd deploy validate` is only a gate if a broken module fails the shell.
+
+    It used to print "Validation failed with errors" and still exit 0, so any
+    CI step or pre-commit hook calling it passed regardless of what it found.
+    """
+
+    def _run(self, project_root):
+        from click.testing import CliRunner
+
+        from rocketdoo.deploy_cli import validate_modules
+
+        return CliRunner().invoke(validate_modules, [], obj={}, catch_exceptions=False)
+
+    def test_a_broken_manifest_exits_nonzero(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        broken = tmp_path / "addons" / "broken"
+        broken.mkdir(parents=True)
+        (broken / "__init__.py").write_text("")
+        (broken / "__manifest__.py").write_text('{ "name": "broken", "depends": ["base"],')
+
+        result = self._run(tmp_path)
+
+        assert result.exit_code == 1
+        assert "Validation failed with errors" in result.output
+
+    def test_healthy_modules_exit_zero(self, addons_tree, monkeypatch):
+        monkeypatch.chdir(addons_tree.parent)
+
+        result = self._run(addons_tree.parent)
+
+        assert result.exit_code == 0
+
+    def test_no_modules_exits_zero(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "addons").mkdir()
+
+        result = self._run(tmp_path)
+
+        assert result.exit_code == 0
