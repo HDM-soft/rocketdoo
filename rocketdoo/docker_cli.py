@@ -33,6 +33,8 @@ def up(detached, extra_args):
     action, changes = ensure_addons_path(Path.cwd())
     if action == "updated":
         click.echo(f"[rkd] addons_path updated: {', '.join(changes)}")
+    elif action == "failed":
+        click.echo(f"[rkd] could not update addons_path: {', '.join(changes)}", err=True)
     cmd = ["docker", "compose", "up"]
     if detached:
         cmd.append("-d")

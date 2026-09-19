@@ -189,6 +189,24 @@ class TestModules:
 
         assert self._run(tmp_path, monkeypatch).stdout.strip() == "real"
 
+    def test_a_broken_manifest_does_not_leak_into_stdout(self, tmp_path, monkeypatch):
+        """The scanner warns about unparseable manifests; that warning is not a module.
+
+        stdout becomes `odoo -i "$MODULES"`, and Odoo answers a bogus name by
+        logging "invalid module names, ignored" and exiting 0 — a green job
+        that installed nothing.
+        """
+        addons = tmp_path / "addons"
+        self._module(addons, "good")
+        broken = addons / "broken"
+        broken.mkdir(parents=True)
+        (broken / "__init__.py").write_text("")
+        (broken / "__manifest__.py").write_text('{"name": "broken", "version": VERSION}\n')
+
+        result = self._run(tmp_path, monkeypatch)
+
+        assert result.stdout.strip() == "good"
+
     def test_names_odoo_cannot_import_are_skipped(self, tmp_path, monkeypatch):
         """The output becomes `odoo -i $MODULES`, and Odoo imports modules as
         Python packages, so a directory that is not an identifier can only be
@@ -354,24 +372,57 @@ class TestInitDefaultBranchFallback:
         parsed = yaml.safe_load(_workflow_path(tmp_path).read_text())
         assert parsed[True]["push"]["branches"] == ["main"]
 
-    def test_inside_a_git_repo_uses_the_current_branch(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
+    def _repo(self, tmp_path, branch):
         _minimal_project(tmp_path)
-        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True, capture_output=True)
-        subprocess.run(["git", "checkout", "-q", "-b", "trunk"], cwd=tmp_path, check=True, capture_output=True)
-        subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+        run = lambda *a: subprocess.run(  # noqa: E731
+            ["git", *a], cwd=tmp_path, check=True, capture_output=True
+        )
+        run("init", "-q")
+        run("checkout", "-q", "-b", branch)
+        run("add", ".")
+        run("-c", "user.email=test@rkd.local", "-c", "user.name=rkd", "commit", "-q", "-m", "initial")
+
+    def _branches(self, tmp_path):
+        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        assert result.exit_code == 0, result.output
+        return yaml.safe_load(_workflow_path(tmp_path).read_text())[True]["push"]["branches"]
+
+    def test_a_feature_branch_is_never_written_as_the_default(self, tmp_path, monkeypatch):
+        """The natural way to adopt this is a branch that gets merged and deleted.
+
+        Writing that branch name into the workflow leaves the install job
+        skipped forever once the branch is gone.
+        """
+        monkeypatch.chdir(tmp_path)
+        self._repo(tmp_path, "main")
+        subprocess.run(["git", "checkout", "-q", "-b", "feat/add-ci"], cwd=tmp_path, check=True, capture_output=True)
+
+        assert self._branches(tmp_path) == ["main"]
+
+    def test_a_repo_on_master_is_respected(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._repo(tmp_path, "master")
+
+        assert self._branches(tmp_path) == ["master"]
+
+    def test_origin_head_wins_over_the_local_guess(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._repo(tmp_path, "main")
         subprocess.run(
-            ["git", "-c", "user.email=test@rkd.local", "-c", "user.name=rkd", "commit", "-q", "-m", "initial"],
+            ["git", "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/develop"],
             cwd=tmp_path,
             check=True,
             capture_output=True,
         )
 
-        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        assert self._branches(tmp_path) == ["develop"]
 
-        assert result.exit_code == 0, result.output
-        parsed = yaml.safe_load(_workflow_path(tmp_path).read_text())
-        assert parsed[True]["push"]["branches"] == ["trunk"]
+    def test_detached_head_does_not_leak_the_literal_HEAD(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._repo(tmp_path, "main")
+        subprocess.run(["git", "checkout", "-q", "--detach"], cwd=tmp_path, check=True, capture_output=True)
+
+        assert self._branches(tmp_path) == ["main"]
 
 
 class TestInitRkdSpecFallback:

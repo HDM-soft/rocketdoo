@@ -236,6 +236,54 @@ class TestEnsureAddonsPathUpdated:
         assert action == "updated"
         assert sibling in conf.read_text()
 
+    def test_a_comma_in_a_directory_name_never_enters_the_line(self, tmp_path):
+        """addons_path is one comma-separated line, so a comma would split.
+
+        The bogus half then looks like a foreign entry and is kept, so every
+        run appends another one and the line never converges.
+        """
+        conf = _write_conf(tmp_path)
+        _module(tmp_path / "addons", "a,b/mod")
+
+        first = ensure_addons_path(tmp_path)
+        second = ensure_addons_path(tmp_path)
+
+        assert first == ("ok", [])
+        assert second == ("ok", [])
+        assert "a,b" not in conf.read_text()
+
+    def test_a_newline_in_a_directory_name_never_enters_the_line(self, tmp_path):
+        conf = _write_conf(tmp_path)
+        _module(tmp_path / "addons", "we\nird/mod")
+
+        ensure_addons_path(tmp_path)
+
+        assert len([ln for ln in conf.read_text().splitlines() if ln.startswith("addons_path")]) == 1
+
+    def test_an_unwritable_conf_is_reported_not_raised(self, tmp_path):
+        """rkd up calls this before starting; a read-only config cannot stop it."""
+        conf = _write_conf(tmp_path)
+        _module(tmp_path / "addons", "oca/mod_a")
+        conf.chmod(0o444)
+        try:
+            action, changes = ensure_addons_path(tmp_path)
+        finally:
+            conf.chmod(0o644)
+
+        assert action == "failed"
+        assert changes
+
+    def test_a_similarly_named_key_is_not_the_addons_path(self, tmp_path):
+        conf = _write_conf(tmp_path)
+        conf.write_text(conf.read_text() + f"addons_path_backup = {CONTAINER_ADDONS_ROOT}/old\n")
+        _module(tmp_path / "addons", "oca/mod_a")
+
+        ensure_addons_path(tmp_path)
+
+        text = conf.read_text()
+        assert f"addons_path_backup = {CONTAINER_ADDONS_ROOT}/old" in text
+        assert len([ln for ln in text.splitlines() if ln.startswith("addons_path ")]) == 1
+
     def test_accepts_a_string_path(self, tmp_path):
         _module(tmp_path / "addons", "oca/mod")
         _write_conf(tmp_path)

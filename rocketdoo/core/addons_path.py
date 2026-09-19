@@ -37,8 +37,14 @@ def discover(project_root: Path | str) -> list[str]:
     entries = {CONTAINER_ADDONS_ROOT}
     for module in scanner.scan():
         parent = module.relative_path.parent
-        if str(parent) != ".":
-            entries.add(f"{CONTAINER_ADDONS_ROOT}/{parent.as_posix()}")
+        if str(parent) == ".":
+            continue
+        # addons_path is one comma-separated line: a directory whose name holds
+        # a comma or a newline would split into bogus entries, and re-split on
+        # every run, growing the line without ever converging.
+        if any(char in parent.as_posix() for char in ",\n\r"):
+            continue
+        entries.add(f"{CONTAINER_ADDONS_ROOT}/{parent.as_posix()}")
 
     return sorted(entries)
 
@@ -55,9 +61,11 @@ def _is_managed(path: str) -> bool:
 
 def _parse_addons_path(lines: list[str]) -> tuple[int | None, list[str]]:
     for index, line in enumerate(lines):
-        if line.strip().startswith("addons_path"):
+        key, sep, _ = line.partition("=")
+        if sep and key.strip() == "addons_path":
             _, _, value = line.partition("=")
             return index, [path.strip() for path in value.split(",") if path.strip()]
+
     return None, []
 
 
@@ -83,6 +91,7 @@ def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
         "ok"      - addons_path already covers discover() exactly, nothing written.
         "updated" - the addons_path line was rewritten; changes lists the
                     entries added ("+path") and removed ("-path").
+        "failed"  - the file could not be written; changes holds the reason.
 
     Entries outside CONTAINER_ADDONS_ROOT (Odoo's default, enterprise,
     Gitman's external_addons, user paths) are kept as-is, in their original
@@ -125,6 +134,12 @@ def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
     new_text = "\n".join(lines)
     if ends_with_newline or line_index is None:
         new_text += "\n"
-    odoo_conf.write_text(new_text)
+
+    try:
+        odoo_conf.write_text(new_text)
+    except OSError as error:
+        # Called from `rkd up` and from the GUI: a config we cannot write is
+        # a reason to warn, never a reason to leave the project down.
+        return "failed", [str(error)]
 
     return "updated", changes

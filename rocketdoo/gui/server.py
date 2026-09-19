@@ -199,6 +199,8 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT, token: str | N
         action, changes = ensure_addons_path(Path.cwd())
         if action == "updated":
             await websocket.send_text(f"[rkd] addons_path updated: {', '.join(changes)}")
+        elif action == "failed":
+            await websocket.send_text(f"[rkd] could not update addons_path: {', '.join(changes)}")
         cmd, error = build_update_command(module, db)
         if error:
             await websocket.send_text(f"[error] {error}")

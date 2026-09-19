@@ -85,6 +85,8 @@ def prepare(admin_passwd):
         console.print(f"[dim]Already present, kept as-is:[/dim] {', '.join(kept)}")
     if action == "updated":
         console.print(f"[green]addons_path updated:[/green] {', '.join(changes)}")
+    elif action == "failed":
+        console.print(f"[yellow]Could not update addons_path:[/yellow] {', '.join(changes)}")
 
 
 @ci.command()
@@ -103,25 +105,39 @@ def modules():
         container_dir = CONTAINER_ADDONS_ROOT
         if str(parent) != ".":
             container_dir = f"{CONTAINER_ADDONS_ROOT}/{parent.as_posix()}"
-        if container_dir in reachable and module.name.isidentifier():
+        # An empty manifest means it did not parse: Odoo will not install it
+        # either, it will just log "invalid module names, ignored" and exit 0.
+        if container_dir in reachable and module.name.isidentifier() and module.manifest:
             names.add(module.name)
 
     if names:
         click.echo(",".join(sorted(names)))
 
 
-def _default_branch(project_root):
+def _git(project_root, args):
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=project_root,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        result = subprocess.run(["git", *args], cwd=project_root, capture_output=True, text=True, check=True)
     except (subprocess.CalledProcessError, OSError):
-        return "main"
-    return result.stdout.strip() or "main"
+        return ""
+    return result.stdout.strip()
+
+
+def _default_branch(project_root):
+    """The repository's default branch, which is not the branch checked out now.
+
+    `rkd ci init` is normally run on a feature branch, and baking that name
+    into the workflow leaves the install job skipped forever once the branch
+    is merged and deleted.
+    """
+    remote_head = _git(project_root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+    if remote_head:
+        return remote_head.rsplit("/", 1)[-1]
+
+    for candidate in ("main", "master"):
+        if _git(project_root, ["rev-parse", "--verify", "--quiet", f"refs/heads/{candidate}"]):
+            return candidate
+
+    return _git(project_root, ["config", "--get", "init.defaultBranch"]) or "main"
 
 
 def _rkd_spec(version):

@@ -11,8 +11,9 @@ from rich.console import Console
 
 console = Console()
 
-# Diagnostics go to stderr: callers such as `rkd ci modules` pipe stdout into
-# a shell substitution, and a message there becomes a module name.
+# Every diagnostic goes to stderr: `rkd ci modules` pipes stdout into a shell
+# substitution that becomes `odoo -i`, so a line there turns into a module name.
+# print_summary() is the exception: printing is what it is for.
 err_console = Console(stderr=True)
 
 
@@ -55,7 +56,7 @@ class OdooModule:
             return {}
 
         except Exception as e:
-            console.print(f"⚠️  Error loading manifest for {self.name}: {e}", style="yellow")
+            err_console.print(f"⚠️  Error loading manifest for {self.name}: {e}", style="yellow")
             return {}
 
     @property
