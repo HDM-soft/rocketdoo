@@ -10,6 +10,7 @@ from rich.table import Table
 from rich.text import Text
 
 from rocketdoo import __version__
+from rocketdoo.ci_cli import ci
 from rocketdoo.core.addons_path import missing_entries as missing_addons_paths
 from rocketdoo.core.gitignore_manager import missing_entries
 from rocketdoo.core.models.profiles import ProfileCatalog, get_golden_path
@@ -682,6 +683,11 @@ main.add_command(validate_modules, name="deploy-validate")
 # 🖥️  Register GUI command
 # ============================================================
 main.add_command(gui_command, name="gui")
+
+# ============================================================
+# 🤖 Register CI/CD command
+# ============================================================
+main.add_command(ci, name="ci")
 
 if __name__ == "__main__":
     main()
