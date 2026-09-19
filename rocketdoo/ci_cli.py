@@ -9,9 +9,10 @@ from pathlib import Path
 import click
 from rich.console import Console
 
-from rocketdoo.core.addons_path import ensure_addons_path
+from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT, discover, ensure_addons_path
 from rocketdoo.core.edition_setup import add_enterprise_to_odoo_conf
 from rocketdoo.core.gitman_config import update_odoo_conf_with_gitman
+from rocketdoo.core.module_scanner import ModuleScanner
 from rocketdoo.init_project import CONFIG_TEMPLATE_DIR, render_template
 from rocketdoo.project_info import get_project_info, project_exists
 
@@ -73,3 +74,26 @@ def prepare(admin_passwd):
         console.print(f"[dim]Already present, kept as-is:[/dim] {', '.join(kept)}")
     if action == "updated":
         console.print(f"[green]addons_path updated:[/green] {', '.join(changes)}")
+
+
+@ci.command()
+def modules():
+    """Print the installable modules Odoo can reach, comma-separated, for `odoo -i`."""
+    project_root = Path.cwd()
+    addons_dir = project_root / "addons"
+    if not addons_dir.is_dir():
+        return
+
+    reachable = set(discover(project_root))
+
+    names = set()
+    for module in ModuleScanner(addons_dir).get_installable_modules():
+        parent = module.relative_path.parent
+        container_dir = CONTAINER_ADDONS_ROOT
+        if str(parent) != ".":
+            container_dir = f"{CONTAINER_ADDONS_ROOT}/{parent.as_posix()}"
+        if container_dir in reachable:
+            names.add(module.name)
+
+    if names:
+        click.echo(",".join(sorted(names)))

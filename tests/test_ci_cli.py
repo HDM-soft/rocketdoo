@@ -148,6 +148,61 @@ class TestCiHelp:
         assert "--admin-passwd" in result.output
 
 
+class TestModules:
+    """`rkd ci modules` feeds `odoo -i`, so its stdout must be clean and exact."""
+
+    def _module(self, addons, relative, *, installable=True):
+        mod = addons / relative
+        mod.mkdir(parents=True)
+        (mod / "__init__.py").write_text("")
+        (mod / "__manifest__.py").write_text(
+            f'{{"name": "{mod.name}", "version": "18.0.1.0.0", "depends": ["base"], "installable": {installable}}}\n'
+        )
+
+    def _run(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        return CliRunner().invoke(ci_cli.modules, [])
+
+    def test_flat_and_nested_modules_are_listed_sorted(self, tmp_path, monkeypatch):
+        addons = tmp_path / "addons"
+        self._module(addons, "zeta")
+        self._module(addons, "oca/alpha")
+
+        result = self._run(tmp_path, monkeypatch)
+
+        assert result.exit_code == 0
+        assert result.stdout.strip() == "alpha,zeta"
+
+    def test_non_installable_modules_are_skipped(self, tmp_path, monkeypatch):
+        addons = tmp_path / "addons"
+        self._module(addons, "good")
+        self._module(addons, "legacy", installable=False)
+
+        assert self._run(tmp_path, monkeypatch).stdout.strip() == "good"
+
+    def test_modules_odoo_cannot_reach_are_skipped(self, tmp_path, monkeypatch):
+        """setup/ is excluded from discover(), so Odoo never sees what lives there."""
+        addons = tmp_path / "addons"
+        self._module(addons, "real")
+        self._module(addons, "setup/packaged")
+
+        assert self._run(tmp_path, monkeypatch).stdout.strip() == "real"
+
+    def test_no_modules_prints_nothing_and_exits_zero(self, tmp_path, monkeypatch):
+        (tmp_path / "addons").mkdir()
+
+        result = self._run(tmp_path, monkeypatch)
+
+        assert result.exit_code == 0
+        assert result.stdout.strip() == ""
+
+    def test_missing_addons_directory_is_not_an_error(self, tmp_path, monkeypatch):
+        result = self._run(tmp_path, monkeypatch)
+
+        assert result.exit_code == 0
+        assert result.stdout.strip() == ""
+
+
 def _compose(root, *args, timeout, check=True):
     result = subprocess.run(
         ["docker", "compose", *args],

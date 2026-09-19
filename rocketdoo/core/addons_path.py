@@ -28,7 +28,11 @@ def discover(project_root: Path | str) -> list[str]:
     Always includes CONTAINER_ADDONS_ROOT, even when addons/ is empty or
     missing, so this never degrades the current single-entry behavior.
     """
-    scanner = ModuleScanner(Path(project_root) / "addons", exclude_patterns=_EXCLUDE_PATTERNS)
+    addons_dir = Path(project_root) / "addons"
+    if not addons_dir.is_dir():
+        return [CONTAINER_ADDONS_ROOT]
+
+    scanner = ModuleScanner(addons_dir, exclude_patterns=_EXCLUDE_PATTERNS)
 
     entries = {CONTAINER_ADDONS_ROOT}
     for module in scanner.scan():

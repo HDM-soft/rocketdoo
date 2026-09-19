@@ -11,6 +11,10 @@ from rich.console import Console
 
 console = Console()
 
+# Diagnostics go to stderr: callers such as `rkd ci modules` pipe stdout into
+# a shell substitution, and a message there becomes a module name.
+err_console = Console(stderr=True)
+
 
 class OdooModule:
     """Represents a detected Odoo module"""
@@ -154,7 +158,7 @@ class ModuleScanner:
             return self._modules
 
         if not self.addons_path.exists():
-            console.print(f"❌ Addons directory not found: {self.addons_path}", style="red")
+            err_console.print(f"❌ Addons directory not found: {self.addons_path}", style="red")
             return []
 
         modules = []
