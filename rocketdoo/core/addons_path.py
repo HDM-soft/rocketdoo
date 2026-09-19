@@ -104,8 +104,12 @@ def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
         return "missing", []
 
     discovered = discover(project_root)
-    text = odoo_conf.read_text()
-    ends_with_newline = text.endswith("\n")
+    # newline="" keeps \r\n intact: rewriting one line must not convert the
+    # line endings of a config written on Windows.
+    with odoo_conf.open(encoding="utf-8", newline="") as handle:
+        text = handle.read()
+    ends_with_newline = text.endswith(("\n", "\r"))
+    newline = "\r\n" if "\r\n" in text else "\n"
     lines = text.splitlines()
 
     line_index, current_paths = _parse_addons_path(lines)
@@ -131,12 +135,13 @@ def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
     else:
         lines[line_index] = new_line
 
-    new_text = "\n".join(lines)
+    new_text = newline.join(lines)
     if ends_with_newline or line_index is None:
-        new_text += "\n"
+        new_text += newline
 
     try:
-        odoo_conf.write_text(new_text)
+        with odoo_conf.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(new_text)
     except OSError as error:
         # Called from `rkd up` and from the GUI: a config we cannot write is
         # a reason to warn, never a reason to leave the project down.

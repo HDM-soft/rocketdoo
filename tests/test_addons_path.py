@@ -284,6 +284,27 @@ class TestEnsureAddonsPathUpdated:
         assert f"addons_path_backup = {CONTAINER_ADDONS_ROOT}/old" in text
         assert len([ln for ln in text.splitlines() if ln.startswith("addons_path ")]) == 1
 
+    def test_crlf_line_endings_survive(self, tmp_path):
+        """A config written on Windows must not be rewritten wholesale."""
+        conf = _write_conf(tmp_path)
+        conf.write_bytes(conf.read_text().replace("\n", "\r\n").encode())
+        before = conf.read_bytes().count(b"\r\n")
+        _module(tmp_path / "addons", "oca/mod_a")
+
+        action, _ = ensure_addons_path(tmp_path)
+
+        assert action == "updated"
+        assert conf.read_bytes().count(b"\r\n") == before
+        assert b"extra-addons/oca" in conf.read_bytes()
+
+    def test_lf_line_endings_stay_lf(self, tmp_path):
+        conf = _write_conf(tmp_path)
+        _module(tmp_path / "addons", "oca/mod_a")
+
+        ensure_addons_path(tmp_path)
+
+        assert b"\r" not in conf.read_bytes()
+
     def test_accepts_a_string_path(self, tmp_path):
         _module(tmp_path / "addons", "oca/mod")
         _write_conf(tmp_path)

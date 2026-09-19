@@ -502,9 +502,10 @@ rkd ci init --force                  # overwrite a workflow you have edited
 ```
 
 Two jobs. **Lint** runs `ruff` over `addons/` plus `rkd deploy validate`, on
-every push and pull request. **Install** boots the project's own compose file
-and runs `odoo -i <your modules> --stop-after-init` against a real Odoo, which
-is what catches a broken manifest or a missing dependency.
+every pull request, on pushes to the default branch, and on manual dispatch.
+**Install** boots the project's own compose file and runs
+`odoo -i <your modules> --stop-after-init` against a real Odoo, which is what
+catches a broken manifest or a missing dependency.
 
 Only your modules are involved: `ruff` only reads `addons/`, and third-party
 code cloned by Gitman lands in `external_addons/`, so it is never linted or

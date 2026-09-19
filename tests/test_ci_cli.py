@@ -207,6 +207,14 @@ class TestModules:
 
         assert result.stdout.strip() == "good"
 
+    def test_non_ascii_names_are_skipped(self, tmp_path, monkeypatch):
+        """isidentifier() accepts "nandu" spelled with a tilde; Odoo will not."""
+        addons = tmp_path / "addons"
+        self._module(addons, "normal")
+        self._module(addons, "\u00f1andu")
+
+        assert self._run(tmp_path, monkeypatch).stdout.strip() == "normal"
+
     def test_names_odoo_cannot_import_are_skipped(self, tmp_path, monkeypatch):
         """The output becomes `odoo -i $MODULES`, and Odoo imports modules as
         Python packages, so a directory that is not an identifier can only be
@@ -620,3 +628,53 @@ class TestInitWarnsAboutPrivateGitmanSources:
         result = self._init(tmp_path, monkeypatch)
 
         assert result.exit_code == 0
+
+
+class TestInitSurvivesAWeirdGitmanFile:
+    def test_a_source_with_an_empty_repo_does_not_crash(self, tmp_path, monkeypatch):
+        """`repo:` with no value parses as None, and None has no startswith."""
+        monkeypatch.chdir(tmp_path)
+        _minimal_project(tmp_path)
+        (tmp_path / "gitman.yaml").write_text("sources:\n  - name: x\n    repo:\n")
+
+        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "never"])
+
+        assert result.exit_code == 0, result.output
+
+
+class TestEveryStartCommandSyncsTheAddonsPath:
+    """up is not the only way Odoo comes back: restart and --rebuild do too."""
+
+    @pytest.mark.parametrize(
+        "command_name, args",
+        [("up", ["-d"]), ("restart", []), ("build", ["--rebuild"])],
+    )
+    def test_the_addons_path_is_current_when_docker_is_invoked(self, command_name, args, tmp_path, monkeypatch):
+        from rocketdoo import docker_cli
+
+        (tmp_path / "config").mkdir()
+        (tmp_path / "config" / "odoo.conf").write_text(f"[options]\naddons_path = {CONTAINER_ADDONS_ROOT}\n")
+        module = tmp_path / "addons" / "oca" / "mod"
+        module.mkdir(parents=True)
+        (module / "__init__.py").write_text("")
+        (module / "__manifest__.py").write_text(
+            '{"name": "mod", "version": "18.0.1.0.0", "depends": ["base"], "installable": True}\n'
+        )
+        monkeypatch.chdir(tmp_path)
+
+        seen = {}
+
+        def fake_run(cmd, *a, **k):
+            seen["conf"] = (tmp_path / "config" / "odoo.conf").read_text()
+
+            class Result:
+                returncode = 0
+
+            return Result()
+
+        monkeypatch.setattr(docker_cli.subprocess, "run", fake_run)
+        monkeypatch.setattr(docker_cli, "ensure_docker_installed", lambda: None)
+
+        CliRunner().invoke(getattr(docker_cli, command_name), args)
+
+        assert f"{CONTAINER_ADDONS_ROOT}/oca" in seen["conf"]

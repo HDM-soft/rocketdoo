@@ -107,7 +107,7 @@ def modules():
             container_dir = f"{CONTAINER_ADDONS_ROOT}/{parent.as_posix()}"
         # An empty manifest means it did not parse: Odoo will not install it
         # either, it will just log "invalid module names, ignored" and exit 0.
-        if container_dir in reachable and module.name.isidentifier() and module.manifest:
+        if container_dir in reachable and _is_odoo_module_name(module.name) and module.manifest:
             names.add(module.name)
 
     if names:
@@ -137,7 +137,12 @@ def _default_branch(project_root):
         if _git(project_root, ["rev-parse", "--verify", "--quiet", f"refs/heads/{candidate}"]):
             return candidate
 
-    return _git(project_root, ["config", "--get", "init.defaultBranch"]) or "main"
+    configured = _git(project_root, ["config", "--get", "init.defaultBranch"])
+    if configured:
+        return configured
+
+    console.print("[yellow]Could not detect the default branch; assuming 'main'.[/yellow]")
+    return "main"
 
 
 def _rkd_spec(version):
@@ -167,6 +172,15 @@ def _unsupported_reasons(info):
     return reasons
 
 
+def _is_odoo_module_name(name):
+    """Odoo imports modules as Python packages, and their names are ASCII.
+
+    isidentifier() alone accepts "ñandu", which reaches `odoo -i` only to be
+    ignored as an unknown module.
+    """
+    return name.isidentifier() and name.isascii()
+
+
 def _private_gitman_sources(project_root):
     """Gitman sources the runner cannot clone: SSH URLs need a key it lacks.
 
@@ -185,7 +199,7 @@ def _private_gitman_sources(project_root):
     return [
         source.get("repo", "")
         for source in config.get("sources") or []
-        if isinstance(source, dict) and source.get("repo", "").startswith(("git@", "ssh://"))
+        if isinstance(source, dict) and (source.get("repo") or "").startswith(("git@", "ssh://"))
     ]
 
 
@@ -194,8 +208,6 @@ def _ci_context(project_root, install_trigger):
     reasons = _unsupported_reasons(info)
     return {
         "project_name": info["project_name"],
-        "odoo_version": info["odoo_version"],
-        "odoo_port": info["odoo_port"],
         "default_branch": _default_branch(project_root),
         "rkd_spec": _rkd_spec(__version__),
         "ruff_target": _ruff_target(info["odoo_version"]),
