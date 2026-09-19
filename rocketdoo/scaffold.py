@@ -9,9 +9,10 @@ from rocketdoo.core.gitignore_manager import ensure_gitignore
 GITIGNORE_TEMPLATE = ".gitignore.jinja"
 
 # Package-level template directories that are not part of a user's project.
-# profiles/ describes the golden paths Rocketdoo itself offers; copying it into
-# every generated project would just ship dead files.
-INTERNAL_TEMPLATE_DIRS = {"profiles"}
+# profiles/ describes the golden paths Rocketdoo itself offers; ci/ is rendered
+# by `rkd ci init`, not copied verbatim. Copying either into every generated
+# project would just ship dead files.
+INTERNAL_TEMPLATE_DIRS = {"profiles", "ci"}
 
 
 def scaffold_project(template="basic", force=False, verbose=False):
