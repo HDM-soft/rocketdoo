@@ -1,8 +1,24 @@
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import click
+
+from rocketdoo.core.addons_path import ensure_addons_path
+
+
+def sync_addons_path():
+    """Keep Odoo's addons_path current before any command that starts it.
+
+    up, restart and `build --rebuild` all bring Odoo back with whatever
+    config/odoo.conf says, so all three need this, not just up.
+    """
+    action, changes = ensure_addons_path(Path.cwd())
+    if action == "updated":
+        click.echo(f"[rkd] addons_path updated: {', '.join(changes)}")
+    elif action == "failed":
+        click.echo(f"[rkd] could not update addons_path: {', '.join(changes)}", err=True)
 
 
 def ensure_docker_installed():
@@ -27,6 +43,7 @@ def docker():
 def up(detached, extra_args):
     """Equivalent to: docker compose up"""
     ensure_docker_installed()
+    sync_addons_path()
     cmd = ["docker", "compose", "up"]
     if detached:
         cmd.append("-d")
@@ -44,6 +61,7 @@ def up(detached, extra_args):
 def restart(timeout, services):
     """Equivalent to: docker compose restart"""
     ensure_docker_installed()
+    sync_addons_path()
     cmd = ["docker", "compose", "restart"]
     if timeout:
         cmd.extend(["-t", str(timeout)])
@@ -146,6 +164,7 @@ def build(tag, rebuild):
     ensure_docker_installed()
 
     if rebuild:
+        sync_addons_path()
         # Execute docker compose up -d --build
         command = ["docker", "compose", "up", "-d", "--build"]
         click.echo("🔄 Rebuilding and restarting containers...")

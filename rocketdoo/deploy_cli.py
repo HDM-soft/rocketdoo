@@ -482,8 +482,8 @@ def validate_modules(ctx, path):
     console.print()
     if has_errors:
         console.print("[red]❌ Validation failed with errors[/red]\n")
-    else:
-        console.print("[yellow]⚠️  Validation completed with warnings[/yellow]\n")
+        ctx.exit(1)
+    console.print("[yellow]⚠️  Validation completed with warnings[/yellow]\n")
 
 
 # Export commands for use in main CLI

@@ -250,6 +250,43 @@ class TestStreamProcess:
         assert ws.sent[-1] == "\x00exit:3"
 
 
+class TestDockerUpEndpoint:
+    """`POST /api/docker/up` (RF2) must sync addons_path before docker runs."""
+
+    def _write_conf(self, project_dir):
+        config_dir = project_dir / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        conf = config_dir / "odoo.conf"
+        conf.write_text("[options]\naddons_path = /usr/lib/python3/dist-packages/odoo/extra-addons\n")
+        return conf
+
+    def test_addons_path_is_synced_before_docker_compose_runs(self, client, project_dir, monkeypatch):
+        from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT
+
+        mod = project_dir / "addons" / "oca" / "mod"
+        mod.mkdir(parents=True)
+        (mod / "__manifest__.py").write_text("{'name': 'x', 'installable': True}\n")
+        conf = self._write_conf(project_dir)
+
+        conf_seen_by_docker = {}
+
+        class _FakeCompletedProcess:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(cmd, *args, **kwargs):
+            conf_seen_by_docker["addons_path"] = conf.read_text()
+            return _FakeCompletedProcess()
+
+        monkeypatch.setattr("rocketdoo.gui.api.docker_ops.subprocess.run", fake_run)
+
+        response = client.post("/api/docker/up")
+
+        assert response.status_code == 200
+        assert f"{CONTAINER_ADDONS_ROOT}/oca" in conf_seen_by_docker["addons_path"]
+
+
 class TestDockerActionWebSocket:
     """Regression coverage for `/ws/docker/{action}` after extracting
     `_stream_process` (CA13): an unknown action must still error out without
@@ -277,6 +314,22 @@ class TestOdooUpdateWebSocket:
         monkeypatch.setattr(asyncio, "create_subprocess_exec", _must_not_run)
 
         with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text().startswith("[error] ")
+            assert ws.receive_text() == "\x00exit:1"
+
+    def test_addons_path_notice_is_sent_before_build_update_command_runs(self, client, project_dir):
+        """RF2: addons_path is synced even when module/db turn out invalid."""
+        from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT
+
+        mod = project_dir / "addons" / "oca" / "mod"
+        mod.mkdir(parents=True)
+        (mod / "__manifest__.py").write_text("{'name': 'x', 'installable': True}\n")
+        config_dir = project_dir / "config"
+        config_dir.mkdir()
+        (config_dir / "odoo.conf").write_text("[options]\naddons_path = /usr/lib/python3/dist-packages/odoo/extra-addons\n")
+
+        with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text() == f"[rkd] addons_path updated: +{CONTAINER_ADDONS_ROOT}/oca"
             assert ws.receive_text().startswith("[error] ")
             assert ws.receive_text() == "\x00exit:1"
 

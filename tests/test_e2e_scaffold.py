@@ -107,6 +107,12 @@ class TestScaffold:
         scaffold_project()
         assert (project_dir / "Dockerfile.jinja").exists()
 
+    def test_does_not_ship_the_ci_workflow_template(self, project_dir):
+        """ci/ is rendered by `rkd ci init`, not copied into the user's project."""
+        scaffold_project()
+        assert not (project_dir / "ci").exists()
+        assert not list(project_dir.rglob("workflow.yaml.jinja"))
+
 
 class TestInit:
     @pytest.fixture

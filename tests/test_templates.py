@@ -62,6 +62,20 @@ INSTANCE_CONTEXT = {
     "pg": PG_PROFILES["small"],
 }
 
+# Mirrors the context rkd ci init derives from get_project_info() (spec RF5).
+CI_CONTEXT = {
+    "project_name": "demo",
+    "odoo_port": 8069,
+    "default_branch": "main",
+    "rkd_spec": "~=3.5",
+    "ruff_target": "py312",
+    "install_supported": True,
+    "install_trigger": "pull_request",
+    "unsupported_reasons": [],
+}
+
+CI_INSTALL_TRIGGERS = ("pull_request", "push", "manual", "never")
+
 ALL_TEMPLATES = sorted(p.relative_to(TEMPLATES).as_posix() for p in TEMPLATES.rglob("*.jinja"))
 
 
@@ -77,6 +91,8 @@ def render(rel_path: str, **context) -> str:
 def _context_for(rel_path: str) -> dict:
     if rel_path.startswith("instance/"):
         return INSTANCE_CONTEXT
+    if rel_path.startswith("ci/"):
+        return CI_CONTEXT
     return PROJECT_CONTEXT
 
 
@@ -421,3 +437,79 @@ class TestDockerfileBullseyeRepos:
         """gitman cannot clone without it: its install must NOT be tolerated."""
         git_line = next(ln for ln in instructions.splitlines() if "apt install -y git" in ln)
         assert "||" not in git_line
+
+
+class TestCiWorkflowTemplate:
+    """`rkd ci init` renders this to `.github/workflows/rkd-ci.yml` (spec RF6/RF8).
+
+    install_trigger governs whether the (expensive) install job runs on every
+    push, only on pull requests against the default branch, only manually, or
+    never at all — see spec RF5.b. install_supported=False (Enterprise or
+    private-repo projects) drops the install job regardless of the trigger.
+    """
+
+    @pytest.mark.parametrize("trigger", CI_INSTALL_TRIGGERS)
+    def test_renders_valid_yaml_for_every_install_trigger(self, trigger):
+        content = render("ci/workflow.yaml.jinja", **{**CI_CONTEXT, "install_trigger": trigger})
+        parsed = yaml.safe_load(content)
+
+        assert "lint" in parsed["jobs"]
+        if trigger == "never":
+            assert "install" not in parsed["jobs"]
+        else:
+            assert "install" in parsed["jobs"]
+
+        assert_snapshot(f"ci__workflow_install_trigger_{trigger}.yaml.jinja.txt", content)
+
+    def test_pull_request_trigger_only_targets_the_default_branch(self):
+        content = render("ci/workflow.yaml.jinja", **{**CI_CONTEXT, "install_trigger": "pull_request"})
+        condition = yaml.safe_load(content)["jobs"]["install"]["if"]
+        assert "pull_request" in condition
+        assert "main" in condition
+
+    @pytest.mark.parametrize("trigger", CI_INSTALL_TRIGGERS)
+    def test_the_rendered_workflow_has_no_actions_expression(self, trigger):
+        """Spec RF6: no ${{ }} at all, so every decision stays in the rkd commands.
+
+        It is also Jinja's own delimiter, so anything left would need escaping
+        and would drift the moment the template is edited.
+        """
+        content = render("ci/workflow.yaml.jinja", **{**CI_CONTEXT, "install_trigger": trigger})
+        assert "${{" not in content
+
+    def test_the_built_image_is_the_one_compose_runs(self):
+        """The build tags the image compose declares, or compose builds again.
+
+        docker-compose.yaml.jinja gives web both `build: .` and
+        `image: {{project_name}}`; the workflow relies on that second key to
+        reuse the cached build instead of paying for it twice.
+        """
+        compose = yaml.safe_load(render("docker-compose.yaml.jinja", **PROJECT_CONTEXT))
+        content = render("ci/workflow.yaml.jinja", **CI_CONTEXT)
+        build_step = next(
+            step
+            for step in yaml.safe_load(content)["jobs"]["install"]["steps"]
+            if str(step.get("uses", "")).startswith("docker/build-push-action")
+        )
+        assert build_step["with"]["tags"] == compose["services"]["web"]["image"]
+
+    def test_install_job_is_absent_when_not_supported(self):
+        context = {
+            **CI_CONTEXT,
+            "install_supported": False,
+            "unsupported_reasons": ["Enterprise addons are not public."],
+        }
+        content = render("ci/workflow.yaml.jinja", **context)
+        parsed = yaml.safe_load(content)
+
+        assert set(parsed["jobs"]) == {"lint"}
+        assert "Enterprise addons are not public." in content
+
+        assert_snapshot("ci__workflow_install_unsupported.yaml.jinja.txt", content)
+
+    def test_lint_job_always_runs_ruff_and_deploy_validate(self):
+        content = render("ci/workflow.yaml.jinja", **{**CI_CONTEXT, "install_supported": False})
+        parsed = yaml.safe_load(content)
+        run_steps = " ".join(step.get("run", "") for step in parsed["jobs"]["lint"]["steps"])
+        assert "ruff check" in run_steps
+        assert "rkd deploy validate" in run_steps

@@ -204,13 +204,86 @@ jobs:
         # Dockerfile have to work on every supported base image, not just one.
         run: docker build -t rkd-ci:${{ matrix.odoo-version }} /tmp/proj
 
+  generated-ci:
+    name: Generated project CI
+    # What `rkd ci init` emits has to be a workflow GitHub actually accepts,
+    # and the checks it wires up have to pass on a freshly generated project.
+    # actionlint is cheap enough for every PR; running the generated workflow
+    # for real is not, so that part follows the same rule as odoo-images.
+    runs-on: ubuntu-latest
+    env:
+      PROJECT: /tmp/generated-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e .
+
+      - name: Generate a project and its workflow
+        run: |
+          mkdir -p "$PROJECT"
+          cd "$PROJECT"
+          rkd scaffold
+          rkd init --profile odoo18-ce
+          git init -q
+          git config user.email ci@rocketdoo.local
+          git config user.name rkd
+          rkd ci init --install-trigger pull_request
+          test -f .github/workflows/rkd-ci.yml
+
+      - name: actionlint accepts the generated workflow
+        run: |
+          docker run --rm -v "$PROJECT:/repo" -w /repo \
+            rhysd/actionlint:latest -color
+
+      - name: The generated project still builds a valid compose
+        run: |
+          cd "$PROJECT"
+          rkd ci prepare
+          docker compose config > /dev/null
+
+      - name: Run the generated workflow's own checks
+        # Expensive: only on the way to a release, or when explicitly requested.
+        if: >
+          inputs.build-odoo-images ||
+          github.base_ref == 'test/v3' ||
+          github.base_ref == 'main'
+        run: |
+          cd "$PROJECT"
+          mkdir -p addons/oca/rkd_probe
+          cat > addons/oca/rkd_probe/__manifest__.py <<'MANIFEST'
+          {"name": "rkd_probe", "version": "18.0.1.0.0", "depends": ["base"], "installable": True}
+          MANIFEST
+          touch addons/oca/rkd_probe/__init__.py
+          rkd ci prepare
+          ruff check --output-format=github --target-version py312 \
+            --extend-per-file-ignores "**/__manifest__.py:B018" addons/
+          rkd deploy validate -p addons
+          docker compose build web
+          docker compose up -d db
+          for _ in $(seq 1 30); do
+            docker compose exec -T db pg_isready -U root && break
+            sleep 2
+          done
+          MODULES=$(rkd ci modules)
+          test "$MODULES" = "rkd_probe"
+          docker compose run --rm -T web odoo -d ci -i "$MODULES" --stop-after-init --without-demo=all
+          docker compose exec -T db psql -U root -d ci -tAc \
+            "SELECT state FROM ir_module_module WHERE name='rkd_probe';" | grep -qx installed
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f "$PROJECT/docker-compose.yaml" down -v || true
+
   ci-ok:
     name: CI
     # Single required status check: add THIS to branch protection.
     if: always()
     # odoo-images is conditional: when it is skipped its result is 'skipped',
     # not 'failure', so it gates the release PRs without blocking dev/v3.
-    needs: [lint, test, test-docker, build, golden-paths, odoo-images]
+    needs: [lint, test, test-docker, build, golden-paths, generated-ci, odoo-images]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any job failed
