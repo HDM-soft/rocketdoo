@@ -6,114 +6,129 @@
 <title>Rocketdoo GUI — v3</title>
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <style>
+:root {
+  color-scheme: light dark;
+  --b: #F4F7FC; --s: #FFFFFF; --ln: #DCE3F0; --ln2: #7590C6; --term-b: #040711; --term-t: #4ADE80; --term-ln: #0F1830;
+  --tx: #0F1729; --mu: #51607B; --su: #5E6B82;
+  --br: #1A3DCC; --br-h: #1531A6; --on-br: #FFFFFF; --lk: #1A3DCC;
+  --ok: #126E35; --ok-bg: #E3F5EA; --wn: #84570A; --er: #B91C1C; --er-bg: #FBEAEA;
+  --gy: #4B5563; --pu: #6D28D9;
+  --br-rgb: 26,61,204; --ok-rgb: 18,110,53; --wn-rgb: 132,87,10; --er-rgb: 185,28,28;
+  --pu-rgb: 109,40,217; --gy-rgb: 75,85,99; --sd-rgb: 0,0,0;
+}
+:root[data-theme="light"] { color-scheme: light; }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
-body { background: #07091A; color: #DDE4F0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+body { background: var(--b); color: var(--tx); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #1C2952; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #1A3DCC; }
+::-webkit-scrollbar-thumb { background: var(--ln2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--br); }
 
 /* Layout */
 .layout { display: flex; min-height: 100vh; }
-.sidebar { width: 224px; min-height: 100vh; background: #090D22; border-right: 1px solid #151E45; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
+.sidebar { width: 224px; min-height: 100vh; background: var(--s); border-right: 1px solid var(--ln); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; flex-shrink: 0; }
 .main { flex: 1; overflow-y: auto; }
 .page { padding: 32px 36px; max-width: 1120px; }
 
 /* Sidebar logo */
-.logo-area { padding: 22px 18px 18px; border-bottom: 1px solid #151E45; display: flex; align-items: center; gap: 10px; }
-.logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, #1A3DCC 0%, #7553C8 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(26,61,204,0.4); }
-.logo-text { font-size: 16px; font-weight: 800; color: #fff; letter-spacing: .02em; line-height: 1; }
-.logo-sub { font-size: 10px; color: #4D6A92; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
-.v3-badge { font-size: 9px; font-weight: 700; background: rgba(26,61,204,0.3); color: #6D9CFF; padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
+.logo-area { padding: 22px 18px 18px; border-bottom: 1px solid var(--ln); display: flex; align-items: center; gap: 10px; }
+.logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, var(--br) 0%, var(--pu) 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(var(--br-rgb),0.4); }
+.logo-text { font-size: 16px; font-weight: 800; color: var(--tx); letter-spacing: .02em; line-height: 1; }
+.logo-sub { font-size: 10px; color: var(--su); text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; }
+.v3-badge { font-size: 9px; font-weight: 700; background: rgba(var(--br-rgb),0.3); color: var(--lk); padding: 1px 5px; border-radius: 4px; margin-left: 4px; }
 
 /* Sidebar active path */
-.active-path { padding: 9px 14px 10px; border-bottom: 1px solid #151E45; cursor: pointer; transition: background .15s; }
-.active-path:hover { background: rgba(26,61,204,0.08); }
-.active-path-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #5577A2; margin-bottom: 2px; }
-.active-path-val { font-size: 11px; color: #6D9CFF; font-family: monospace; word-break: break-all; line-height: 1.4; }
+.active-path { display: block; width: 100%; background: none; border: 0; border-bottom: 1px solid var(--ln); font: inherit; color: inherit; text-align: left; padding: 9px 14px 10px; cursor: pointer; transition: background .15s; }
+.active-path:hover { background: rgba(var(--br-rgb),0.08); }
+.active-path-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--su); margin-bottom: 2px; }
+.active-path-val { font-size: 11px; color: var(--lk); font-family: monospace; word-break: break-all; line-height: 1.4; }
 
 /* Sidebar nav */
 .nav { flex: 1; padding: 12px 10px; }
-.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: #6B82A8; font-size: 13px; font-weight: 500; margin-bottom: 2px; transition: all .15s; border: 1px solid transparent; user-select: none; }
-.nav-item:hover { background: rgba(26,61,204,0.1); color: #DDE4F0; }
-.nav-item.active { background: rgba(26,61,204,0.18); color: #7AA3FF; border-color: rgba(26,61,204,0.3); }
+.nav-item { display: flex; align-items: center; gap: 10px; background: none; font-family: inherit; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: var(--mu); font-size: 13px; font-weight: 500; margin-bottom: 2px; transition: all .15s; border: 1px solid transparent; user-select: none; }
+.nav-item:hover { background: rgba(var(--br-rgb),0.1); color: var(--tx); }
+.nav-item.active { background: rgba(var(--br-rgb),0.18); color: var(--lk); border-color: rgba(var(--br-rgb),0.3); }
 .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
-.nav-sep { height: 1px; background: #151E45; margin: 8px 10px; }
-.sidebar-footer { padding: 14px 18px; border-top: 1px solid #151E45; font-size: 11px; color: #4D6A92; line-height: 1.7; }
+.nav-sep { height: 1px; background: var(--ln); margin: 8px 10px; }
+.sidebar-footer { padding: 14px 18px; border-top: 1px solid var(--ln); font-size: 11px; color: var(--su); line-height: 1.7; }
 
 /* Cards */
-.card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 20px; transition: border-color .15s; }
-.card:hover { border-color: rgba(26,61,204,0.35); }
-.card-flat { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; overflow: hidden; }
-.card-header { padding: 12px 20px; border-bottom: 1px solid #151E45; display: flex; align-items: center; justify-content: space-between; }
+.card { background: var(--s); border: 1px solid var(--ln); border-radius: 10px; padding: 20px; transition: border-color .15s; }
+.card:hover { border-color: rgba(var(--br-rgb),0.35); }
+.card-flat { background: var(--s); border: 1px solid var(--ln); border-radius: 10px; overflow: hidden; }
+.card-header { padding: 12px 20px; border-bottom: 1px solid var(--ln); display: flex; align-items: center; justify-content: space-between; }
 
 /* Badges */
-.badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-.badge-blue   { background: rgba(26,61,204,0.22); color: #6D9CFF; }
-.badge-green  { background: rgba(34,197,94,0.18);  color: #4ADE80; }
-.badge-red    { background: rgba(239,68,68,0.18);  color: #F87171; }
-.badge-yellow { background: rgba(245,158,11,0.18); color: #FCD34D; }
-.badge-purple { background: rgba(117,83,200,0.22); color: #A78BFA; }
-.badge-gray   { background: rgba(107,114,128,0.18); color: #9CA3AF; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.badge-blue   { background: rgba(var(--br-rgb),0.22); color: var(--lk); }
+.badge-green  { background: rgba(var(--ok-rgb),0.18);  color: var(--ok); }
+.badge-red    { background: rgba(var(--er-rgb),0.18);  color: var(--er); }
+.badge-yellow { background: rgba(var(--wn-rgb),0.18); color: var(--wn); }
+.badge-purple { background: rgba(var(--pu-rgb),0.22); color: var(--pu); }
+.badge-gray   { background: rgba(var(--gy-rgb),0.18); color: var(--gy); }
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; transition: all .15s; }
 .btn svg { width: 13px; height: 13px; flex-shrink: 0; }
-.btn-primary { background: #1A3DCC; color: #fff; }
-.btn-primary:hover { background: #2450E8; box-shadow: 0 0 14px rgba(26,61,204,0.45); }
+.btn-primary { background: var(--br); color: var(--on-br); }
+.btn-primary:hover { background: var(--br-h); box-shadow: 0 0 14px rgba(var(--br-rgb),0.45); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-.btn-ghost { background: transparent; color: #7A92BA; border: 1px solid #1A2A50; }
-.btn-ghost:hover { color: #DDE4F0; border-color: rgba(26,61,204,0.5); background: rgba(26,61,204,0.1); }
+.btn-ghost { background: transparent; color: var(--mu); border: 1px solid var(--ln2); }
+.btn-ghost:hover { color: var(--tx); border-color: rgba(var(--br-rgb),0.5); background: rgba(var(--br-rgb),0.1); }
 .btn-ghost:disabled { opacity: .5; cursor: not-allowed; }
-.btn-danger { background: transparent; color: #F87171; border: 1px solid rgba(239,68,68,0.4); }
-.btn-danger:hover { background: rgba(239,68,68,0.1); border-color: #EF4444; }
+.btn-danger { background: transparent; color: var(--er); border: 1px solid rgba(var(--er-rgb),0.4); }
+.btn-danger:hover { background: rgba(var(--er-rgb),0.1); border-color: var(--er); }
 .btn-sm { padding: 4px 9px; font-size: 12px; }
 .btn-sm svg { width: 11px; height: 11px; }
 
 /* Status dot */
 .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
-.dot-green  { background: #22C55E; box-shadow: 0 0 6px rgba(34,197,94,.5); }
-.dot-red    { background: #EF4444; }
-.dot-yellow { background: #F59E0B; }
-.dot-gray   { background: #4B5563; }
+.dot-green  { background: var(--ok); box-shadow: 0 0 6px rgba(var(--ok-rgb),.5); }
+.dot-red    { background: var(--er); }
+.dot-yellow { background: var(--wn); }
+.dot-gray   { background: var(--gy); }
 
 /* Page header */
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
-.page-title { font-size: 22px; font-weight: 700; color: #DDE4F0; }
-.page-sub { font-size: 13px; color: #6B82A8; margin-top: 3px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--tx); }
+.page-sub { font-size: 13px; color: var(--mu); margin-top: 3px; }
 
 /* Stats grid */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 28px; }
-.stat-card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 16px 18px; }
-.stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #5C7498; margin-bottom: 10px; }
-.stat-value { font-size: 28px; font-weight: 700; color: #DDE4F0; line-height: 1; }
-.stat-note { font-size: 12px; color: #6B82A8; margin-top: 6px; }
+.stat-card { background: var(--s); border: 1px solid var(--ln); border-radius: 10px; padding: 16px 18px; }
+.stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--su); margin-bottom: 10px; }
+.stat-value { font-size: 28px; font-weight: 700; color: var(--tx); line-height: 1; }
+.stat-note { font-size: 12px; color: var(--mu); margin-top: 6px; }
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; }
-.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #5577A2; border-bottom: 1px solid #151E45; }
-.table td { padding: 13px 18px; border-bottom: 1px solid #0F1830; vertical-align: middle; }
+.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--su); border-bottom: 1px solid var(--ln); }
+.table td { padding: 13px 18px; border-bottom: 1px solid var(--ln); vertical-align: middle; }
 .table tr:last-child td { border-bottom: none; }
-.table tr:hover td { background: rgba(26,61,204,0.04); }
+.table tr:hover td { background: rgba(var(--br-rgb),0.04); }
 
 /* Log terminal */
-.log-term { background: #040711; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.65; color: #7EC87E; height: 300px; overflow-y: auto; padding: 12px 14px; border-radius: 8px; border: 1px solid #0F1830; }
+.log-term { background: var(--term-b); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.65; color: #7EC87E; height: 300px; overflow-y: auto; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--term-ln); }
 .log-err { color: #F87171; }
 .log-warn { color: #FCD34D; }
 
 /* Toggle */
 .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
 .toggle input { opacity: 0; width: 0; height: 0; }
-.toggle-track { position: absolute; inset: 0; background: #1A2A50; border-radius: 22px; transition: .2s; cursor: pointer; }
-.toggle-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: #4B6080; border-radius: 50%; transition: .2s; }
-input:checked ~ .toggle-track { background: #1A3DCC; }
-input:checked ~ .toggle-track::before { transform: translateX(18px); background: #fff; }
+.toggle-track { position: absolute; inset: 0; background: var(--ln2); border-radius: 22px; transition: .2s; cursor: pointer; }
+.toggle-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: var(--gy); border-radius: 50%; transition: .2s; }
+input:checked ~ .toggle-track { background: var(--br); }
+input:checked ~ .toggle-track::before { transform: translateX(18px); background: var(--on-br); }
+input:focus-visible ~ .toggle-track { outline: 2px solid var(--lk); outline-offset: 2px; }
 
 /* Input */
-.input { background: #0D1230; border: 1px solid #1A2A50; border-radius: 7px; padding: 8px 12px; color: #DDE4F0; font-size: 13px; outline: none; transition: border-color .15s; width: 100%; }
-.input:focus { border-color: #1A3DCC; }
+.input { background: var(--s); border: 1px solid var(--ln2); border-radius: 7px; padding: 8px 12px; color: var(--tx); font-size: 13px; outline: none; transition: border-color .15s; width: 100%; }
+.input:focus { border-color: var(--lk); }
+
+/* Focus */
+:focus-visible { outline: 2px solid var(--lk); outline-offset: 2px; }
 
 /* Animations */
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -123,37 +138,47 @@ input:checked ~ .toggle-track::before { transform: translateX(18px); background:
 
 /* Notifications */
 .notif-wrap { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 9999; min-width: 280px; max-width: 360px; }
-.notif { padding: 11px 14px; border-radius: 8px; display: flex; align-items: center; gap: 9px; font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,.5); animation: fadeIn .2s ease; }
-.notif-ok  { background: #081A10; border: 1px solid rgba(34,197,94,.35); }
-.notif-err { background: #160808; border: 1px solid rgba(239,68,68,.35); }
+.notif { padding: 11px 14px; border-radius: 8px; display: flex; align-items: center; gap: 9px; font-size: 13px; box-shadow: 0 4px 20px rgba(var(--sd-rgb),.5); animation: fadeIn .2s ease; }
+.notif-ok  { background: var(--ok-bg); border: 1px solid rgba(var(--ok-rgb),.35); }
+.notif-err { background: var(--er-bg); border: 1px solid rgba(var(--er-rgb),.35); }
 .notif svg { width: 15px; height: 15px; flex-shrink: 0; }
-.notif-ok svg  { color: #22C55E; }
-.notif-err svg { color: #EF4444; }
+.notif-ok svg  { color: var(--ok); }
+.notif-err svg { color: var(--er); }
 
 /* Empty state */
 .empty { text-align: center; padding: 56px 32px; }
-.empty svg { width: 44px; height: 44px; color: #1A2A50; margin-bottom: 16px; }
-.empty h3 { font-size: 16px; font-weight: 600; color: #5C7498; margin-bottom: 8px; }
-.empty p { font-size: 13px; color: #5577A2; }
-.code-block { background: #040711; border: 1px solid #0F1830; border-radius: 8px; padding: 14px 20px; display: inline-block; font-family: monospace; font-size: 13px; color: #4ADE80; text-align: left; margin-top: 20px; }
+.empty svg { width: 44px; height: 44px; color: var(--su); margin-bottom: 16px; }
+.empty h3 { font-size: 16px; font-weight: 600; color: var(--su); margin-bottom: 8px; }
+.empty p { font-size: 13px; color: var(--su); }
+.code-block { background: var(--term-b); border: 1px solid var(--term-ln); border-radius: 8px; padding: 14px 20px; display: inline-block; font-family: monospace; font-size: 13px; color: var(--term-t); text-align: left; margin-top: 20px; }
 
 /* Project card */
-.proj-card { background: #0D1230; border: 1px solid #151E45; border-radius: 10px; padding: 18px; transition: all .15s; }
-.proj-card:hover { border-color: rgba(26,61,204,0.4); }
-.proj-card.active-proj { border-color: rgba(26,61,204,0.55); background: rgba(26,61,204,0.05); }
+.proj-card { background: var(--s); border: 1px solid var(--ln); border-radius: 10px; padding: 18px; transition: all .15s; }
+.proj-card:hover { border-color: rgba(var(--br-rgb),0.4); }
+.proj-card.active-proj { border-color: rgba(var(--br-rgb),0.55); background: rgba(var(--br-rgb),0.05); }
 
-/* ── Light Mode ─────────────────────────────────────────────────────────── */
-html.light body { background: #C8D4E2; color: #0A1528; }
-html.light .page-title { color: #0A1528; }
-html.light .page-sub   { color: #1E3A58; }
-/* Nav items inside dark sidebar keep their dark-mode colors — no override needed */
-html.light .btn-ghost  { color: #1E3558; border-color: #6A88B0; }
-html.light .btn-ghost:hover { color: #0A1528; background: rgba(26,61,204,0.12); border-color: rgba(26,61,204,0.4); }
-html.light .btn-ghost:disabled { color: #3A5880; }
-/* Sidebar stays dark: logo-sub, active-path-label, sidebar-footer use same colors */
-html.light ::-webkit-scrollbar-track { background: #B2C0D5; }
-html.light ::-webkit-scrollbar-thumb { background: #7A8EAA; }
-html.light ::-webkit-scrollbar-thumb:hover { background: #4A6080; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --b: #080B18; --s: #0E1329; --ln: #151E45; --ln2: #3D62BB; --term-b: #040711; --term-t: #4ADE80; --term-ln: #0F1830;
+    --tx: #E6ECF7; --mu: #9DB0CE; --su: #7E93B6;
+    --br: #2450E8; --br-h: #3D63FF; --on-br: #FFFFFF; --lk: #7FA9FF;
+    --ok: #4ADE80; --ok-bg: #081A10; --wn: #FBBF24; --er: #FB8B8B; --er-bg: #160808;
+    --gy: #9CA3AF; --pu: #A78BFA;
+    --br-rgb: 36,80,232; --ok-rgb: 74,222,128; --wn-rgb: 251,191,36; --er-rgb: 251,139,139;
+    --pu-rgb: 167,139,250; --gy-rgb: 156,163,175; --sd-rgb: 0,0,0;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --b: #080B18; --s: #0E1329; --ln: #151E45; --ln2: #3D62BB; --term-b: #040711; --term-t: #4ADE80; --term-ln: #0F1830;
+  --tx: #E6ECF7; --mu: #9DB0CE; --su: #7E93B6;
+  --br: #2450E8; --br-h: #3D63FF; --on-br: #FFFFFF; --lk: #7FA9FF;
+  --ok: #4ADE80; --ok-bg: #081A10; --wn: #FBBF24; --er: #FB8B8B; --er-bg: #160808;
+  --gy: #9CA3AF; --pu: #A78BFA;
+  --br-rgb: 36,80,232; --ok-rgb: 74,222,128; --wn-rgb: 251,191,36; --er-rgb: 251,139,139;
+  --pu-rgb: 167,139,250; --gy-rgb: 156,163,175; --sd-rgb: 0,0,0;
+}
 </style>
 </head>
 <body>
@@ -247,6 +272,14 @@ function dotClass(s) {
   const m = {running:'dot-green', stopped:'dot-red', paused:'dot-yellow'}
   return m[cstatus(s)] || 'dot-gray'
 }
+function statusBadgeClass(s) {
+  const m = {running:'badge-green', stopped:'badge-red', paused:'badge-yellow'}
+  return m[cstatus(s)] || 'badge-gray'
+}
+function statusVar(s) {
+  const m = {running:'--ok', stopped:'--er', paused:'--wn'}
+  return 'var(' + (m[cstatus(s)] || '--gy') + ')'
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    LOG VIEWER COMPONENT
@@ -309,8 +342,8 @@ const LogViewer = {
   template: `
     <div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <span style="font-size:12px;font-weight:600;color:#DDE4F0;">{{ name }}</span>
-        <span v-if="live" style="display:flex;align-items:center;gap:5px;font-size:11px;color:#22C55E;">
+        <span style="font-size:12px;font-weight:600;color:var(--tx);">{{ name }}</span>
+        <span v-if="live" style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ok);">
           <span class="dot dot-green" style="width:6px;height:6px;"></span> Live
         </span>
         <div style="margin-left:auto;display:flex;gap:6px;">
@@ -319,7 +352,7 @@ const LogViewer = {
         </div>
       </div>
       <div ref="el" class="log-term">
-        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Waiting for output…</div>
+        <div v-if="!lines.length" style="color:var(--term-t);font-style:italic;">Waiting for output…</div>
         <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
       </div>
     </div>
@@ -399,19 +432,19 @@ const DockerTerminal = {
     return { lines, running, exitCode, el, lineClass, I }
   },
   template: `
-    <div class="card-flat" style="border-color:rgba(26,61,204,0.2);">
-      <div style="display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:1px solid #151E45;background:#090D22;">
-        <span v-if="running" v-html="I.spin" class="spin" style="width:13px;height:13px;color:#6D9CFF;display:inline-block;flex-shrink:0;"></span>
-        <span v-else-if="exitCode===0" v-html="I.check" style="width:13px;height:13px;color:#22C55E;flex-shrink:0;"></span>
-        <span v-else v-html="I.warn" style="width:13px;height:13px;color:#F87171;flex-shrink:0;"></span>
-        <code style="font-size:12px;color:#DDE4F0;flex:1;font-family:monospace;">{{ label }}</code>
-        <span v-if="running" style="font-size:11px;color:#6B82A8;">running…</span>
-        <span v-else-if="exitCode===0" style="font-size:11px;color:#22C55E;">✓ completed</span>
-        <span v-else style="font-size:11px;color:#F87171;">✗ exit {{ exitCode }}</span>
-        <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" title="Close terminal">✕</button>
+    <div class="card-flat" style="border-color:rgba(var(--br-rgb),0.2);">
+      <div style="display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:1px solid var(--ln);background:var(--s);">
+        <span v-if="running" v-html="I.spin" class="spin" style="width:13px;height:13px;color:var(--lk);display:inline-block;flex-shrink:0;"></span>
+        <span v-else-if="exitCode===0" v-html="I.check" style="width:13px;height:13px;color:var(--ok);flex-shrink:0;"></span>
+        <span v-else v-html="I.warn" style="width:13px;height:13px;color:var(--er);flex-shrink:0;"></span>
+        <code style="font-size:12px;color:var(--tx);flex:1;font-family:monospace;">{{ label }}</code>
+        <span v-if="running" style="font-size:11px;color:var(--mu);">running…</span>
+        <span v-else-if="exitCode===0" style="font-size:11px;color:var(--ok);">✓ completed</span>
+        <span v-else style="font-size:11px;color:var(--er);">✗ exit {{ exitCode }}</span>
+        <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" title="Close terminal" aria-label="Close terminal">✕</button>
       </div>
       <div ref="el" class="log-term" style="height:320px;">
-        <div v-if="!lines.length" style="color:#5577A2;font-style:italic;">Connecting to {{ label }}…</div>
+        <div v-if="!lines.length" style="color:var(--term-t);font-style:italic;">Connecting to {{ label }}…</div>
         <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
       </div>
     </div>
@@ -463,7 +496,7 @@ const Dashboard = {
     const running = computed(() => ctrs.value.filter(c=>cstatus(c.State||c.Status)==='running').length)
 
     onActivated(load)
-    return { proj, ctrs, busy, act, logOf, running, termAction, load, docker, onTermDone, closeTerminal, dotClass, cstatus, I }
+    return { proj, ctrs, busy, act, logOf, running, termAction, load, docker, onTermDone, closeTerminal, dotClass, cstatus, statusBadgeClass, I }
   },
   template: `
   <div class="page fade-in">
@@ -474,7 +507,7 @@ const Dashboard = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -483,8 +516,8 @@ const Dashboard = {
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Containers</div>
-          <div class="stat-value" :style="{color: running>0?'#22C55E':'#4B5563'}">
-            {{ running }}<span style="font-size:16px;color:#5577A2;"> / {{ ctrs.length }}</span>
+          <div class="stat-value" :style="{color: running>0?'var(--ok)':'var(--gy)'}">
+            {{ running }}<span style="font-size:16px;color:var(--su);"> / {{ ctrs.length }}</span>
           </div>
           <div class="stat-note">{{ running }} running</div>
         </div>
@@ -505,7 +538,7 @@ const Dashboard = {
           <div class="stat-value">{{ proj.odoo_port||'—' }}</div>
           <div class="stat-note" style="margin-top:7px;">
             <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank"
-               style="color:#1A3DCC;text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
+               style="color:var(--lk);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
               Open Odoo <span v-html="I.ext" style="width:10px;height:10px;"></span>
             </a>
           </div>
@@ -517,18 +550,18 @@ const Dashboard = {
         <div v-html="I.rocket"></div>
         <h3>No project found in this directory</h3>
         <p>Initialize a Rocketdoo project to get started</p>
-        <div class="code-block"><div style="color:#6B82A8;">## Create a new project</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
+        <div class="code-block"><div style="color:var(--term-t);">## Create a new project</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
       </div>
 
       <!-- Project card -->
       <div v-if="proj?.exists" style="margin-bottom:24px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Project</div>
-        <div class="card" style="border-color:rgba(26,61,204,0.3);">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">Project</div>
+        <div class="card" style="border-color:rgba(var(--br-rgb),0.3);">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
             <div>
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                <span v-html="I.rocket" style="width:18px;height:18px;color:#1A3DCC;flex-shrink:0;"></span>
-                <span style="font-size:17px;font-weight:700;color:#DDE4F0;">{{ proj.project_name||'Unnamed Project' }}</span>
+                <span v-html="I.rocket" style="width:18px;height:18px;color:var(--lk);flex-shrink:0;"></span>
+                <span style="font-size:17px;font-weight:700;color:var(--tx);">{{ proj.project_name||'Unnamed Project' }}</span>
               </div>
               <div style="display:flex;flex-wrap:wrap;gap:6px;">
                 <span class="badge badge-blue">Odoo {{ proj.odoo_version }}</span>
@@ -544,25 +577,29 @@ const Dashboard = {
           </div>
 
           <!-- Containers -->
-          <div style="border-top:1px solid #151E45;padding-top:14px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Containers</div>
+          <div style="border-top:1px solid var(--ln);padding-top:14px;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Containers</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
-              <div v-for="c in ctrs" :key="c.Name||c.Service"
+              <button type="button" v-for="c in ctrs" :key="c.Name||c.Service"
                    @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
-                   :style="{background:'#090D22',border:'1px solid '+(logOf===(c.Name||c.Service)?'#1A3DCC':'#151E45'),borderRadius:'8px',padding:'10px 14px',cursor:'pointer',minWidth:'150px',transition:'all .15s'}">
-                <div style="display:flex;align-items:center;gap:7px;margin-bottom:4px;">
-                  <span class="dot" :class="dotClass(c.State||c.Status)"></span>
-                  <span style="font-size:13px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</span>
+                   :aria-expanded="logOf===(c.Name||c.Service)"
+                   :aria-label="'Logs for '+(c.Service||c.Name)"
+                   :style="{background:'var(--s)',border:'1px solid '+(logOf===(c.Name||c.Service)?'var(--lk)':'var(--ln)'),borderRadius:'8px',padding:'10px 14px',cursor:'pointer',minWidth:'150px',transition:'all .15s',display:'block',font:'inherit',color:'inherit',textAlign:'left'}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:6px;">
+                  <span style="font-size:13px;font-weight:600;color:var(--tx);">{{ c.Service||c.Name }}</span>
+                  <span class="badge" :class="statusBadgeClass(c.State||c.Status)">
+                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ cstatus(c.State||c.Status) }}
+                  </span>
                 </div>
-                <div style="font-size:11px;color:#6B82A8;font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
-                <div v-if="c.Ports" style="font-size:10px;color:#5577A2;margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
-              </div>
-              <div v-if="!ctrs.length" style="color:#5577A2;font-size:13px;padding:8px 0;">No containers running</div>
+                <div style="font-size:11px;color:var(--mu);font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
+                <div v-if="c.Ports" style="font-size:10px;color:var(--su);margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
+              </button>
+              <div v-if="!ctrs.length" style="color:var(--su);font-size:13px;padding:8px 0;">No containers running</div>
             </div>
           </div>
 
           <!-- Inline logs -->
-          <div v-if="logOf" style="margin-top:14px;border-top:1px solid #151E45;padding-top:14px;">
+          <div v-if="logOf" style="margin-top:14px;border-top:1px solid var(--ln);padding-top:14px;">
             <LogViewer :name="logOf" />
           </div>
         </div>
@@ -570,7 +607,7 @@ const Dashboard = {
 
       <!-- Quick actions -->
       <div v-if="proj?.exists">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Quick Actions</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">Quick Actions</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           <button @click="docker('up')" class="btn btn-primary" :disabled="act!==''">
             <span v-html="act==='up'?I.spin:I.play" :class="act==='up'?'spin':''"></span> Start All
@@ -628,7 +665,7 @@ const Containers = {
     }
 
     onActivated(load)
-    return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, I }
+    return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, statusBadgeClass, statusVar, I }
   },
   template: `
   <div class="page fade-in">
@@ -639,7 +676,7 @@ const Containers = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -647,7 +684,7 @@ const Containers = {
       <div v-if="!ctrs.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.containers"></div>
         <h3>No containers found</h3>
-        <p>Make sure you are in a Rocketdoo project directory and run <code style="color:#6D9CFF;">rkd up</code></p>
+        <p>Make sure you are in a Rocketdoo project directory and run <code style="color:var(--lk);">rkd up</code></p>
       </div>
 
       <div v-else class="card-flat">
@@ -660,39 +697,38 @@ const Containers = {
           <tbody>
             <template v-for="c in ctrs" :key="c.Name||c.Service">
               <tr>
-                <td>
-                  <div style="display:flex;align-items:center;gap:7px;">
-                    <span class="dot" :class="dotClass(c.State||c.Status)"></span>
-                    <span style="font-size:12px;color:#6B82A8;text-transform:capitalize;">{{ cstatus(c.State||c.Status) }}</span>
-                  </div>
+                <td :style="{borderLeft: '3px solid ' + statusVar(c.State||c.Status)}">
+                  <span class="badge" :class="statusBadgeClass(c.State||c.Status)">
+                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ cstatus(c.State||c.Status) }}
+                  </span>
                 </td>
                 <td>
-                  <div style="font-size:14px;font-weight:600;color:#DDE4F0;">{{ c.Service||c.Name }}</div>
-                  <div style="font-size:11px;color:#5577A2;font-family:monospace;">{{ c.Name }}</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--tx);">{{ c.Service||c.Name }}</div>
+                  <div style="font-size:11px;color:var(--su);font-family:monospace;">{{ c.Name }}</div>
                 </td>
-                <td style="font-family:monospace;font-size:12px;color:#6B82A8;">{{ c.Image||'—' }}</td>
-                <td style="font-family:monospace;font-size:11px;color:#6B82A8;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
+                <td style="font-family:monospace;font-size:12px;color:var(--mu);">{{ c.Image||'—' }}</td>
+                <td style="font-family:monospace;font-size:11px;color:var(--mu);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
                 <td style="text-align:right;">
                   <div style="display:flex;gap:5px;justify-content:flex-end;">
-                    <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" title="Start" :disabled="acts[(c.Service||c.Name)+'start']">
+                    <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" title="Start" aria-label="Start" :disabled="acts[(c.Service||c.Name)+'start']">
                       <span v-html="acts[(c.Service||c.Name)+'start']?I.spin:I.play" :class="acts[(c.Service||c.Name)+'start']?'spin':''"></span>
                     </button>
-                    <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" title="Stop" :disabled="acts[(c.Service||c.Name)+'stop']">
+                    <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" title="Stop" aria-label="Stop" :disabled="acts[(c.Service||c.Name)+'stop']">
                       <span v-html="acts[(c.Service||c.Name)+'stop']?I.spin:I.stop" :class="acts[(c.Service||c.Name)+'stop']?'spin':''"></span>
                     </button>
-                    <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" title="Restart" :disabled="acts[(c.Service||c.Name)+'restart']">
+                    <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" title="Restart" aria-label="Restart" :disabled="acts[(c.Service||c.Name)+'restart']">
                       <span v-html="acts[(c.Service||c.Name)+'restart']?I.spin:I.restart" :class="acts[(c.Service||c.Name)+'restart']?'spin':''"></span>
                     </button>
                     <button @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
-                            class="btn btn-ghost btn-sm" title="Logs"
-                            :style="logOf===(c.Name||c.Service)?'color:#1A3DCC;border-color:#1A3DCC;':''">
+                            class="btn btn-ghost btn-sm" title="Logs" aria-label="Logs"
+                            :style="logOf===(c.Name||c.Service)?'color:var(--lk);border-color:var(--lk);':''">
                       <span v-html="I.logs"></span>
                     </button>
                   </div>
                 </td>
               </tr>
               <tr v-if="logOf===(c.Name||c.Service)" :key="(c.Name||c.Service)+'-log'">
-                <td colspan="5" style="background:#040711;padding:14px 18px;">
+                <td colspan="5" style="background:var(--s);padding:14px 18px;">
                   <LogViewer :name="c.Name||c.Service" />
                 </td>
               </tr>
@@ -898,14 +934,14 @@ const Modules = {
       <div><div class="page-title">Modules</div><div class="page-sub">Local addons and external Gitman repositories</div></div>
       <div style="display:flex;gap:10px;align-items:center;">
         <div v-if="dbs.length" style="display:flex;align-items:center;gap:6px;">
-          <label style="font-size:11px;color:#6B82A8;">DB</label>
+          <label style="font-size:11px;color:var(--mu);">DB</label>
           <select v-model="db" class="input" style="width:auto;padding:5px 8px;font-size:12px;">
             <option v-for="d in dbs" :key="d" :value="d">{{ d }}</option>
           </select>
         </div>
-        <div v-else style="font-size:12px;color:#F87171;" :title="dbError">{{ dbError || 'No databases found' }}</div>
-        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#5577A2;cursor:pointer;">
-          <input type="checkbox" v-model="all" style="accent-color:#1A3DCC;"> Show all
+        <div v-else style="font-size:12px;color:var(--er);" :title="dbError">{{ dbError || 'No databases found' }}</div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--su);cursor:pointer;">
+          <input type="checkbox" v-model="all" style="accent-color:var(--br);"> Show all
         </label>
         <button class="btn btn-ghost" @click="load" :disabled="busy">
           <span v-html="I.refresh" :class="busy?'spin':''"></span> Scan
@@ -914,7 +950,7 @@ const Modules = {
     </div>
 
     <!-- ── Local Addons ────────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
       Local Addons <span class="badge badge-blue">{{ mods.length }}</span>
     </div>
 
@@ -922,7 +958,7 @@ const Modules = {
       <input v-model="q" class="input" placeholder="Search modules…" style="max-width:340px;" />
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:60px 0;color:#6B82A8;">
+    <div v-if="busy" style="text-align:center;padding:60px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -940,14 +976,14 @@ const Modules = {
           <tbody>
             <tr v-for="m in filtered" :key="m.name">
               <td>
-                <div style="font-family:monospace;font-size:13px;font-weight:600;color:#DDE4F0;">{{ m.name }}</div>
-                <div v-if="m.has_invalid_name" style="font-size:11px;color:#FCD34D;margin-top:2px;">⚠ Invalid name</div>
+                <div style="font-family:monospace;font-size:13px;font-weight:600;color:var(--tx);">{{ m.name }}</div>
+                <div v-if="m.has_invalid_name" style="font-size:11px;color:var(--wn);margin-top:2px;">⚠ Invalid name</div>
               </td>
-              <td style="font-family:monospace;font-size:11px;color:#6B82A8;">{{ m.path }}</td>
-              <td style="font-size:12px;color:#6B82A8;">{{ m.version||'—' }}</td>
+              <td style="font-family:monospace;font-size:11px;color:var(--mu);">{{ m.path }}</td>
+              <td style="font-size:12px;color:var(--mu);">{{ m.version||'—' }}</td>
               <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?'Installable':'Disabled' }}</span></td>
               <td><span class="badge" :class="stateBadgeClass(stateOf(m))">{{ stateOf(m) }}</span></td>
-              <td style="font-size:11px;color:#5577A2;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
+              <td style="font-size:11px;color:var(--su);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
               <td style="text-align:right;">
                 <button @click="startUpdate(m)" class="btn btn-ghost btn-sm" :disabled="!canUpdate(m)" :title="updateReason(m)">
                   <span v-html="updating===m.name?I.spin:I.refresh" :class="updating===m.name?'spin':''"></span>
@@ -966,11 +1002,11 @@ const Modules = {
     </div>
 
     <!-- ── External Repos (Gitman) ────────────────────────────────────── -->
-    <div style="margin-top:36px;padding-top:24px;border-top:1px solid #151E45;">
+    <div style="margin-top:36px;padding-top:24px;border-top:1px solid var(--ln);">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;">External Repos (Gitman)</div>
-          <div style="font-size:12px;color:#6B82A8;margin-top:3px;">Managed via <code style="color:#6D9CFF;">gitman.yaml</code> → <code style="color:#6D9CFF;">external_addons/</code></div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);">External Repos (Gitman)</div>
+          <div style="font-size:12px;color:var(--mu);margin-top:3px;">Managed via <code style="color:var(--lk);">gitman.yaml</code> → <code style="color:var(--lk);">external_addons/</code></div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
           <button v-if="gitDirty && gitExists" @click="saveGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
@@ -988,27 +1024,27 @@ const Modules = {
       </div>
 
       <!-- Inline Add/Edit form -->
-      <div v-if="gitForm" class="card" style="margin-bottom:14px;border-color:rgba(26,61,204,0.4);">
-        <div style="font-size:13px;font-weight:600;color:#DDE4F0;margin-bottom:14px;">
+      <div v-if="gitForm" class="card" style="margin-bottom:14px;border-color:rgba(var(--br-rgb),0.4);">
+        <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:14px;">
           {{ gitForm.idx === -1 ? 'Add Repository' : 'Edit Repository' }}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <div>
-            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Repository URL</label>
+            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">Repository URL</label>
             <input v-model="gitForm.repo" @blur="autoName" class="input" placeholder="https://github.com/org/repo.git" />
           </div>
           <div>
-            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Folder name</label>
+            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">Folder name</label>
             <input v-model="gitForm.name" class="input" placeholder="auto-filled from URL" />
           </div>
         </div>
         <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:14px;align-items:end;">
           <div>
-            <label style="font-size:11px;color:#6B82A8;display:block;margin-bottom:4px;">Branch / Rev</label>
+            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">Branch / Rev</label>
             <input v-model="gitForm.rev" class="input" placeholder="18.0" />
           </div>
-          <div style="font-size:12px;color:#6B82A8;padding-bottom:9px;">
-            Clones into <code style="color:#6D9CFF;">external_addons/{{ gitForm.name || '&lt;name&gt;' }}</code>
+          <div style="font-size:12px;color:var(--mu);padding-bottom:9px;">
+            Clones into <code style="color:var(--lk);">external_addons/{{ gitForm.name || '&lt;name&gt;' }}</code>
           </div>
         </div>
         <div style="display:flex;gap:8px;">
@@ -1021,17 +1057,17 @@ const Modules = {
         </div>
       </div>
 
-      <div v-if="gitBusy" style="text-align:center;padding:36px 0;color:#6B82A8;">
+      <div v-if="gitBusy" style="text-align:center;padding:36px 0;color:var(--mu);">
         <span v-html="I.spin" class="spin" style="width:22px;height:22px;display:inline-block;"></span>
       </div>
 
       <template v-else>
         <!-- gitman.yaml does not exist yet -->
         <div v-if="!gitExists && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:32px 20px;">
-          <div v-html="I.link" style="width:32px;height:32px;color:#1A3D80;margin:0 auto 12px;"></div>
-          <div style="font-size:15px;font-weight:700;color:#DDE4F0;margin-bottom:6px;">gitman.yaml not found</div>
-          <div style="font-size:12px;color:#5577A2;margin-bottom:18px;">
-            This project has no <code style="color:#6D9CFF;">gitman.yaml</code>.<br>
+          <div v-html="I.link" style="width:32px;height:32px;color:var(--su);margin:0 auto 12px;"></div>
+          <div style="font-size:15px;font-weight:700;color:var(--tx);margin-bottom:6px;">gitman.yaml not found</div>
+          <div style="font-size:12px;color:var(--su);margin-bottom:18px;">
+            This project has no <code style="color:var(--lk);">gitman.yaml</code>.<br>
             Create it to manage external Odoo repositories (community modules, OCA, etc.)
           </div>
           <button @click="initGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
@@ -1041,9 +1077,9 @@ const Modules = {
         </div>
         <!-- gitman.yaml exists but has no repos yet -->
         <div v-else-if="gitExists && !gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
-          <div v-html="I.link" style="width:30px;height:30px;color:#1A2A50;margin:0 auto 10px;"></div>
-          <div style="font-size:14px;font-weight:600;color:#6B82A8;margin-bottom:5px;">No external repos configured</div>
-          <div style="font-size:12px;color:#5577A2;">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
+          <div v-html="I.link" style="width:30px;height:30px;color:var(--su);margin:0 auto 10px;"></div>
+          <div style="font-size:14px;font-weight:600;color:var(--mu);margin-bottom:5px;">No external repos configured</div>
+          <div style="font-size:12px;color:var(--su);">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
         </div>
         <div v-else-if="gitSources.length" class="card-flat">
           <table class="table">
@@ -1052,8 +1088,8 @@ const Modules = {
             </thead>
             <tbody>
               <tr v-for="(s, idx) in gitSources" :key="idx">
-                <td style="font-family:monospace;font-size:13px;font-weight:600;color:#DDE4F0;">{{ s.name }}</td>
-                <td style="font-family:monospace;font-size:11px;color:#6B82A8;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="s.repo">{{ s.repo }}</td>
+                <td style="font-family:monospace;font-size:13px;font-weight:600;color:var(--tx);">{{ s.name }}</td>
+                <td style="font-family:monospace;font-size:11px;color:var(--mu);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="s.repo">{{ s.repo }}</td>
                 <td><span class="badge badge-blue">{{ s.rev }}</span></td>
                 <td style="text-align:right;">
                   <div style="display:flex;gap:5px;justify-content:flex-end;">
@@ -1109,7 +1145,7 @@ const Instances = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -1122,34 +1158,34 @@ const Instances = {
       </div>
 
       <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:18px;">
-        <div v-for="i in inst" :key="i.env" class="card" :style="{borderColor:i.env==='prod'?'rgba(239,68,68,0.25)':'rgba(26,61,204,0.3)'}">
+        <div v-for="i in inst" :key="i.env" class="card" :style="{borderColor:i.env==='prod'?'rgba(var(--er-rgb),0.25)':'rgba(var(--br-rgb),0.3)'}">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
             <div style="display:flex;align-items:center;gap:9px;">
-              <span v-html="I.instances" style="width:18px;height:18px;color:#1A3DCC;"></span>
-              <span style="font-size:16px;font-weight:700;color:#DDE4F0;text-transform:capitalize;">{{ i.env }}</span>
+              <span v-html="I.instances" style="width:18px;height:18px;color:var(--lk);"></span>
+              <span style="font-size:16px;font-weight:700;color:var(--tx);text-transform:capitalize;">{{ i.env }}</span>
             </div>
             <span class="badge" :class="i.env==='prod'?'badge-red':'badge-blue'">{{ i.env==='prod'?'Production':'Staging' }}</span>
           </div>
 
           <div style="display:grid;gap:7px;margin-bottom:18px;font-size:12px;">
-            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ i.host||'—' }}</span></div>
-            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Domain</span>
-              <a :href="'https://'+i.domain" target="_blank" style="color:#1A3DCC;text-decoration:none;font-family:monospace;display:flex;align-items:center;gap:4px;">
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Host</span><span style="color:var(--tx);font-family:monospace;">{{ i.host||'—' }}</span></div>
+            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Domain</span>
+              <a :href="'https://'+i.domain" target="_blank" style="color:var(--lk);text-decoration:none;font-family:monospace;display:flex;align-items:center;gap:4px;">
                 {{ i.domain }} <span v-html="I.ext" style="width:10px;height:10px;"></span>
               </a>
             </div>
-            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Odoo</span><span style="color:#DDE4F0;">{{ i.odoo_version||'—' }}</span></div>
-            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Type</span><span class="badge badge-gray">{{ i.type }}</span></div>
-            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Path</span><span style="color:#6B82A8;font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Odoo</span><span style="color:var(--tx);">{{ i.odoo_version||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Type</span><span class="badge badge-gray">{{ i.type }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Path</span><span style="color:var(--mu);font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
           </div>
 
-          <div style="border-top:1px solid #151E45;padding-top:14px;display:flex;align-items:center;gap:10px;">
+          <div style="border-top:1px solid var(--ln);padding-top:14px;display:flex;align-items:center;gap:10px;">
             <button @click="deploy(i.env)" class="btn btn-primary" :disabled="dep[i.env]">
               <span v-html="dep[i.env]?I.spin:I.deploy" :class="dep[i.env]?'spin':''"></span>
               {{ dep[i.env]?'Deploying…':'Deploy' }}
             </button>
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#6B82A8;cursor:pointer;">
-              <input type="checkbox" v-model="dry[i.env]" style="accent-color:#1A3DCC;"> Dry run
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
+              <input type="checkbox" v-model="dry[i.env]" style="accent-color:var(--br);"> Dry run
             </label>
           </div>
         </div>
@@ -1223,22 +1259,22 @@ const Services = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
     <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px;">
 
       <!-- Mailpit -->
-      <div class="card" :style="{borderColor:mail.enabled?'rgba(34,197,94,0.3)':''}">
+      <div class="card" :style="{borderColor:mail.enabled?'rgba(var(--ok-rgb),0.3)':''}">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:38px;height:38px;background:rgba(26,61,204,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
-              <span v-html="I.mail" style="width:18px;height:18px;color:#1A3DCC;"></span>
+            <div style="width:38px;height:38px;background:rgba(var(--br-rgb),0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span v-html="I.mail" style="width:18px;height:18px;color:var(--lk);"></span>
             </div>
             <div>
-              <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Mailpit</div>
-              <div style="font-size:12px;color:#6B82A8;">Local SMTP testing</div>
+              <div style="font-size:15px;font-weight:700;color:var(--tx);">Mailpit</div>
+              <div style="font-size:12px;color:var(--mu);">Local SMTP testing</div>
             </div>
           </div>
           <label class="toggle" :style="mailBusy?'opacity:.5;pointer-events:none':''">
@@ -1248,15 +1284,15 @@ const Services = {
         </div>
 
         <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Service</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?'Enabled':'Disabled' }}</span></div>
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Container</span>
-            <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:#6B82A8;">{{ mail.running?'Running':'Stopped' }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Service</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?'Enabled':'Disabled' }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Container</span>
+            <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:var(--mu);">{{ mail.running?'Running':'Stopped' }}</span></div>
           </div>
-          <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">SMTP</span><span style="color:#DDE4F0;font-family:monospace;">:1025</span></div>
-          <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Web UI</span><span style="color:#DDE4F0;font-family:monospace;">:8025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">SMTP</span><span style="color:var(--tx);font-family:monospace;">:1025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Web UI</span><span style="color:var(--tx);font-family:monospace;">:8025</span></div>
         </div>
 
-        <div style="border-top:1px solid #151E45;padding-top:12px;">
+        <div style="border-top:1px solid var(--ln);padding-top:12px;">
           <a href="http://localhost:8025" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
             <span v-html="I.ext"></span> Open Mailpit
           </a>
@@ -1264,48 +1300,48 @@ const Services = {
       </div>
 
       <!-- Traefik -->
-      <div class="card" :style="{borderColor:traefik.enabled?'rgba(26,61,204,0.35)':''}">
+      <div class="card" :style="{borderColor:traefik.enabled?'rgba(var(--br-rgb),0.35)':''}">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;">
           <div style="display:flex;align-items:center;gap:10px;">
-            <div style="width:38px;height:38px;background:rgba(26,61,204,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
-              <span v-html="I.globe" style="width:18px;height:18px;color:#1A3DCC;"></span>
+            <div style="width:38px;height:38px;background:rgba(var(--br-rgb),0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;">
+              <span v-html="I.globe" style="width:18px;height:18px;color:var(--lk);"></span>
             </div>
             <div>
-              <div style="font-size:15px;font-weight:700;color:#DDE4F0;">Traefik</div>
-              <div style="font-size:12px;color:#6B82A8;">Reverse proxy / HTTPS</div>
+              <div style="font-size:15px;font-weight:700;color:var(--tx);">Traefik</div>
+              <div style="font-size:12px;color:var(--mu);">Reverse proxy / HTTPS</div>
             </div>
           </div>
           <span class="badge" :class="traefik.enabled?'badge-green':'badge-gray'">{{ traefik.enabled?'Active':'Inactive' }}</span>
         </div>
 
         <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Mode</span>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Mode</span>
             <span v-if="traefik.mode" class="badge" :class="traefik.mode==='production'?'badge-purple':'badge-blue'">{{ traefik.mode }}</span>
-            <span v-else style="color:#5577A2;">Not configured</span>
+            <span v-else style="color:var(--su);">Not configured</span>
           </div>
-          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:72px;">Domain</span><span style="color:#DDE4F0;font-family:monospace;">{{ traefik.domain }}</span></div>
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:#5577A2;min-width:72px;">Override</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?'Present':'Not found' }}</span></div>
+          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Domain</span><span style="color:var(--tx);font-family:monospace;">{{ traefik.domain }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Override</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?'Present':'Not found' }}</span></div>
         </div>
 
-        <div style="border-top:1px solid #151E45;padding-top:12px;">
+        <div style="border-top:1px solid var(--ln);padding-top:12px;">
           <button v-if="traefik.enabled" @click="traefikOff" class="btn btn-danger" :disabled="traefikBusy">
             <span v-html="traefikBusy?I.spin:I.x" :class="traefikBusy?'spin':''"></span> Disable Traefik
           </button>
           <div v-else style="font-size:12px;">
             <div style="display:grid;gap:9px;margin-bottom:12px;">
               <div>
-                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Mode</label>
+                <label style="color:var(--mu);display:block;margin-bottom:4px;">Mode</label>
                 <select v-model="traefikForm.mode" class="input" style="width:auto;">
                   <option value="local">local (HTTP)</option>
                   <option value="production">production (HTTPS + Let's Encrypt)</option>
                 </select>
               </div>
               <div>
-                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Domain</label>
+                <label style="color:var(--mu);display:block;margin-bottom:4px;">Domain</label>
                 <input v-model="traefikForm.domain" class="input" placeholder="myodoo.local" />
               </div>
               <div v-if="traefikForm.mode==='production'">
-                <label style="color:#6B82A8;display:block;margin-bottom:4px;">Let's Encrypt email</label>
+                <label style="color:var(--mu);display:block;margin-bottom:4px;">Let's Encrypt email</label>
                 <input v-model="traefikForm.email" type="email" class="input" placeholder="you@example.com" />
               </div>
             </div>
@@ -1381,12 +1417,12 @@ const Setup = {
     </div>
     <div style="display:grid;gap:20px;max-width:700px;">
       <div class="card">
-        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.rocket" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Step 1 — Scaffold Templates
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.rocket" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Step 1 — Scaffold Templates
         </div>
-        <div style="font-size:12px;color:#6B82A8;margin-bottom:12px;">Copies base template files to the current directory. Run this first in a new project.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">Copies base template files to the current directory. Run this first in a new project.</div>
         <div style="margin-bottom:14px;">
-          <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:6px;">Template type</label>
+          <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:6px;">Template type</label>
           <select v-model="form.template" class="input" style="width:auto;">
             <option value="basic">basic — standard Odoo setup with Docker</option>
             <option value="advanced">advanced — with extra tooling</option>
@@ -1399,24 +1435,24 @@ const Setup = {
         </button>
       </div>
       <div class="card">
-        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.setup" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Step 2 — Initialize Project
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.setup" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Step 2 — Initialize Project
         </div>
-        <div style="font-size:12px;color:#6B82A8;margin-bottom:14px;">Generates Dockerfile, docker-compose.yaml, odoo.conf and launch.json from your answers below.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:14px;">Generates Dockerfile, docker-compose.yaml, odoo.conf and launch.json from your answers below.</div>
         <div style="display:grid;gap:12px;">
           <div>
-            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Project name *</label>
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Project name *</label>
             <input v-model="form.project_name" class="input" placeholder="my-odoo-project — used as container name prefix" />
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Odoo version</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Odoo version</label>
               <select v-model="form.odoo_version" class="input">
                 <option>15.0</option><option>16.0</option><option>17.0</option><option>18.0</option><option>19.0</option>
               </select>
             </div>
             <div>
-              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Edition</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Edition</label>
               <select v-model="form.odoo_edition" class="input">
                 <option>Community</option><option>Enterprise — requires access to Odoo Enterprise repo</option>
               </select>
@@ -1424,11 +1460,11 @@ const Setup = {
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">PostgreSQL version</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">PostgreSQL version</label>
               <select v-model="form.db_version" class="input"><option>13</option><option>14</option><option>15</option><option>16</option></select>
             </div>
             <div>
-              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Restart policy</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Restart policy</label>
               <select v-model="form.restart" class="input">
                 <option value="unless-stopped">unless-stopped — restart unless manually stopped</option>
                 <option value="always">always — restart on any exit</option>
@@ -1438,42 +1474,42 @@ const Setup = {
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Odoo port</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Odoo port</label>
               <div style="display:flex;gap:7px;">
                 <input v-model="form.odoo_port" type="number" class="input" placeholder="8069" @blur="checkPort('odoo_port')" />
-                <button @click="checkPort('odoo_port')" class="btn btn-ghost btn-sm" title="Check port availability">
-                  <span v-html="I.check" :style="{color:portStatus.odoo_port===true?'#22C55E':portStatus.odoo_port===false?'#EF4444':'inherit'}"></span>
+                <button @click="checkPort('odoo_port')" class="btn btn-ghost btn-sm" title="Check port availability" aria-label="Check port availability">
+                  <span v-html="I.check" :style="{color:portStatus.odoo_port===true?'var(--ok)':portStatus.odoo_port===false?'var(--er)':'inherit'}"></span>
                 </button>
               </div>
-              <div v-if="portStatus.odoo_port===false" style="font-size:11px;color:#F87171;margin-top:3px;">Port in use — choose another</div>
-              <div v-if="portStatus.odoo_port===true" style="font-size:11px;color:#4ADE80;margin-top:3px;">Available</div>
+              <div v-if="portStatus.odoo_port===false" style="font-size:11px;color:var(--er);margin-top:3px;">Port in use — choose another</div>
+              <div v-if="portStatus.odoo_port===true" style="font-size:11px;color:var(--ok);margin-top:3px;">Available</div>
             </div>
             <div>
-              <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">VSCode debug port</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">VSCode debug port</label>
               <input v-model="form.vsc_port" type="number" class="input" placeholder="8888 — for debugpy remote attach" />
             </div>
           </div>
           <div>
-            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Master password (admin_passwd)</label>
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Master password (admin_passwd)</label>
             <input v-model="form.admin_passwd" type="password" class="input" placeholder="admin — Odoo database manager password" />
           </div>
           <div style="display:flex;gap:20px;">
-            <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
-              <input type="checkbox" v-model="form.use_private_repos" style="accent-color:#1A3DCC;"> SSH / Private repos
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mu);cursor:pointer;">
+              <input type="checkbox" v-model="form.use_private_repos" style="accent-color:var(--br);"> SSH / Private repos
             </label>
-            <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
-              <input type="checkbox" v-model="form.use_third_party_repos" style="accent-color:#1A3DCC;"> Gitman repos
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mu);cursor:pointer;">
+              <input type="checkbox" v-model="form.use_third_party_repos" style="accent-color:var(--br);"> Gitman repos
             </label>
           </div>
           <div v-if="form.use_private_repos">
-            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">SSH key (from ~/.ssh/)</label>
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">SSH key (from ~/.ssh/)</label>
             <select v-model="form.ssh_key_name" class="input">
               <option value="">— none —</option>
               <option v-for="k in sshKeys" :key="k" :value="k">{{ k }}</option>
             </select>
           </div>
         </div>
-        <div style="margin-top:18px;border-top:1px solid #151E45;padding-top:14px;">
+        <div style="margin-top:18px;border-top:1px solid var(--ln);padding-top:14px;">
           <button @click="initProject" class="btn btn-primary" :disabled="busy">
             <span v-html="busy?I.spin:I.play" :class="busy?'spin':''"></span>
             {{ busy ? 'Initializing…' : 'Initialize Project (rkd init)' }}
@@ -1554,51 +1590,51 @@ const Deploy = {
       </div>
     </div>
 
-    <div v-if="validation" class="card" :style="{borderColor:validation.ok?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)',marginBottom:'20px'}">
+    <div v-if="validation" class="card" :style="{borderColor:validation.ok?'rgba(var(--ok-rgb),0.3)':'rgba(var(--er-rgb),0.3)',marginBottom:'20px'}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <span v-html="validation.ok?I.check:I.warn" :style="{width:'16px',height:'16px',color:validation.ok?'#22C55E':'#F87171',flexShrink:0}"></span>
-        <span style="font-size:14px;font-weight:600;color:#DDE4F0;">{{ validation.ok ? 'All '+validation.total+' modules valid' : 'Validation errors' }}</span>
+        <span v-html="validation.ok?I.check:I.warn" :style="{width:'16px',height:'16px',color:validation.ok?'var(--ok)':'var(--er)',flexShrink:0}"></span>
+        <span style="font-size:14px;font-weight:600;color:var(--tx);">{{ validation.ok ? 'All '+validation.total+' modules valid' : 'Validation errors' }}</span>
       </div>
-      <div v-if="!validation.ok" style="font-size:12px;color:#F87171;">
+      <div v-if="!validation.ok" style="font-size:12px;color:var(--er);">
         <div v-for="(errs,mod) in validation.errors" :key="mod" style="margin-bottom:3px;">
-          <span style="color:#FCD34D;font-family:monospace;">{{ mod }}</span>: <span v-for="e in errs" :key="e">{{ e }} </span>
+          <span style="color:var(--wn);font-family:monospace;">{{ mod }}</span>: <span v-for="e in errs" :key="e">{{ e }} </span>
         </div>
       </div>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:#6B82A8;">
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
     <template v-else>
       <div v-if="!hasConfig" class="card" style="max-width:600px;margin-bottom:20px;">
-        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.deploy" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Create Deploy Config
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.deploy" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Create Deploy Config
         </div>
-        <div style="font-size:12px;color:#6B82A8;margin-bottom:14px;">Creates <code style="color:#6D9CFF;">.rkd/deploy.yaml</code> with your VPS target configuration.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:14px;">Creates <code style="color:var(--lk);">.rkd/deploy.yaml</code> with your VPS target configuration.</div>
         <div style="display:grid;gap:11px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Target name</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Target name</label>
               <input v-model="initForm.target_name" class="input" placeholder="production — identifier for this target" /></div>
-            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Type</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Type</label>
               <select v-model="initForm.target_type" class="input"><option value="vps">vps — self-hosted Linux server</option><option value="odoo-sh">odoo-sh — Odoo.sh platform</option></select></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 80px;gap:10px;">
-            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Host / IP</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Host / IP</label>
               <input v-model="initForm.host" class="input" placeholder="10.0.0.1 or vps.example.com" /></div>
-            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">SSH Port</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">SSH Port</label>
               <input v-model="initForm.ssh_port" type="number" class="input" placeholder="22" /></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">User</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">User</label>
               <input v-model="initForm.user" class="input" placeholder="ubuntu — SSH user on the VPS" /></div>
-            <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">Deployment</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Deployment</label>
               <select v-model="initForm.deployment_type" class="input"><option value="docker">docker</option><option value="native">native</option></select></div>
           </div>
-          <div><label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:4px;">SSH Key path</label>
+          <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">SSH Key path</label>
             <input v-model="initForm.ssh_key" class="input" placeholder="~/.ssh/id_rsa — leave empty to use ssh-agent" /></div>
         </div>
-        <div style="margin-top:14px;border-top:1px solid #151E45;padding-top:12px;">
+        <div style="margin-top:14px;border-top:1px solid var(--ln);padding-top:12px;">
           <button @click="initDeploy" class="btn btn-primary" :disabled="initBusy">
             <span v-html="initBusy?I.spin:I.play" :class="initBusy?'spin':''"></span>
             {{ initBusy ? 'Creating…' : 'Create deploy.yaml' }}
@@ -1609,20 +1645,20 @@ const Deploy = {
       <div v-else-if="!targets.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.deploy"></div>
         <h3>No deploy targets found</h3>
-        <p>Add targets to <code style="color:#6D9CFF;">.rkd/deploy.yaml</code></p>
+        <p>Add targets to <code style="color:var(--lk);">.rkd/deploy.yaml</code></p>
       </div>
 
       <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;margin-bottom:20px;">
-        <div v-for="t in targets" :key="t.name" class="card" style="border-color:rgba(26,61,204,0.3);">
+        <div v-for="t in targets" :key="t.name" class="card" style="border-color:rgba(var(--br-rgb),0.3);">
           <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">
-            <span v-html="I.deploy" style="width:17px;height:17px;color:#1A3DCC;flex-shrink:0;"></span>
-            <span style="font-size:15px;font-weight:700;color:#DDE4F0;">{{ t.name }}</span>
+            <span v-html="I.deploy" style="width:17px;height:17px;color:var(--lk);flex-shrink:0;"></span>
+            <span style="font-size:15px;font-weight:700;color:var(--tx);">{{ t.name }}</span>
             <span class="badge badge-blue" style="margin-left:auto;">{{ t.type }}</span>
           </div>
           <div style="font-size:12px;margin-bottom:14px;">
-            <div style="display:flex;gap:10px;"><span style="color:#5577A2;min-width:48px;">Host</span><span style="color:#DDE4F0;font-family:monospace;">{{ t.host||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:48px;">Host</span><span style="color:var(--tx);font-family:monospace;">{{ t.host||'—' }}</span></div>
           </div>
-          <div style="border-top:1px solid #151E45;padding-top:12px;display:flex;gap:8px;">
+          <div style="border-top:1px solid var(--ln);padding-top:12px;display:flex;gap:8px;">
             <button @click="deployTarget(t.name,false)" class="btn btn-primary btn-sm" :disabled="depBusy[t.name+'false']">
               <span v-html="depBusy[t.name+'false']?I.spin:I.deploy" :class="depBusy[t.name+'false']?'spin':''"></span> Deploy
             </button>
@@ -1712,34 +1748,34 @@ const Pack = {
           <div class="stat-label">Project</div>
           <div style="display:flex;align-items:center;gap:7px;margin-top:8px;">
             <span class="dot" :class="status.project_exists?'dot-green':'dot-red'"></span>
-            <span style="color:#DDE4F0;">{{ status.project_exists?'Found':'Not found' }}</span>
+            <span style="color:var(--tx);">{{ status.project_exists?'Found':'Not found' }}</span>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-label">rkd-shared.json</div>
           <div style="display:flex;align-items:center;gap:7px;margin-top:8px;">
             <span class="dot" :class="status.shared_json_found?'dot-green':'dot-gray'"></span>
-            <span style="color:#DDE4F0;">{{ status.shared_json_found?'Found':'Not found' }}</span>
+            <span style="color:var(--tx);">{{ status.shared_json_found?'Found':'Not found' }}</span>
           </div>
         </div>
       </div>
 
       <!-- Pack card -->
       <div class="card">
-        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.pack" style="width:16px;height:16px;color:#1A3DCC;flex-shrink:0;"></span> Pack Environment
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.pack" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Pack Environment
         </div>
-        <div style="font-size:12px;color:#6B82A8;margin-bottom:12px;">Creates a ZIP with the full project (code + DB backup + filestore) to share with another developer.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">Creates a ZIP with the full project (code + DB backup + filestore) to share with another developer.</div>
         <div style="display:grid;gap:11px;margin-bottom:14px;">
-          <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#6B82A8;cursor:pointer;">
-            <input type="checkbox" v-model="packForm.include_db" style="accent-color:#1A3DCC;"> Include database backup (pg_dump)
+          <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mu);cursor:pointer;">
+            <input type="checkbox" v-model="packForm.include_db" style="accent-color:var(--br);"> Include database backup (pg_dump)
           </label>
           <div>
-            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Output path (optional)</label>
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Output path (optional)</label>
             <input v-model="packForm.output_path" class="input" placeholder="~/my-project.zip — default: auto-named in current dir" />
           </div>
           <div>
-            <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">Database name (optional)</label>
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Database name (optional)</label>
             <input v-model="packForm.db_name" class="input" placeholder="auto-detect — leave empty to detect automatically" />
           </div>
         </div>
@@ -1751,48 +1787,48 @@ const Pack = {
 
       <!-- Unpack card -->
       <div class="card">
-        <div style="font-size:14px;font-weight:700;color:#DDE4F0;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.pack" style="width:16px;height:16px;color:#7553C8;flex-shrink:0;"></span> Unpack Environment
+        <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+          <span v-html="I.pack" style="width:16px;height:16px;color:var(--pu);flex-shrink:0;"></span> Unpack Environment
         </div>
-        <div style="font-size:13px;color:#6B82A8;margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--mu);margin-bottom:14px;">
           Restore a previously packed environment in the current directory.
-          Requires <code style="background:#090D22;padding:1px 5px;border-radius:4px;color:#6D9CFF;font-size:11px;">rkd-shared.json</code> to be present.
+          Requires <code style="background:var(--s);padding:1px 5px;border-radius:4px;color:var(--lk);font-size:11px;">rkd-shared.json</code> to be present.
         </div>
 
         <!-- Wizard panel (shown after clicking Configure) -->
-        <div v-if="showUnpackWizard" style="border:1px solid #1A2A50;border-radius:8px;padding:16px;margin-bottom:14px;background:#090D22;">
-          <div v-if="loadingInfo" style="color:#6B82A8;font-size:13px;">Loading environment info…</div>
+        <div v-if="showUnpackWizard" style="border:1px solid var(--ln2);border-radius:8px;padding:16px;margin-bottom:14px;background:var(--s);">
+          <div v-if="loadingInfo" style="color:var(--mu);font-size:13px;">Loading environment info…</div>
           <template v-else>
             <!-- Environment metadata -->
-            <div v-if="unpackInfo.meta && unpackInfo.meta.project_name" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #151E45;">
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5577A2;margin-bottom:7px;">Environment detected</div>
+            <div v-if="unpackInfo.meta && unpackInfo.meta.project_name" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--ln);">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--su);margin-bottom:7px;">Environment detected</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                <div style="font-size:12px;color:#6B82A8;">Project: <span style="color:#DDE4F0;">{{ unpackInfo.meta.project_name }}</span></div>
-                <div style="font-size:12px;color:#6B82A8;">Odoo: <span style="color:#DDE4F0;">{{ unpackInfo.meta.odoo_version }}</span></div>
-                <div style="font-size:12px;color:#6B82A8;">Edition: <span style="color:#DDE4F0;">{{ unpackInfo.meta.odoo_edition||'Community' }}</span></div>
-                <div style="font-size:12px;color:#6B82A8;">DB backup: <span :style="{color: unpackInfo.meta.has_db_backup?'#4ADE80':'#9CA3AF'}">{{ unpackInfo.meta.has_db_backup?'Included':'Not included' }}</span></div>
+                <div style="font-size:12px;color:var(--mu);">Project: <span style="color:var(--tx);">{{ unpackInfo.meta.project_name }}</span></div>
+                <div style="font-size:12px;color:var(--mu);">Odoo: <span style="color:var(--tx);">{{ unpackInfo.meta.odoo_version }}</span></div>
+                <div style="font-size:12px;color:var(--mu);">Edition: <span style="color:var(--tx);">{{ unpackInfo.meta.odoo_edition||'Community' }}</span></div>
+                <div style="font-size:12px;color:var(--mu);">DB backup: <span :style="{color: unpackInfo.meta.has_db_backup?'var(--ok)':'var(--gy)'}">{{ unpackInfo.meta.has_db_backup?'Included':'Not included' }}</span></div>
               </div>
             </div>
 
             <!-- SSH Configuration -->
             <div style="margin-bottom:14px;">
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#5577A2;margin-bottom:10px;">🔐 Repository configuration</div>
-              <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#DDE4F0;cursor:pointer;margin-bottom:10px;">
-                <input type="checkbox" v-model="unpackForm.use_ssh" style="accent-color:#1A3DCC;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--su);margin-bottom:10px;">🔐 Repository configuration</div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx);cursor:pointer;margin-bottom:10px;">
+                <input type="checkbox" v-model="unpackForm.use_ssh" style="accent-color:var(--br);">
                 Uses private repositories (SSH key required)
                 <span v-if="unpackInfo.meta && unpackInfo.meta.uses_private_repos" class="badge badge-yellow" style="font-size:9px;">recommended by sender</span>
               </label>
               <div v-if="unpackForm.use_ssh">
-                <label style="font-size:12px;color:#6B82A8;display:block;margin-bottom:5px;">SSH key from ~/.ssh/</label>
+                <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">SSH key from ~/.ssh/</label>
                 <select v-model="unpackForm.ssh_key" class="input">
                   <option value="">— select a key —</option>
                   <option v-for="k in unpackInfo.ssh_keys" :key="k" :value="k">{{ k }}</option>
                 </select>
-                <div v-if="!unpackInfo.ssh_keys.length" style="font-size:11px;color:#F87171;margin-top:5px;">
-                  No SSH keys found in ~/.ssh/ — generate one with <code style="color:#6D9CFF;">ssh-keygen -t ed25519</code>
+                <div v-if="!unpackInfo.ssh_keys.length" style="font-size:11px;color:var(--er);margin-top:5px;">
+                  No SSH keys found in ~/.ssh/ — generate one with <code style="color:var(--lk);">ssh-keygen -t ed25519</code>
                 </div>
-                <div v-if="unpackInfo.meta && unpackInfo.meta.ssh_key_name" style="font-size:11px;color:#6B82A8;margin-top:5px;">
-                  Sender used key: <span style="color:#FCD34D;">{{ unpackInfo.meta.ssh_key_name }}</span>
+                <div v-if="unpackInfo.meta && unpackInfo.meta.ssh_key_name" style="font-size:11px;color:var(--mu);margin-top:5px;">
+                  Sender used key: <span style="color:var(--wn);">{{ unpackInfo.meta.ssh_key_name }}</span>
                 </div>
               </div>
             </div>
@@ -1923,11 +1959,11 @@ const Projects = {
 
     <!-- ── Active project directory ──────────────────────────────────────── -->
     <div style="margin-bottom:24px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Active Project Directory</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Active Project Directory</div>
       <div class="card">
         <div v-if="!editing" style="display:flex;align-items:center;gap:12px;">
-          <span v-html="I.folder" style="width:18px;height:18px;color:#1A3DCC;flex-shrink:0;"></span>
-          <span style="font-family:monospace;font-size:13px;color:#DDE4F0;flex:1;word-break:break-all;">{{ currentPath || '…' }}</span>
+          <span v-html="I.folder" style="width:18px;height:18px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-family:monospace;font-size:13px;color:var(--tx);flex:1;word-break:break-all;">{{ currentPath || '…' }}</span>
           <button @click="editing=true" class="btn btn-ghost btn-sm">Change</button>
         </div>
         <div v-else style="display:flex;gap:8px;align-items:center;">
@@ -1943,9 +1979,9 @@ const Projects = {
 
     <!-- ── Create new project ────────────────────────────────────────────── -->
     <div style="margin-bottom:28px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Create New Project</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Create New Project</div>
       <div class="card">
-        <div style="font-size:13px;color:#6B82A8;margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--mu);margin-bottom:14px;">
           Creates a new directory in the scan folder → navigates to it → opens Setup so you can scaffold and initialize.
         </div>
         <div style="display:flex;gap:10px;margin-bottom:10px;">
@@ -1960,15 +1996,15 @@ const Projects = {
             {{ createBusy ? 'Creating…' : 'Create & Setup' }}
           </button>
         </div>
-        <div style="font-size:11px;color:#5577A2;">
+        <div style="font-size:11px;color:var(--su);">
           Will create:
-          <span style="font-family:monospace;color:#6B82A8;">{{ scanDir }}/{{ newName || '&lt;name&gt;' }}</span>
+          <span style="font-family:monospace;color:var(--mu);">{{ scanDir }}/{{ newName || '&lt;name&gt;' }}</span>
         </div>
       </div>
     </div>
 
     <!-- ── Discover section ──────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:10px;">Discover Projects</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Discover Projects</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
       <input v-model="scanDir" class="input"
              placeholder="~/workspace — base directory to scan recursively"
@@ -1978,7 +2014,7 @@ const Projects = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:60px 0;color:#6B82A8;">
+    <div v-if="busy" style="text-align:center;padding:60px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
       <div style="margin-top:12px;font-size:13px;">Scanning for projects…</div>
     </div>
@@ -1987,11 +2023,11 @@ const Projects = {
       <div v-if="scanned && !projects.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.compass"></div>
         <h3>No projects found</h3>
-        <p>A Rocketdoo project must have both <code style="color:#6D9CFF;">Dockerfile</code> and <code style="color:#6D9CFF;">docker-compose.yaml</code></p>
+        <p>A Rocketdoo project must have both <code style="color:var(--lk);">Dockerfile</code> and <code style="color:var(--lk);">docker-compose.yaml</code></p>
       </div>
 
       <div v-else-if="projects.length">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:14px;">
           {{ projects.length }} Project{{ projects.length !== 1 ? 's' : '' }} Found
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
@@ -2000,10 +2036,10 @@ const Projects = {
             <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
               <div style="flex:1;min-width:0;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
-                  <span v-html="I.folder" style="width:15px;height:15px;color:#1A3DCC;flex-shrink:0;"></span>
-                  <span style="font-size:15px;font-weight:700;color:#DDE4F0;">{{ p.name }}</span>
+                  <span v-html="I.folder" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+                  <span style="font-size:15px;font-weight:700;color:var(--tx);">{{ p.name }}</span>
                 </div>
-                <div style="font-size:10px;color:#5577A2;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                <div style="font-size:10px;color:var(--su);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
                      :title="p.path">{{ p.path }}</div>
               </div>
               <span v-if="p.is_current" class="badge badge-blue" style="margin-left:8px;flex-shrink:0;">Active</span>
@@ -2011,13 +2047,13 @@ const Projects = {
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
               <span class="dot"
                     :class="p.running>0 ? 'dot-green' : p.containers>0 ? 'dot-red' : 'dot-gray'"></span>
-              <span style="font-size:12px;color:#6B82A8;">
+              <span style="font-size:12px;color:var(--mu);">
                 {{ p.containers > 0
                    ? p.running + '/' + p.containers + ' container' + (p.containers!==1?'s':'') + ' running'
                    : 'No containers' }}
               </span>
             </div>
-            <div style="border-top:1px solid #151E45;padding-top:12px;">
+            <div style="border-top:1px solid var(--ln);padding-top:12px;">
               <button v-if="!p.is_current"
                       @click="navigate(p.path)"
                       class="btn btn-primary btn-sm"
@@ -2028,7 +2064,7 @@ const Projects = {
               </button>
               <div v-else style="display:flex;align-items:center;gap:6px;">
                 <span class="dot dot-green" style="width:6px;height:6px;"></span>
-                <span style="font-size:12px;color:#22C55E;font-weight:500;">Currently active</span>
+                <span style="font-size:12px;color:var(--ok);font-weight:500;">Currently active</span>
               </div>
             </div>
           </div>
@@ -2056,7 +2092,7 @@ const Help = {
     </div>
 
     <!-- ── Quick Start ───────────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">Quick Start</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">Quick Start</div>
     <div class="card-flat" style="margin-bottom:28px;">
       <div style="padding:20px 24px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;">
@@ -2068,12 +2104,12 @@ const Help = {
             {n:5, title:'Develop', desc:'Open Odoo in the browser, check logs, add modules.', cli:'http://localhost:8069'},
             {n:6, title:'Deploy', desc:'Push modules to a VPS target when ready for production.', cli:'rkd deploy run -t prod'},
           ]" :key="i"
-          style="display:flex;gap:14px;padding:14px 16px;border-right:1px solid #151E45;border-bottom:1px solid #151E45;">
-            <div style="width:26px;height:26px;border-radius:50%;background:rgba(26,61,204,0.25);border:1px solid rgba(26,61,204,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:#6D9CFF;">{{ step.n }}</div>
+          style="display:flex;gap:14px;padding:14px 16px;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln);">
+            <div style="width:26px;height:26px;border-radius:50%;background:rgba(var(--br-rgb),0.25);border:1px solid rgba(var(--br-rgb),0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:var(--lk);">{{ step.n }}</div>
             <div>
-              <div style="font-size:13px;font-weight:600;color:#DDE4F0;margin-bottom:3px;">{{ step.title }}</div>
-              <div style="font-size:12px;color:#6B82A8;margin-bottom:7px;line-height:1.5;">{{ step.desc }}</div>
-              <code style="font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;color:#4ADE80;font-family:monospace;">{{ step.cli }}</code>
+              <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:3px;">{{ step.title }}</div>
+              <div style="font-size:12px;color:var(--mu);margin-bottom:7px;line-height:1.5;">{{ step.desc }}</div>
+              <code style="font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;color:var(--term-t);font-family:monospace;">{{ step.cli }}</code>
             </div>
           </div>
         </div>
@@ -2081,140 +2117,140 @@ const Help = {
     </div>
 
     <!-- ── View Reference ────────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">View Reference</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">View Reference</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:28px;">
 
       <!-- Projects -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.compass" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Projects</span>
+          <span v-html="I.compass" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Projects</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalent</div>
-        <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:4px 9px;display:inline-block;">cd /path/to/project &amp;&amp; rkd gui</code>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalent</div>
+        <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:4px 9px;display:inline-block;">cd /path/to/project &amp;&amp; rkd gui</code>
       </div>
 
       <!-- Dashboard -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.dashboard" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Dashboard</span>
+          <span v-html="I.dashboard" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Dashboard</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:#DDE4F0;">Start</b> / <b style="color:#DDE4F0;">Stop</b> / <b style="color:#DDE4F0;">Build</b> buttons open a real-time terminal showing the full docker output.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:var(--tx);">Start</b> / <b style="color:var(--tx);">Stop</b> / <b style="color:var(--tx);">Build</b> buttons open a real-time terminal showing the full docker output.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd up -d</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd down</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd restart</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd build --rebuild</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd up -d</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd down</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd restart</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd build --rebuild</code>
         </div>
       </div>
 
       <!-- Containers -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.containers" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Containers</span>
+          <span v-html="I.containers" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Containers</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:#DDE4F0;">Logs</b> to open a live WebSocket stream for that container.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:var(--tx);">Logs</b> to open a live WebSocket stream for that container.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd status</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd logs web -f</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd docker restart web</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd status</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd logs web -f</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd docker restart web</code>
         </div>
       </div>
 
       <!-- Modules -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.modules" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Modules</span>
+          <span v-html="I.modules" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Modules</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Scans the <code style="color:#6D9CFF;font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:#DDE4F0;">External Repos</b> section shows and edits <code style="color:#6D9CFF;font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Scans the <code style="color:var(--lk);font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:var(--tx);">External Repos</b> section shows and edits <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy list-modules</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">gitman update</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy list-modules</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">gitman update</code>
         </div>
       </div>
 
       <!-- Instances -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.instances" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Instances</span>
+          <span v-html="I.instances" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Instances</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:#DDE4F0;">stage</b> and <b style="color:#DDE4F0;">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:var(--tx);">stage</b> and <b style="color:var(--tx);">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance init</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance deploy --env stage</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance init</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance deploy --env stage</code>
         </div>
       </div>
 
       <!-- Services -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.services" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Services</span>
+          <span v-html="I.services" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Services</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;"><b style="color:#DDE4F0;">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:#6D9CFF;font-size:11px;">localhost:8025</code> to inspect them. <b style="color:#DDE4F0;">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;"><b style="color:var(--tx);">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:var(--lk);font-size:11px;">localhost:8025</code> to inspect them. <b style="color:var(--tx);">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd mail on/off</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd traefik on/off</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd mail on/off</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd traefik on/off</code>
         </div>
       </div>
 
       <!-- Deploy -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.deploy" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Deploy</span>
+          <span v-html="I.deploy" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Deploy</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Deploy specific Odoo <b style="color:#DDE4F0;">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:#DDE4F0;">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Deploy specific Odoo <b style="color:var(--tx);">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:var(--tx);">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy init</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy run -t prod</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy init</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy run -t prod</code>
         </div>
       </div>
 
       <!-- Pack -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.pack" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Pack</span>
+          <span v-html="I.pack" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Pack</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;">Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:#DDE4F0;">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:var(--tx);">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd pack</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd unpack</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd pack</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd unpack</code>
         </div>
       </div>
 
       <!-- Setup -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          <span v-html="I.setup" style="width:15px;height:15px;color:#6D9CFF;flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:#DDE4F0;">Setup</span>
+          <span v-html="I.setup" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">Setup</span>
         </div>
-        <p style="font-size:12px;color:#6B82A8;line-height:1.55;margin-bottom:10px;"><b style="color:#DDE4F0;">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:#DDE4F0;">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;"><b style="color:var(--tx);">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:var(--tx);">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd scaffold</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd init</code>
-          <code style="font-size:11px;color:#4ADE80;background:#040711;border:1px solid #0F1830;border-radius:5px;padding:3px 8px;font-family:monospace;">rkd info</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd scaffold</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd init</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd info</code>
         </div>
       </div>
 
     </div><!-- /grid -->
 
     <!-- ── CLI Quick Reference ────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5577A2;margin-bottom:12px;">CLI Quick Reference</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">CLI Quick Reference</div>
     <div class="card-flat" style="margin-bottom:8px;">
       <table class="table">
         <thead>
@@ -2250,16 +2286,16 @@ const Help = {
             ['rkd unpack',                      'Restore an environment from a ZIP'],
             ['rkd del -i',                      'Remove .Identifier files generated by WSL2'],
           ]" :key="i">
-            <td style="font-family:monospace;font-size:12px;color:#6D9CFF;white-space:nowrap;">{{ cmd }}</td>
-            <td style="font-size:12px;color:#6B82A8;">{{ desc }}</td>
+            <td style="font-family:monospace;font-size:12px;color:var(--lk);white-space:nowrap;">{{ cmd }}</td>
+            <td style="font-size:12px;color:var(--mu);">{{ desc }}</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <div style="text-align:center;padding:16px 0 4px;font-size:12px;color:#5577A2;">
-      Run <code style="color:#6D9CFF;font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:4px;padding:2px 7px;">rkd --help</code> or
-      <code style="color:#6D9CFF;font-size:11px;background:#040711;border:1px solid #0F1830;border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
+    <div style="text-align:center;padding:16px 0 4px;font-size:12px;color:var(--su);">
+      Run <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd --help</code> or
+      <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
       for full option details in the terminal.
     </div>
   </div>`
@@ -2295,11 +2331,30 @@ const App = {
     onMounted(async () => {
       try { rkdVersion.value = (await api.get('/version')).version || '' } catch (e) { }
     })
-    const darkMode = ref(localStorage.getItem('rkd-theme') !== 'light')
+    // No stored choice: follow the system theme via the `prefers-color-scheme` block and
+    // never stamp `data-theme` at all. Stamping only happens once the button is used, so a
+    // system-theme change while the GUI is open still shows up for anyone who never chose.
+    function readTheme() {
+      try { return localStorage.getItem('rkd-theme') } catch (e) { return null }
+    }
+    function writeTheme(value) {
+      try { localStorage.setItem('rkd-theme', value) } catch (e) { /* private window, etc. */ }
+    }
+    const systemDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null
+    let storedTheme = readTheme()
+    function currentDarkMode() {
+      return storedTheme ? storedTheme === 'dark' : !!(systemDark && systemDark.matches)
+    }
+    const darkMode = ref(currentDarkMode())
+    function applyTheme() {
+      if (storedTheme) document.documentElement.setAttribute('data-theme', storedTheme)
+      else document.documentElement.removeAttribute('data-theme')
+      darkMode.value = currentDarkMode()
+    }
     function toggleTheme() {
-      darkMode.value = !darkMode.value
-      localStorage.setItem('rkd-theme', darkMode.value ? 'dark' : 'light')
-      document.documentElement.classList.toggle('light', !darkMode.value)
+      storedTheme = darkMode.value ? 'light' : 'dark'
+      writeTheme(storedTheme)
+      applyTheme()
     }
 
     async function init() {
@@ -2310,7 +2365,12 @@ const App = {
     }
 
     onMounted(() => {
-      if (!darkMode.value) document.documentElement.classList.add('light')
+      applyTheme()
+      if (systemDark) {
+        const onSystemChange = () => { if (!storedTheme) darkMode.value = currentDarkMode() }
+        if (systemDark.addEventListener) systemDark.addEventListener('change', onSystemChange)
+        else if (systemDark.addListener) systemDark.addListener(onSystemChange)
+      }
       init()
     })
     return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion, authError }
@@ -2318,9 +2378,9 @@ const App = {
   template: `
   <div v-if="authError" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
     <div class="card" style="max-width:460px;text-align:center;">
-      <span v-html="I.warn" style="width:32px;height:32px;color:#FCD34D;display:inline-block;margin-bottom:12px;"></span>
+      <span v-html="I.warn" style="width:32px;height:32px;color:var(--wn);display:inline-block;margin-bottom:12px;"></span>
       <h2 style="font-size:16px;margin-bottom:8px;">Session token required</h2>
-      <p style="color:#8CA0C4;font-size:13px;line-height:1.6;">
+      <p style="color:var(--mu);font-size:13px;line-height:1.6;">
         This page has no valid session token. Open the URL printed by <code>rkd gui</code>
         in the terminal it is running from — it ends with <code>?token=...</code>.
       </p>
@@ -2331,7 +2391,7 @@ const App = {
     <aside class="sidebar">
       <div class="logo-area">
         <div class="logo-icon">
-          <span v-html="I.rocket" style="width:18px;height:18px;color:white;"></span>
+          <span v-html="I.rocket" style="width:18px;height:18px;color:var(--on-br);"></span>
         </div>
         <div>
           <div class="logo-text">RKD <span class="v3-badge">{{ rkdVersion ? 'v'+rkdVersion : 'v3' }}</span></div>
@@ -2340,31 +2400,33 @@ const App = {
       </div>
 
       <!-- Active path pill -->
-      <div v-if="currentPath" class="active-path" @click="view='projects'" title="Click to manage projects">
+      <button type="button" v-if="currentPath" class="active-path" @click="view='projects'" title="Click to manage projects" aria-label="Manage projects">
         <div class="active-path-label">Working Dir</div>
         <div class="active-path-val">{{ currentPath.split('/').slice(-2).join('/') || currentPath }}</div>
-      </div>
+      </button>
 
-      <nav class="nav">
-        <div v-for="n in nav" :key="n.id"
+      <nav class="nav" aria-label="Main navigation">
+        <button type="button" v-for="n in nav" :key="n.id"
              class="nav-item" :class="{ active: view===n.id }"
+             :aria-current="view===n.id ? 'page' : null"
              @click="view=n.id">
           <span v-html="n.icon"></span>
           {{ n.label }}
-        </div>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <span style="color:#4D6A92;">Rocketdoo GUI<span v-if="rkdVersion"> v{{ rkdVersion }}</span></span>
+          <span style="color:var(--su);">Rocketdoo GUI<span v-if="rkdVersion"> v{{ rkdVersion }}</span></span>
           <button @click="toggleTheme" class="btn btn-ghost btn-sm"
                   :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
+                  :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
                   style="padding:3px 8px;border-radius:6px;">
             <span v-html="darkMode ? I.sun : I.moon" style="width:14px;height:14px;display:block;"></span>
           </button>
         </div>
         <a href="https://rkd-docs.readthedocs.io" target="_blank"
-           style="color:#1A3DCC;text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:4px;">
+           style="color:var(--lk);text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:4px;">
           <span v-html="I.ext" style="width:10px;height:10px;"></span> Documentation
         </a>
       </div>
