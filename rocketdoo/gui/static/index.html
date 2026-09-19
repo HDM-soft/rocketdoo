@@ -8,12 +8,12 @@
 <style>
 :root {
   color-scheme: light dark;
-  --b: #F4F7FC; --s: #FFFFFF; --ln: #DCE3F0; --ln2: #C7D2E8; --term-b: #040711; --term-t: #4ADE80;
+  --b: #F4F7FC; --s: #FFFFFF; --ln: #DCE3F0; --ln2: #7590C6; --term-b: #040711; --term-t: #4ADE80; --term-ln: #0F1830;
   --tx: #0F1729; --mu: #51607B; --su: #5E6B82;
   --br: #1A3DCC; --br-h: #1531A6; --on-br: #FFFFFF; --lk: #1A3DCC;
-  --ok: #15803D; --ok-bg: #E3F5EA; --wn: #92600B; --er: #B91C1C; --er-bg: #FBEAEA;
+  --ok: #126E35; --ok-bg: #E3F5EA; --wn: #84570A; --er: #B91C1C; --er-bg: #FBEAEA;
   --gy: #4B5563; --pu: #6D28D9;
-  --br-rgb: 26,61,204; --ok-rgb: 21,128,61; --wn-rgb: 146,96,11; --er-rgb: 185,28,28;
+  --br-rgb: 26,61,204; --ok-rgb: 18,110,53; --wn-rgb: 132,87,10; --er-rgb: 185,28,28;
   --pu-rgb: 109,40,217; --gy-rgb: 75,85,99; --sd-rgb: 0,0,0;
 }
 :root[data-theme="light"] { color-scheme: light; }
@@ -110,7 +110,7 @@ body { background: var(--b); color: var(--tx); font-family: system-ui, -apple-sy
 .table tr:hover td { background: rgba(var(--br-rgb),0.04); }
 
 /* Log terminal */
-.log-term { background: var(--term-b); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.65; color: #7EC87E; height: 300px; overflow-y: auto; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--ln); }
+.log-term { background: var(--term-b); font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; line-height: 1.65; color: #7EC87E; height: 300px; overflow-y: auto; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--term-ln); }
 .log-err { color: #F87171; }
 .log-warn { color: #FCD34D; }
 
@@ -118,15 +118,16 @@ body { background: var(--b); color: var(--tx); font-family: system-ui, -apple-sy
 .toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
 .toggle input { opacity: 0; width: 0; height: 0; }
 .toggle-track { position: absolute; inset: 0; background: var(--ln2); border-radius: 22px; transition: .2s; cursor: pointer; }
-.toggle-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: var(--su); border-radius: 50%; transition: .2s; }
+.toggle-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: var(--gy); border-radius: 50%; transition: .2s; }
 input:checked ~ .toggle-track { background: var(--br); }
 input:checked ~ .toggle-track::before { transform: translateX(18px); background: var(--on-br); }
+input:focus-visible ~ .toggle-track { outline: 2px solid var(--lk); outline-offset: 2px; }
 
 /* Input */
 .input { background: var(--s); border: 1px solid var(--ln2); border-radius: 7px; padding: 8px 12px; color: var(--tx); font-size: 13px; outline: none; transition: border-color .15s; width: 100%; }
 .input:focus { border-color: var(--lk); }
 
-/* Focus visibility (RF6) */
+/* Focus */
 :focus-visible { outline: 2px solid var(--lk); outline-offset: 2px; }
 
 /* Animations */
@@ -146,10 +147,10 @@ input:checked ~ .toggle-track::before { transform: translateX(18px); background:
 
 /* Empty state */
 .empty { text-align: center; padding: 56px 32px; }
-.empty svg { width: 44px; height: 44px; color: var(--ln2); margin-bottom: 16px; }
+.empty svg { width: 44px; height: 44px; color: var(--su); margin-bottom: 16px; }
 .empty h3 { font-size: 16px; font-weight: 600; color: var(--su); margin-bottom: 8px; }
 .empty p { font-size: 13px; color: var(--su); }
-.code-block { background: var(--term-b); border: 1px solid var(--ln); border-radius: 8px; padding: 14px 20px; display: inline-block; font-family: monospace; font-size: 13px; color: var(--term-t); text-align: left; margin-top: 20px; }
+.code-block { background: var(--term-b); border: 1px solid var(--term-ln); border-radius: 8px; padding: 14px 20px; display: inline-block; font-family: monospace; font-size: 13px; color: var(--term-t); text-align: left; margin-top: 20px; }
 
 /* Project card */
 .proj-card { background: var(--s); border: 1px solid var(--ln); border-radius: 10px; padding: 18px; transition: all .15s; }
@@ -158,7 +159,7 @@ input:checked ~ .toggle-track::before { transform: translateX(18px); background:
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --b: #080B18; --s: #0E1329; --ln: #151E45; --ln2: #1A2A50; --term-b: #040711; --term-t: #4ADE80;
+    --b: #080B18; --s: #0E1329; --ln: #151E45; --ln2: #3D62BB; --term-b: #040711; --term-t: #4ADE80; --term-ln: #0F1830;
     --tx: #E6ECF7; --mu: #9DB0CE; --su: #7E93B6;
     --br: #2450E8; --br-h: #3D63FF; --on-br: #FFFFFF; --lk: #7FA9FF;
     --ok: #4ADE80; --ok-bg: #081A10; --wn: #FBBF24; --er: #FB8B8B; --er-bg: #160808;
@@ -170,7 +171,7 @@ input:checked ~ .toggle-track::before { transform: translateX(18px); background:
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --b: #080B18; --s: #0E1329; --ln: #151E45; --ln2: #1A2A50; --term-b: #040711; --term-t: #4ADE80;
+  --b: #080B18; --s: #0E1329; --ln: #151E45; --ln2: #3D62BB; --term-b: #040711; --term-t: #4ADE80; --term-ln: #0F1830;
   --tx: #E6ECF7; --mu: #9DB0CE; --su: #7E93B6;
   --br: #2450E8; --br-h: #3D63FF; --on-br: #FFFFFF; --lk: #7FA9FF;
   --ok: #4ADE80; --ok-bg: #081A10; --wn: #FBBF24; --er: #FB8B8B; --er-bg: #160808;
@@ -581,6 +582,8 @@ const Dashboard = {
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
               <button type="button" v-for="c in ctrs" :key="c.Name||c.Service"
                    @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
+                   :aria-expanded="logOf===(c.Name||c.Service)"
+                   :aria-label="'Logs for '+(c.Service||c.Name)"
                    :style="{background:'var(--s)',border:'1px solid '+(logOf===(c.Name||c.Service)?'var(--lk)':'var(--ln)'),borderRadius:'8px',padding:'10px 14px',cursor:'pointer',minWidth:'150px',transition:'all .15s',display:'block',font:'inherit',color:'inherit',textAlign:'left'}">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:6px;">
                   <span style="font-size:13px;font-weight:600;color:var(--tx);">{{ c.Service||c.Name }}</span>
@@ -1061,7 +1064,7 @@ const Modules = {
       <template v-else>
         <!-- gitman.yaml does not exist yet -->
         <div v-if="!gitExists && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:32px 20px;">
-          <div v-html="I.link" style="width:32px;height:32px;color:var(--ln2);margin:0 auto 12px;"></div>
+          <div v-html="I.link" style="width:32px;height:32px;color:var(--su);margin:0 auto 12px;"></div>
           <div style="font-size:15px;font-weight:700;color:var(--tx);margin-bottom:6px;">gitman.yaml not found</div>
           <div style="font-size:12px;color:var(--su);margin-bottom:18px;">
             This project has no <code style="color:var(--lk);">gitman.yaml</code>.<br>
@@ -1074,7 +1077,7 @@ const Modules = {
         </div>
         <!-- gitman.yaml exists but has no repos yet -->
         <div v-else-if="gitExists && !gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
-          <div v-html="I.link" style="width:30px;height:30px;color:var(--ln2);margin:0 auto 10px;"></div>
+          <div v-html="I.link" style="width:30px;height:30px;color:var(--su);margin:0 auto 10px;"></div>
           <div style="font-size:14px;font-weight:600;color:var(--mu);margin-bottom:5px;">No external repos configured</div>
           <div style="font-size:12px;color:var(--su);">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
         </div>
@@ -2106,7 +2109,7 @@ const Help = {
             <div>
               <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:3px;">{{ step.title }}</div>
               <div style="font-size:12px;color:var(--mu);margin-bottom:7px;line-height:1.5;">{{ step.desc }}</div>
-              <code style="font-size:11px;background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;color:var(--term-t);font-family:monospace;">{{ step.cli }}</code>
+              <code style="font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;color:var(--term-t);font-family:monospace;">{{ step.cli }}</code>
             </div>
           </div>
         </div>
@@ -2125,7 +2128,7 @@ const Help = {
         </div>
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalent</div>
-        <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:4px 9px;display:inline-block;">cd /path/to/project &amp;&amp; rkd gui</code>
+        <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:4px 9px;display:inline-block;">cd /path/to/project &amp;&amp; rkd gui</code>
       </div>
 
       <!-- Dashboard -->
@@ -2137,10 +2140,10 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:var(--tx);">Start</b> / <b style="color:var(--tx);">Stop</b> / <b style="color:var(--tx);">Build</b> buttons open a real-time terminal showing the full docker output.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd up -d</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd down</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd restart</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd build --rebuild</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd up -d</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd down</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd restart</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd build --rebuild</code>
         </div>
       </div>
 
@@ -2153,9 +2156,9 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:var(--tx);">Logs</b> to open a live WebSocket stream for that container.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd status</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd logs web -f</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd docker restart web</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd status</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd logs web -f</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd docker restart web</code>
         </div>
       </div>
 
@@ -2168,8 +2171,8 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Scans the <code style="color:var(--lk);font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:var(--tx);">External Repos</b> section shows and edits <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy list-modules</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">gitman update</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy list-modules</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">gitman update</code>
         </div>
       </div>
 
@@ -2182,8 +2185,8 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:var(--tx);">stage</b> and <b style="color:var(--tx);">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance init</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance deploy --env stage</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance init</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance deploy --env stage</code>
         </div>
       </div>
 
@@ -2196,8 +2199,8 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;"><b style="color:var(--tx);">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:var(--lk);font-size:11px;">localhost:8025</code> to inspect them. <b style="color:var(--tx);">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd mail on/off</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd traefik on/off</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd mail on/off</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd traefik on/off</code>
         </div>
       </div>
 
@@ -2210,8 +2213,8 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Deploy specific Odoo <b style="color:var(--tx);">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:var(--tx);">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy init</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy run -t prod</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy init</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy run -t prod</code>
         </div>
       </div>
 
@@ -2224,8 +2227,8 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:var(--tx);">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd pack</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd unpack</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd pack</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd unpack</code>
         </div>
       </div>
 
@@ -2238,9 +2241,9 @@ const Help = {
         <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;"><b style="color:var(--tx);">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:var(--tx);">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.</p>
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd scaffold</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd init</code>
-          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd info</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd scaffold</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd init</code>
+          <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd info</code>
         </div>
       </div>
 
@@ -2291,8 +2294,8 @@ const Help = {
     </div>
 
     <div style="text-align:center;padding:16px 0 4px;font-size:12px;color:var(--su);">
-      Run <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--ln);border-radius:4px;padding:2px 7px;">rkd --help</code> or
-      <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
+      Run <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd --help</code> or
+      <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
       for full option details in the terminal.
     </div>
   </div>`
@@ -2363,7 +2366,11 @@ const App = {
 
     onMounted(() => {
       applyTheme()
-      if (systemDark) systemDark.addEventListener('change', () => { if (!storedTheme) darkMode.value = currentDarkMode() })
+      if (systemDark) {
+        const onSystemChange = () => { if (!storedTheme) darkMode.value = currentDarkMode() }
+        if (systemDark.addEventListener) systemDark.addEventListener('change', onSystemChange)
+        else if (systemDark.addListener) systemDark.addListener(onSystemChange)
+      }
       init()
     })
     return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion, authError }
@@ -2393,7 +2400,7 @@ const App = {
       </div>
 
       <!-- Active path pill -->
-      <button type="button" v-if="currentPath" class="active-path" @click="view='projects'" title="Click to manage projects">
+      <button type="button" v-if="currentPath" class="active-path" @click="view='projects'" title="Click to manage projects" aria-label="Manage projects">
         <div class="active-path-label">Working Dir</div>
         <div class="active-path-val">{{ currentPath.split('/').slice(-2).join('/') || currentPath }}</div>
       </button>

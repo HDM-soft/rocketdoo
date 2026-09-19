@@ -7,12 +7,23 @@ and `:root[data-theme="dark"]`. RGB triplets used for translucent overlays
 (`rgba(var(--br-rgb), .3)`) are declared the same way, as a component token
 consumed by `rgba()`. These tests pin down the structure so a future edit
 can't reintroduce a literal hex color, a hand-written `rgba()`/`rgb()`/
-`hsl()`/`hsla()`, or drift the three blocks apart.
+`hsl()`/`hsla()`, a CSS named color, or drift the three blocks apart.
 
 The only literals allowed to remain outside the theme blocks are the
 log-level colors inside the Docker log terminal (`.log-term`, `.log-err`,
 `.log-warn`): that surface is exempt from theming because it renders real
-terminal output at high contrast in both themes.
+terminal output at high contrast in both themes. `test_terminal_hex_exceptions_are_only_the_log_level_colors`
+checks that exclusively, by counting occurrences, not just finding one.
+
+Contrast is checked two ways. `CONTRAST_PAIRS` covers text/icons rendered
+directly on a surface. `TINTED_CONTRAST_PAIRS` covers badges/pills, which
+never render on the plain surface: the text sits on its own translucent tint
+(`rgba(var(--x-rgb), alpha)`) composited over the surface, and RF3 requires
+4.5:1 against that *real*, composited background, not the surface alone.
+`BORDER_CONTRAST_PAIRS` covers WCAG 1.4.11's non-text 3:1 for the few borders
+that are the only thing identifying a control (`.input`, `.btn-ghost`, the
+switch's off-state fill) — plain card/table dividers don't need this, they
+are not the sole way to identify a component.
 
 A separate test guards RF6 (every element operable by keyboard has a visible
 focus indicator): anything wired to `@click` has to be a tag the browser
@@ -26,15 +37,41 @@ from pathlib import Path
 
 INDEX_HTML = Path(__file__).resolve().parent.parent / "rocketdoo" / "gui" / "static" / "index.html"
 
-HEX_RE = re.compile(r"#[0-9A-Fa-f]{3,8}")
+HEX_RE = re.compile(r"(?<!&)#[0-9A-Fa-f]{3,8}")
 # A color function is only a literal when its first argument is a number: `rgba(var(--x),.4)`
 # is a token reference and must not match, `rgba(26,61,204,.4)` is the literal this guards
 # against.
 COLOR_FUNC_LITERAL_RE = re.compile(r"(?:rgba?|hsla?)\(\s*\d[^)]*\)")
-# A CSS named color used directly as a property value (`color:white`), not `transparent`
-# (which has no theme-dependent equivalent) and not a class name like `badge-green` or a
-# property name like `white-space` — both excluded by requiring the colon right before it.
-NAMED_COLOR_LITERAL_RE = re.compile(r":\s*(?:white|black|red|green|blue|yellow|purple|orange|gray|grey)\b")
+# The full CSS Color Module Level 4 named-color list (148 keywords), minus `transparent` and
+# `currentcolor`, which are allowed. Matched with a hyphen-aware boundary on both sides so it
+# never fires inside a class name (`badge-green`, `dot-red`), a property name (`white-space`),
+# or mid-word (`instant`, `constant`) — only a standalone color keyword, wherever it appears:
+# `border: 1px solid white`, a `linear-gradient(...)` stop, or an SVG `fill="white"`. This is
+# deliberately a "reject everything that looks like a raw color" list rather than a "require a
+# colon right before it" pattern: the latter is what let `border:1px solid white` and gradient
+# stops slip past an earlier, narrower version of this same check.
+_CSS_NAMED_COLORS = frozenset(
+    """aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue
+blueviolet brown burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson
+cyan darkblue darkcyan darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta
+darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen darkslateblue darkslategray
+darkslategrey darkturquoise darkviolet deeppink deepskyblue dimgray dimgrey dodgerblue firebrick
+floralwhite forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray grey green greenyellow
+honeydew hotpink indianred indigo ivory khaki lavender lavenderblush lawngreen lemonchiffon
+lightblue lightcoral lightcyan lightgoldenrodyellow lightgray lightgreen lightgrey lightpink
+lightsalmon lightseagreen lightskyblue lightslategray lightslategrey lightsteelblue lightyellow
+lime limegreen linen magenta maroon mediumaquamarine mediumblue mediumorchid mediumpurple
+mediumseagreen mediumslateblue mediumspringgreen mediumturquoise mediumvioletred midnightblue
+mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab orange orangered orchid
+palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru pink plum
+powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown seagreen
+seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan teal
+thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen""".split()
+)
+NAMED_COLOR_LITERAL_RE = re.compile(
+    r"(?<![\w-])(?:" + "|".join(sorted(_CSS_NAMED_COLORS, key=len, reverse=True)) + r")(?![\w-])",
+    re.IGNORECASE,
+)
 COLOR_LITERAL_RE = re.compile(f"{HEX_RE.pattern}|{COLOR_FUNC_LITERAL_RE.pattern}|{NAMED_COLOR_LITERAL_RE.pattern}")
 VAR_USE_RE = re.compile(r"var\(--([a-zA-Z0-9-]+)\)")
 TOKEN_DECL_RE = re.compile(r"--([a-zA-Z0-9-]+):")
@@ -78,20 +115,16 @@ INLINE_STYLE_RE = re.compile(r'style="([^"]*)"')
 TAG_OPEN_RE = re.compile(r"<(\w+)\b((?:\"[^\"]*\"|'[^']*'|[^\">])*)>", re.S)
 NON_INTERACTIVE_CLICK_TAGS = {"div", "span", "a"}
 
-# Every pair mirrors a real foreground/background combination rendered in index.html:
-# body/secondary/tertiary text over the page and over cards, links over both, button
-# text over the brand button, and the semantic/status tokens over the card surface
-# where they render as badge text (badge-green/red/yellow/gray/purple, and the
-# dashboard/module/instance status pills). WCAG 2.1 requires 4.5:1 for this kind of
-# normal-size text in both themes.
+# Text/icons rendered directly on a surface: body/secondary/tertiary text over the page and
+# over cards, links over both, button text over the brand button, and the semantic/status
+# tokens over the card surface where they render as plain text (not badge text — see
+# TINTED_CONTRAST_PAIRS for that). WCAG 2.1 requires 4.5:1 for this kind of normal-size text in
+# both themes.
 #
-# The terminal is excluded on purpose: `.log-term`/`.log-err`/`.log-warn` keep the
-# literal hex colors from TERMINAL_HEX_EXCEPTIONS (RF3's own carve-out, checked by
-# test_terminal_hex_exceptions_are_only_the_log_level_colors), and `.code-block` plus
-# every `<code>` snippet on the Help page render `--term-t` on `--term-b`, a pair that
-# is identical in both themes by construction (both tokens keep the same value in
-# :root, the dark media query and [data-theme=dark]), so there is nothing theme-
-# dependent left to audit there.
+# The terminal is excluded on purpose: `.log-term`/`.log-err`/`.log-warn` keep the literal hex
+# colors from TERMINAL_HEX_EXCEPTIONS (RF3's own carve-out), and `.code-block` plus every
+# `<code>` snippet on the Help page render `--term-t` on `--term-b`, a pair that is identical in
+# both themes by construction, so there is nothing theme-dependent left to audit there.
 CONTRAST_PAIRS = [
     ("tx", "b", 4.5),
     ("tx", "s", 4.5),
@@ -107,6 +140,31 @@ CONTRAST_PAIRS = [
     ("er", "s", 4.5),
     ("gy", "s", 4.5),
     ("pu", "s", 4.5),
+]
+
+# Badge/pill text: (fg_token, tint_token, alpha, surface_token, threshold). The tint is what
+# `.badge-*` actually paints, `rgba(var(--tint-rgb), alpha)`, composited over the surface — this
+# is the badge's real background, not the plain surface. tint_token differs from fg_token only
+# for badge-blue/v3-badge, whose fill is `--br-rgb` (the brand fill) even though the text
+# renders in `--lk` (identical to --br in the light theme, not in the dark one).
+TINTED_CONTRAST_PAIRS = [
+    ("ok", "ok", 0.18, "s", 4.5),  # .badge-green
+    ("wn", "wn", 0.18, "s", 4.5),  # .badge-yellow
+    ("er", "er", 0.18, "s", 4.5),  # .badge-red
+    ("pu", "pu", 0.22, "s", 4.5),  # .badge-purple
+    ("gy", "gy", 0.18, "s", 4.5),  # .badge-gray
+    ("lk", "br", 0.22, "s", 4.5),  # .badge-blue
+    ("lk", "br", 0.30, "s", 4.5),  # .v3-badge
+]
+
+# WCAG 1.4.11 non-text contrast: "visual information required to identify user interface
+# components and states". --ln2 is T1's control-border token; these are the cases where the
+# border (or, for the switch's off state, the fill itself) is the *only* thing that identifies
+# the control — `.input` and `.btn-ghost` sit on the exact same surface as their container, and
+# an unchecked switch has no border at all. Plain card/table dividers (--ln) are not the sole
+# way to identify a component, so WCAG 1.4.11 does not reach them.
+BORDER_CONTRAST_PAIRS = [
+    ("ln2", "s", 3.0),
 ]
 
 
@@ -157,11 +215,53 @@ def _token_values(block_text):
     return dict(TOKEN_VALUE_RE.findall(block_text))
 
 
-def _relative_luminance(hexval):
+def _theme_blocks(style):
+    """Token values for the three theme blocks, keyed by a human-readable label."""
+    return {
+        ":root (light)": _token_values(_root_light_match(style).group(1)),
+        "@media prefers-color-scheme: dark": _token_values(_media_dark_match(style).group(1)),
+        ':root[data-theme="dark"]': _token_values(_attr_dark_match(style).group(1)),
+    }
+
+
+def _style_outside_theme_blocks(text):
+    """The `<style>` body and the rest of the document, with the three theme blocks removed."""
+    style_match = _style_block(text)
+    style = style_match.group(1)
+
+    theme_spans = sorted(
+        (
+            _root_light_match(style).span(),
+            _media_dark_match(style).span(),
+            _attr_dark_match(style).span(),
+        ),
+        reverse=True,
+    )
+    style_outside_themes = style
+    for start, end in theme_spans:
+        style_outside_themes = style_outside_themes[:start] + style_outside_themes[end:]
+
+    outside_style_tag = text[: style_match.start()] + text[style_match.end() :]
+    return style_outside_themes, outside_style_tag
+
+
+def _hex_to_rgb(hexval):
     hexval = hexval.lstrip("#")
     if len(hexval) == 3:
         hexval = "".join(c * 2 for c in hexval)
-    r, g, b = (int(hexval[i : i + 2], 16) for i in (0, 2, 4))
+    return tuple(int(hexval[i : i + 2], 16) for i in (0, 2, 4))
+
+
+def _blend(fg_hex, alpha, bg_hex):
+    """`fg_hex` at `alpha` opacity composited over the opaque `bg_hex`, as the browser paints it."""
+    fg = _hex_to_rgb(fg_hex)
+    bg = _hex_to_rgb(bg_hex)
+    blended = (fg[i] * alpha + bg[i] * (1 - alpha) for i in range(3))
+    return "#" + "".join(f"{round(c):02X}" for c in blended)
+
+
+def _relative_luminance(hexval):
+    r, g, b = _hex_to_rgb(hexval)
 
     def channel(c):
         c /= 255
@@ -197,51 +297,66 @@ def test_theme_blocks_declare_the_same_token_set():
 
 
 def test_no_color_literals_outside_the_three_theme_blocks():
-    text = _text()
-    style_match = _style_block(text)
-    style = style_match.group(1)
-
-    theme_spans = sorted(
-        (
-            _root_light_match(style).span(),
-            _media_dark_match(style).span(),
-            _attr_dark_match(style).span(),
-        ),
-        reverse=True,
-    )
-    style_outside_themes = style
-    for start, end in theme_spans:
-        style_outside_themes = style_outside_themes[:start] + style_outside_themes[end:]
-
-    outside_style_tag = text[: style_match.start()] + text[style_match.end() :]
+    style_outside_themes, outside_style_tag = _style_outside_theme_blocks(_text())
     haystack = style_outside_themes + outside_style_tag
 
     found = set(COLOR_LITERAL_RE.findall(haystack))
     unexpected = found - TERMINAL_HEX_EXCEPTIONS
     assert not unexpected, (
-        f"color literals (hex or rgba/rgb/hsl/hsla with numeric arguments) found outside the "
-        f"theme blocks and the terminal exceptions: {sorted(unexpected)}"
+        f"color literals (hex, rgba/rgb/hsl/hsla with numeric arguments, or a CSS named color) "
+        f"found outside the theme blocks and the terminal exceptions: {sorted(unexpected)}"
     )
 
 
 def test_terminal_hex_exceptions_are_only_the_log_level_colors():
-    style = _style_block(_text()).group(1)
+    style_outside_themes, outside_style_tag = _style_outside_theme_blocks(_text())
+    haystack = style_outside_themes + outside_style_tag
+
+    failures = []
     for hexval in TERMINAL_HEX_EXCEPTIONS:
-        assert re.search(rf"\.log-(?:term|err|warn)\s*\{{[^}}]*{re.escape(hexval)}", style), (
-            f"{hexval} is only allowed inside .log-term/.log-err/.log-warn"
-        )
+        total = haystack.count(hexval)
+        within_selectors = len(re.findall(rf"\.log-(?:term|err|warn)\s*\{{[^}}]*{re.escape(hexval)}", style_outside_themes))
+        if total != within_selectors:
+            failures.append(
+                f"{hexval} appears {total} time(s) total but only {within_selectors} inside "
+                ".log-term/.log-err/.log-warn — it is used somewhere else too"
+            )
+    assert not failures, "\n".join(failures)
 
 
 def test_contrast_pairs_meet_wcag_thresholds():
     style = _style_block(_text()).group(1)
-    blocks = {
-        ":root (light)": _token_values(_root_light_match(style).group(1)),
-        "@media prefers-color-scheme: dark": _token_values(_media_dark_match(style).group(1)),
-        ':root[data-theme="dark"]': _token_values(_attr_dark_match(style).group(1)),
-    }
     failures = []
-    for block_name, values in blocks.items():
+    for block_name, values in _theme_blocks(style).items():
         for fg, bg, threshold in CONTRAST_PAIRS:
+            ratio = _contrast_ratio(values[fg], values[bg])
+            if ratio < threshold:
+                failures.append(
+                    f"{block_name}: --{fg} ({values[fg]}) on --{bg} ({values[bg]}) = {ratio:.2f}:1, needs {threshold}:1"
+                )
+    assert not failures, "\n".join(failures)
+
+
+def test_tinted_badge_pairs_meet_wcag_thresholds():
+    style = _style_block(_text()).group(1)
+    failures = []
+    for block_name, values in _theme_blocks(style).items():
+        for fg, tint, alpha, surface, threshold in TINTED_CONTRAST_PAIRS:
+            effective_bg = _blend(values[tint], alpha, values[surface])
+            ratio = _contrast_ratio(values[fg], effective_bg)
+            if ratio < threshold:
+                failures.append(
+                    f"{block_name}: --{fg} on {alpha:.0%} --{tint} over --{surface} "
+                    f"({effective_bg}) = {ratio:.2f}:1, needs {threshold}:1"
+                )
+    assert not failures, "\n".join(failures)
+
+
+def test_border_pairs_meet_wcag_non_text_threshold():
+    style = _style_block(_text()).group(1)
+    failures = []
+    for block_name, values in _theme_blocks(style).items():
+        for fg, bg, threshold in BORDER_CONTRAST_PAIRS:
             ratio = _contrast_ratio(values[fg], values[bg])
             if ratio < threshold:
                 failures.append(
