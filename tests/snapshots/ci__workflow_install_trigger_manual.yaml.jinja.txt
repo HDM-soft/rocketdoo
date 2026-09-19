@@ -28,8 +28,13 @@ jobs:
       - name: Install Rocketdoo and ruff
         run: pip install "rocketdoo~=3.5" ruff
 
+      # An Odoo __manifest__.py is a bare dict literal by design, which ruff's
+      # default rules report as B018 "useless expression" in every module.
       - name: Ruff check
-        run: ruff check --output-format=github --target-version py312 addons/
+        run: >
+          ruff check --output-format=github --target-version py312
+          --extend-per-file-ignores "**/__manifest__.py:B018"
+          addons/
 
       - name: Validate module manifests
         run: rkd deploy validate -p addons
