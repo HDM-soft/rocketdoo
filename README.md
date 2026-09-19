@@ -547,6 +547,20 @@ rkd up -d
 touched, so your own master password survives. Useful in CI, and useful to
 anyone onboarding onto an existing project.
 
+#### The GUI is readable in daylight
+
+The web GUI now defaults to a light theme and meets WCAG 2.1 AA: 4.5:1 for
+text and icons, and 3:1 for the borders that are the only thing identifying a
+control, such as inputs and ghost buttons. Badges and pills are checked
+against the translucent tint they actually sit on, not against the surface
+underneath it.
+
+Every colour is a CSS custom property declared in three theme blocks — the
+light default, `prefers-color-scheme: dark`, and the explicit dark toggle — so
+the two themes cannot drift apart. Anything clickable is a real `<button>` or
+a link with an `href`, which is what puts it in the browser's tab order and
+makes the focus outline meaningful.
+
 #### Modules in subdirectories now work
 
 Odoo's `addons_path` is a static list of directories, so a module at
