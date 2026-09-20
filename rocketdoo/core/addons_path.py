@@ -1,0 +1,150 @@
+"""Keep a project's addons_path in sync with what is under addons/.
+
+Odoo's addons_path is a static, comma-separated list of directories that each
+hold modules directly; a nested addons/oca/mod is invisible to Odoo unless
+.../extra-addons/oca is listed too. discover() finds those directories and
+ensure_addons_path() merges them into an existing config/odoo.conf without
+touching anything else in the file.
+"""
+
+from pathlib import Path
+
+from rocketdoo.core.module_scanner import ModuleScanner
+
+CONTAINER_ADDONS_ROOT = "/usr/lib/python3/dist-packages/odoo/extra-addons"
+
+_EXCLUDE_PATTERNS = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/.git/*",
+    "*/node_modules/*",
+    "*/setup/*",
+]
+
+
+def discover(project_root: Path | str) -> list[str]:
+    """Container-side addons_path entries covering every module under addons/.
+
+    Always includes CONTAINER_ADDONS_ROOT, even when addons/ is empty or
+    missing, so this never degrades the current single-entry behavior.
+    """
+    addons_dir = Path(project_root) / "addons"
+    if not addons_dir.is_dir():
+        return [CONTAINER_ADDONS_ROOT]
+
+    scanner = ModuleScanner(addons_dir, exclude_patterns=_EXCLUDE_PATTERNS)
+
+    entries = {CONTAINER_ADDONS_ROOT}
+    for module in scanner.scan():
+        parent = module.relative_path.parent
+        if str(parent) == ".":
+            continue
+        # addons_path is one comma-separated line: a directory whose name holds
+        # a comma or a newline would split into bogus entries, and re-split on
+        # every run, growing the line without ever converging.
+        if any(char in parent.as_posix() for char in ",\n\r"):
+            continue
+        entries.add(f"{CONTAINER_ADDONS_ROOT}/{parent.as_posix()}")
+
+    return sorted(entries)
+
+
+def _is_managed(path: str) -> bool:
+    """True for CONTAINER_ADDONS_ROOT itself or a directory inside it.
+
+    A plain startswith() would also claim sibling directories that merely
+    share the prefix, such as .../extra-addons-private, and prune them out
+    of the user's config.
+    """
+    return path == CONTAINER_ADDONS_ROOT or path.startswith(f"{CONTAINER_ADDONS_ROOT}/")
+
+
+def _parse_addons_path(lines: list[str]) -> tuple[int | None, list[str]]:
+    for index, line in enumerate(lines):
+        key, sep, _ = line.partition("=")
+        if sep and key.strip() == "addons_path":
+            _, _, value = line.partition("=")
+            return index, [path.strip() for path in value.split(",") if path.strip()]
+
+    return None, []
+
+
+def missing_entries(project_root: Path | str) -> list[str]:
+    """Discovered directories the project's addons_path does not list yet.
+
+    Read-only counterpart of ensure_addons_path(), for callers that report
+    without writing, mirroring gitignore_manager.missing_entries().
+    """
+    odoo_conf = Path(project_root) / "config" / "odoo.conf"
+    if not odoo_conf.exists():
+        return []
+
+    _, current_paths = _parse_addons_path(odoo_conf.read_text().splitlines())
+    return [path for path in discover(project_root) if path not in current_paths]
+
+
+def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
+    """Merge discover() into config/odoo.conf's addons_path line.
+
+    Returns (action, changes):
+        "missing" - config/odoo.conf does not exist, nothing written.
+        "ok"      - addons_path already covers discover() exactly, nothing written.
+        "updated" - the addons_path line was rewritten; changes lists the
+                    entries added ("+path") and removed ("-path").
+        "failed"  - the file could not be written; changes holds the reason.
+
+    Entries outside CONTAINER_ADDONS_ROOT (Odoo's default, enterprise,
+    Gitman's external_addons, user paths) are kept as-is, in their original
+    order and position. Only the managed block is replaced,
+    and only the addons_path line is touched.
+    """
+    project_root = Path(project_root)
+    odoo_conf = project_root / "config" / "odoo.conf"
+    if not odoo_conf.exists():
+        return "missing", []
+
+    discovered = discover(project_root)
+    # newline="" keeps \r\n intact: rewriting one line must not convert the
+    # line endings of a config written on Windows.
+    with odoo_conf.open(encoding="utf-8", newline="") as handle:
+        text = handle.read()
+    ends_with_newline = text.endswith(("\n", "\r"))
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.splitlines()
+
+    line_index, current_paths = _parse_addons_path(lines)
+    managed = [path for path in current_paths if _is_managed(path)]
+    kept = [path for path in current_paths if not _is_managed(path)]
+
+    if managed == discovered:
+        return "ok", []
+
+    insert_at = 0
+    for path in current_paths:
+        if _is_managed(path):
+            break
+        insert_at += 1
+    new_paths = kept[:insert_at] + discovered + kept[insert_at:]
+
+    changes = [f"+{path}" for path in discovered if path not in managed]
+    changes += [f"-{path}" for path in managed if path not in discovered]
+
+    new_line = f"addons_path = {','.join(new_paths)}"
+    if line_index is None:
+        lines.append(new_line)
+    else:
+        lines[line_index] = new_line
+
+    new_text = newline.join(lines)
+    if ends_with_newline or line_index is None:
+        new_text += newline
+
+    try:
+        with odoo_conf.open("w", encoding="utf-8", newline="") as handle:
+            handle.write(new_text)
+    except OSError as error:
+        # Called from `rkd up` and from the GUI: a config we cannot write is
+        # a reason to warn, never a reason to leave the project down.
+        return "failed", [str(error)]
+
+    return "updated", changes

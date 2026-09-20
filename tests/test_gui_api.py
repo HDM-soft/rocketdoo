@@ -10,8 +10,10 @@ endpoint reporting "no compose file" is a pass, one blowing up or reporting a
 missing helper is not.
 """
 
+import ast
 import asyncio
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +22,16 @@ fastapi_testclient = pytest.importorskip("fastapi.testclient")
 from starlette.websockets import WebSocketDisconnect  # noqa: E402
 
 from rocketdoo.gui.server import create_app  # noqa: E402
+
+ROCKETDOO_ROOT = Path(__file__).resolve().parent.parent / "rocketdoo"
+
+
+def _called_name(func_node):
+    if isinstance(func_node, ast.Attribute):
+        return func_node.attr
+    if isinstance(func_node, ast.Name):
+        return func_node.id
+    return None
 
 
 @pytest.fixture
@@ -238,6 +250,43 @@ class TestStreamProcess:
         assert ws.sent[-1] == "\x00exit:3"
 
 
+class TestDockerUpEndpoint:
+    """`POST /api/docker/up` (RF2) must sync addons_path before docker runs."""
+
+    def _write_conf(self, project_dir):
+        config_dir = project_dir / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        conf = config_dir / "odoo.conf"
+        conf.write_text("[options]\naddons_path = /usr/lib/python3/dist-packages/odoo/extra-addons\n")
+        return conf
+
+    def test_addons_path_is_synced_before_docker_compose_runs(self, client, project_dir, monkeypatch):
+        from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT
+
+        mod = project_dir / "addons" / "oca" / "mod"
+        mod.mkdir(parents=True)
+        (mod / "__manifest__.py").write_text("{'name': 'x', 'installable': True}\n")
+        conf = self._write_conf(project_dir)
+
+        conf_seen_by_docker = {}
+
+        class _FakeCompletedProcess:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        def fake_run(cmd, *args, **kwargs):
+            conf_seen_by_docker["addons_path"] = conf.read_text()
+            return _FakeCompletedProcess()
+
+        monkeypatch.setattr("rocketdoo.gui.api.docker_ops.subprocess.run", fake_run)
+
+        response = client.post("/api/docker/up")
+
+        assert response.status_code == 200
+        assert f"{CONTAINER_ADDONS_ROOT}/oca" in conf_seen_by_docker["addons_path"]
+
+
 class TestDockerActionWebSocket:
     """Regression coverage for `/ws/docker/{action}` after extracting
     `_stream_process` (CA13): an unknown action must still error out without
@@ -265,6 +314,22 @@ class TestOdooUpdateWebSocket:
         monkeypatch.setattr(asyncio, "create_subprocess_exec", _must_not_run)
 
         with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text().startswith("[error] ")
+            assert ws.receive_text() == "\x00exit:1"
+
+    def test_addons_path_notice_is_sent_before_build_update_command_runs(self, client, project_dir):
+        """RF2: addons_path is synced even when module/db turn out invalid."""
+        from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT
+
+        mod = project_dir / "addons" / "oca" / "mod"
+        mod.mkdir(parents=True)
+        (mod / "__manifest__.py").write_text("{'name': 'x', 'installable': True}\n")
+        config_dir = project_dir / "config"
+        config_dir.mkdir()
+        (config_dir / "odoo.conf").write_text("[options]\naddons_path = /usr/lib/python3/dist-packages/odoo/extra-addons\n")
+
+        with client.websocket_connect("/ws/odoo/update?module=x&db=y") as ws:
+            assert ws.receive_text() == f"[rkd] addons_path updated: +{CONTAINER_ADDONS_ROOT}/oca"
             assert ws.receive_text().startswith("[error] ")
             assert ws.receive_text() == "\x00exit:1"
 
@@ -657,3 +722,48 @@ class TestTokenMiddlewareEdges:
     def test_the_schema_under_api_needs_the_token(self, untokened, client):
         assert untokened.get("/api/openapi.json").status_code == 401
         assert client.get("/api/openapi.json").status_code == 200
+
+
+class TestNoTracebackOverHTTP:
+    """A traceback must stay on the server (#191).
+
+    `/api/setup/init` used to return `traceback.format_exc()` in the response
+    body, handing whoever held the token the absolute paths of the developer's
+    filesystem and the package layout. The traceback is now logged where the
+    developer already is: the terminal running `rkd gui`.
+    """
+
+    def test_a_failing_setup_does_not_return_the_traceback(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        body = {
+            "project_name": "demo",
+            "odoo_version": "18.0",
+            "db_version": "16",
+            "admin_passwd": "x",
+            "odoo_port": 8069,
+            "vsc_port": 8888,
+            "use_private_repos": True,
+            "ssh_key_name": "no_such_key_anywhere",
+        }
+        payload = client.post("/api/setup/init", json=body).json()
+
+        assert payload["ok"] is False
+        assert "Traceback" not in payload.get("detail", "")
+        assert "rocketdoo/gui/api" not in payload.get("detail", "")
+
+    def test_no_gui_module_sends_a_traceback_to_the_client(self):
+        """Structural guard: a new endpoint reintroducing this fails here.
+
+        `logger.exception()` already records the traceback, so no module under
+        `gui/` needs `format_exc` at all; banning the name outright is both
+        simpler and stricter than trying to tell apart where its result goes.
+        """
+        gui_root = ROCKETDOO_ROOT / "gui"
+        offenders = []
+        for path in sorted(gui_root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and _called_name(node.func) == "format_exc":
+                    offenders.append(f"{path.relative_to(ROCKETDOO_ROOT.parent)}:{node.lineno}")
+
+        assert not offenders, "traceback.format_exc() under gui/:\n" + "\n".join(offenders)

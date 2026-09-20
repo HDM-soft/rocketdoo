@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "3.4.0"
+   - "3.5.0"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -468,7 +468,7 @@ The GUI provides a complete visual interface for all Rocketdoo v3 features:
 | Section | What you can do |
 |---------|-----------------|
 | **Projects** | Discover all Rocketdoo projects on your host, switch between them, create new project directories |
-| **Dashboard** | Project overview, container status cards, quick start/stop/restart/build controls, inline log viewer |
+| **Dashboard** | Project overview as compact tags (Odoo version, edition, PostgreSQL, port), container table with per-service actions, one highlighted action that matches the environment's state |
 | **Containers** | Full container list with status, per-service start/stop/restart, real-time log streaming |
 | **Modules** | Scan and browse Odoo addons with version and dependency info; manage `gitman.yaml` external repos and trigger Docker rebuild |
 | **Instances** | View configured stage/prod environments, trigger deployments with dry-run support |
@@ -476,7 +476,9 @@ The GUI provides a complete visual interface for all Rocketdoo v3 features:
 | **Help** | Quick reference guide for all `rkd` commands |
 
 Additional interface features:
-- **Dark / Light mode toggle** — persisted per browser session
+- **Dark / Light mode toggle** — follows your system's preference until you pick one explicitly; that choice then persists in `localStorage`
+- **Spanish / English switch** — in the top bar, remembers your choice, defaults to your browser's language on first run
+- A persistent top bar shows the active project and how many containers are running, on every screen
 - Real-time log streaming via WebSocket
 - Runs entirely from the installed package — no Node.js or build step required
 
@@ -484,6 +486,123 @@ Additional interface features:
 > from your own machine. The session token adds a second layer on top of that: even another
 > process running as your own user on the same machine cannot call the API without it. See
 > [SECURITY.md](SECURITY.md) for the full threat model.
+
+---
+
+### New in Version 3.5: generated CI and nested addons
+
+#### `rkd ci` — CI for your own project
+
+`rkd ci init` writes a GitHub Actions workflow to `.github/workflows/rkd-ci.yml`,
+parameterised from the project you already have — it reads your Dockerfile and
+compose file, so nothing extra has to be recorded anywhere.
+
+```bash
+rkd ci init                          # asks how often the expensive job runs
+rkd ci init --install-trigger never  # or decide up front
+rkd ci init --force                  # overwrite a workflow you have edited
+```
+
+Two jobs. **Lint** runs `ruff` over `addons/` plus `rkd deploy validate`, on
+every pull request, on pushes to the default branch, and on manual dispatch.
+**Install** boots the project's own compose file and runs
+`odoo -i <your modules> --stop-after-init` against a real Odoo, which is what
+catches a broken manifest or a missing dependency.
+
+Only your modules are involved: `ruff` only reads `addons/`, and third-party
+code cloned by Gitman lands in `external_addons/`, so it is never linted or
+installed by the workflow.
+
+**About Actions minutes.** Public repositories get unlimited standard runner
+minutes. Private ones share 2,000 minutes a month across the whole account on
+the Free plan, and the install job costs a few minutes per run, so it defaults
+to running only on pull requests against your default branch:
+
+| `--install-trigger` | When the install job runs |
+|---------------------|---------------------------|
+| `pull_request` | Default. Pull requests against the default branch. |
+| `push` | Every push and every pull request. |
+| `manual` | Only when dispatched by hand. |
+| `never` | The job is not generated at all. |
+
+The job is also skipped for Enterprise projects and for projects whose
+Dockerfile clones private repositories over SSH — a public runner has neither
+the subscription nor the key. The generated file says so in a comment.
+
+Running `rkd ci init` again never overwrites a workflow you edited: it reports
+the file as modified and leaves it alone unless you pass `--force`.
+
+#### `rkd ci prepare` — make a fresh clone buildable
+
+`config/odoo.conf` and `odoo_pg_pass` are gitignored because they carry
+credentials, but the Dockerfile copies `config/odoo.conf` into the image. A
+clean clone of a teammate's project therefore fails to build with
+`"/config/odoo.conf": not found`.
+
+```bash
+git clone <your project> && cd <your project>
+rkd ci prepare
+rkd up -d
+```
+
+`prepare` regenerates only what is missing — an existing `odoo.conf` is never
+touched, so your own master password survives. Useful in CI, and useful to
+anyone onboarding onto an existing project.
+
+#### The GUI is readable in daylight
+
+The web GUI now follows your system's light/dark preference by default
+(falling back to light if the system has none) and meets WCAG 2.1 AA: 4.5:1
+for text and icons, and 3:1 for the borders that are the only thing
+identifying a control, such as inputs and ghost buttons. Badges and pills are
+checked against the translucent tint they actually sit on, not against the
+surface underneath it.
+
+Every colour is a CSS custom property declared in three theme blocks — the
+light default, `prefers-color-scheme: dark`, and the explicit dark toggle — so
+the two themes cannot drift apart. Anything clickable is a real `<button>` or
+a link with an `href`, which is what puts it in the browser's tab order and
+makes the focus outline meaningful.
+
+#### Modules in subdirectories now work
+
+Odoo's `addons_path` is a static list of directories, so a module at
+`addons/oca/my_module` was invisible to Odoo unless that subdirectory was listed
+too. It did not fail loudly: Odoo logged `Modules loaded` and exited 0 with the
+module simply absent, which is why the GUI's per-module **Update** button did
+nothing for them.
+
+`rkd up`, the GUI's Up button and the GUI's Update button now sync the
+`addons_path` before starting, and `rkd info` warns when it is out of date.
+Existing projects are fixed in place on the next `rkd up` — nothing to recreate.
+The merge only ever rewrites the `addons_path` line and preserves entries it
+does not manage, such as `enterprise` or Gitman's `external_addons`.
+
+---
+
+### New in Version 3.6: language switch and a clearer GUI hierarchy
+
+#### The GUI now speaks Spanish and English
+
+A button in the top bar switches the whole interface between Spanish and
+English without a reload. The choice is saved in `localStorage`; the very
+first time, it follows your browser's own language (Spanish if it starts with
+`es`, English otherwise). Only interface text is translated — Docker logs,
+addon names and versions, container and image names, and the raw status text
+Docker itself reports (`Up 3 hours`) stay exactly as the system produces them.
+
+#### One highlighted action, project context on every screen
+
+A persistent top bar now shows the active project and how many containers are
+running on every screen, not just the Dashboard. The four metric cards that
+used to sit at the top of the Dashboard (Odoo version, PostgreSQL version,
+port, container count) became compact tags next to the project name, and the
+container table moved into the space they freed up. On the Dashboard,
+exactly one button is ever shown filled with colour: "Open Odoo" (in the top
+bar) when the Odoo container itself is running, "Start All" when it isn't.
+The other nine screens still show their own primary actions — the top bar's
+"Open Odoo" is a global shortcut, not a claim that every screen has only one
+highlighted button.
 
 ---
 
