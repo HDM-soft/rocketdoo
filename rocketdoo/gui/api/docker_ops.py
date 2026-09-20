@@ -1,7 +1,10 @@
 import subprocess
+from pathlib import Path
 
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from rocketdoo.core.addons_path import ensure_addons_path
 
 router = APIRouter()
 
@@ -24,6 +27,7 @@ def _run(cmd: list[str], timeout: int = 60) -> dict:
 
 @router.post("/up")
 async def docker_up():
+    ensure_addons_path(Path.cwd())
     return _run(["docker", "compose", "up", "-d"])
 
 
