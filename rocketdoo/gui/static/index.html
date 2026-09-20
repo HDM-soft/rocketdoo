@@ -212,6 +212,776 @@ const api = {
   }
 }
 
+/* ── i18n ────────────────────────────────────────────────────────────────── */
+const L = {
+  es: {
+    absolutePathPlaceholder: `/home/user/projects/my-project — ruta absoluta`,
+    actions: `Acciones`,
+    active: `Activo`,
+    activeProjectDirectory: `Directorio de proyecto activo`,
+    add: `Agregar`,
+    addModulesHint: `Agrega módulos de Odoo al directorio addons/`,
+    addRepo: `Agregar repo`,
+    addRepository: `Agregar repositorio`,
+    addTargetsHint: `Agrega destinos a <code style="color:var(--lk);">.rkd/deploy.yaml</code>`,
+    allModulesValid: `Los {count} módulos son válidos`,
+    autoFilledFromUrl: `se completa automáticamente desde la URL`,
+    available: `Disponible`,
+    branch: `Rama`,
+    branchRev: `Rama / Rev`,
+    build: `Construir`,
+    buildingEllipsis: `Compilando…`,
+    cancel: `Cancelar`,
+    change: `Cambiar`,
+    checkPortAvailability: `Verificar disponibilidad del puerto`,
+    clear: `Limpiar`,
+    cliBuild: `Reconstruye la imagen Docker y reinicia`,
+    cliDelIdentifier: `Elimina los archivos .Identifier generados por WSL2`,
+    cliDeployInit: `Configura los destinos de despliegue de módulos`,
+    cliDeployListModules: `Escanea y lista los módulos de Odoo en addons/`,
+    cliDeployRun: `Despliega módulos a un destino configurado`,
+    cliDeployValidate: `Valida los módulos antes del despliegue`,
+    cliDown: `Detiene y elimina los contenedores (opcionalmente borra los volúmenes)`,
+    cliInfo: `Muestra la configuración actual del proyecto en tablas`,
+    cliInit: `Asistente interactivo — Dockerfile, docker-compose, odoo.conf`,
+    cliInstanceDeploy: `Despliega una instancia completa de Odoo al VPS`,
+    cliInstanceInit: `Configura los entornos VPS de stage/prod`,
+    cliInstanceStatus: `Muestra los entornos de despliegue configurados`,
+    cliLogs: `Transmite los logs del contenedor en vivo`,
+    cliMail: `Activa o desactiva el servidor SMTP de pruebas Mailpit`,
+    cliMailOpen: `Abre la interfaz web de Mailpit en localhost:8025`,
+    cliPack: `Empaqueta el entorno (código + BD) en un ZIP`,
+    cliQuickReference: `Referencia rápida de la CLI`,
+    cliRestart: `Reinicia todos los servicios`,
+    cliScaffold: `Copia los archivos base de la plantilla al directorio actual`,
+    cliStatus: `Muestra el estado de los contenedores (docker compose ps)`,
+    cliStop: `Detiene los contenedores sin eliminarlos`,
+    cliTraefik: `Activa o desactiva el proxy inverso Traefik`,
+    cliTraefikGuide: `Muestra las instrucciones para configurar /etc/hosts`,
+    cliUnpack: `Restaura un entorno desde un ZIP`,
+    cliUp: `Inicia todos los contenedores en segundo plano`,
+    clickToManageProjects: `Haz clic para gestionar proyectos`,
+    clonesInto: `Clona en`,
+    closeTerminal: `Cerrar terminal`,
+    command: `Comando`,
+    completed: `✓ completado`,
+    configureAndUnpack: `Configurar y desempaquetar`,
+    configureDeploymentTargets: `Configura los destinos de despliegue con:`,
+    connect: `Conectar`,
+    connectingTo: `Conectando con {label}…`,
+    container: `Contenedor`,
+    containers: `Contenedores`,
+    containersRunningCount: `{running}/{total} contenedor(es) en ejecución`,
+    containersSubtitle: `Gestiona los servicios Docker de este proyecto`,
+    containersTitle: `Contenedores`,
+    createAndSetup: `Crear y configurar`,
+    createDeployConfig: `Crear configuración de despliegue`,
+    createDeployConfigDesc: `Crea <code style="color:var(--lk);">.rkd/deploy.yaml</code> con la configuración de tu destino VPS.`,
+    createDeployYaml: `Crear deploy.yaml`,
+    createNewProject: `Crear nuevo proyecto`,
+    createNewProjectDesc: `Crea un nuevo directorio en la carpeta escaneada → navega a él → abre Configuración para que puedas ejecutar Scaffold e inicializar.`,
+    createProjectComment: `## Crear un nuevo proyecto`,
+    creatingEllipsis: `Creando…`,
+    currentlyActive: `Actualmente activo`,
+    dashboardSubtitle: `Resumen del proyecto y controles rápidos`,
+    dashboardTitle: `Panel`,
+    database: `Base de datos`,
+    databaseNameLabel: `Nombre de la base de datos (opcional)`,
+    databaseNamePlaceholder: `auto-detectar — deja vacío para detectarla automáticamente`,
+    dbBackupLabel: `Backup de la BD`,
+    delete: `Eliminar`,
+    depends: `Dependencias`,
+    deploy: `Desplegar`,
+    deploySubtitle: `Despliega módulos de Odoo a destinos VPS configurados`,
+    deployTitle: `Despliegue`,
+    deployingEllipsis: `Desplegando…`,
+    deploymentLabel: `Tipo de despliegue`,
+    description: `Descripción`,
+    disableTraefik: `Deshabilitar Traefik`,
+    disabled: `Deshabilitado`,
+    discover: `Descubrir`,
+    discoverProjects: `Descubrir proyectos`,
+    documentation: `Documentación`,
+    domain: `Dominio`,
+    down: `Bajar entorno`,
+    dryRun: `Simulación (dry run)`,
+    edit: `Editar`,
+    editRepository: `Editar repositorio`,
+    editionLabel: `Edición`,
+    enableTraefik: `Habilitar Traefik`,
+    enabled: `Habilitado`,
+    enablingEllipsis: `Habilitando…`,
+    enterpriseHint: `requiere acceso al repositorio de Odoo Enterprise`,
+    environmentDetected: `Entorno detectado`,
+    equivalent: `Equivalente`,
+    equivalents: `Equivalentes`,
+    exitCode: `✗ salida {code}`,
+    externalReposGitman: `Repositorios externos (Gitman)`,
+    folderName: `Nombre de carpeta`,
+    found: `Encontrado`,
+    fullDocs: `Documentación completa`,
+    gitmanRepos: `Repos de Gitman`,
+    gitmanYamlNotFound: `No se encontró gitman.yaml`,
+    gitmanYamlNotFoundDesc: `Este proyecto no tiene <code style="color:var(--lk);">gitman.yaml</code>.<br>Créalo para gestionar repositorios externos de Odoo (módulos de la comunidad, OCA, etc.)`,
+    go: `Ir`,
+    helpContainersDesc: `Tabla de todos los servicios (web, db, mailpit…) con su estado, imagen y puertos. Inicia, detén o reinicia un solo servicio sin afectar a los demás. Haz clic en <b style="color:var(--tx);">Logs</b> para abrir un stream en vivo por WebSocket de ese contenedor.`,
+    helpDashboardDesc: `Resumen del proyecto con estadísticas (versión de Odoo, PG, puertos), pastillas de estado de contenedores, visor de logs en línea y acciones rápidas de docker compose. Los botones <b style="color:var(--tx);">Iniciar</b> / <b style="color:var(--tx);">Detener</b> / <b style="color:var(--tx);">Compilar</b> abren una terminal en tiempo real con la salida completa de docker.`,
+    helpDeployDesc: `Despliega <b style="color:var(--tx);">módulos</b> específicos de Odoo (no la instancia completa) a un destino VPS u Odoo.sh configurado. Primero configura un destino con <b style="color:var(--tx);">Init</b>, luego selecciona módulos y ejecuta un despliegue. Admite simulación, backups y validación antes de enviar.`,
+    helpInstancesDesc: `Despliega una instancia completa de Odoo (Dockerfile + docker-compose + odoo.conf) a un VPS remoto vía SSH. Admite entornos <b style="color:var(--tx);">stage</b> y <b style="color:var(--tx);">prod</b>, despliegue con Docker o nativo, y un modo de simulación (dry-run) para previsualizar qué se enviará antes de transferir archivos.`,
+    helpModulesDesc: `Escanea el directorio <code style="color:var(--lk);font-size:11px;">addons/</code> y lista todos los módulos de Odoo con su versión y dependencias. La sección <b style="color:var(--tx);">Repositorios externos</b> muestra y edita <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — agrega, edita o elimina repos y luego dispara una reconstrucción de Docker para traer los cambios al contenedor.`,
+    helpPackDesc: `Crea un ZIP portable de todo el entorno — código fuente, volcado de la base de datos y filestore — para compartir con un compañero. Quien lo recibe extrae el ZIP y ejecuta <b style="color:var(--tx);">Desempaquetar</b> para restaurarlo con un solo comando. Las claves SSH nunca se incluyen en el archivo.`,
+    helpProjectsDesc: `Recorre el sistema de archivos para abrir proyectos Rocketdoo existentes. Cambiar de proyecto reinicia el servidor de la GUI en el nuevo directorio para que todas las pantallas reflejen el contexto seleccionado.`,
+    helpServicesDesc: `<b style="color:var(--tx);">Mailpit</b> — activa o desactiva un servidor SMTP de pruebas. Odoo le envía los correos en vez de a un servidor real; abre <code style="color:var(--lk);font-size:11px;">localhost:8025</code> para inspeccionarlos. <b style="color:var(--tx);">Traefik</b> — configura un proxy inverso con HTTPS local o de producción, y obtén instrucciones para actualizar tu archivo hosts.`,
+    helpSetupDesc: `<b style="color:var(--tx);">Scaffold</b> copia los archivos base de la plantilla (Dockerfile, docker-compose, odoo.conf…) al directorio actual. El <b style="color:var(--tx);">asistente de inicialización</b> te guía para elegir la versión de Odoo, la edición, los puertos, las claves SSH y los repos de terceros, y luego genera todas las plantillas.`,
+    helpSubtitle: `Referencia de todas las funciones de la GUI con sus equivalentes de línea de comandos`,
+    helpTitle: `Ayuda y guía rápida`,
+    host: `Host`,
+    hostIpLabel: `Host / IP`,
+    image: `Imagen`,
+    inactive: `Inactivo`,
+    includeDbBackup: `Incluir backup de la base de datos (pg_dump)`,
+    included: `Incluido`,
+    initStepDesc: `Genera Dockerfile, docker-compose.yaml, odoo.conf y launch.json a partir de tus respuestas.`,
+    initializeGitmanYaml: `Inicializar gitman.yaml`,
+    initializeProject: `Inicializar proyecto (rkd init)`,
+    initializingEllipsis: `Inicializando…`,
+    installable: `Instalable`,
+    instancesSubtitle: `Despliega Odoo en entornos VPS remotos`,
+    instancesTitle: `Instancias`,
+    invalidName: `Nombre inválido`,
+    letsEncryptEmail: `Correo para Let's Encrypt`,
+    live: `En vivo`,
+    loadingEnvironmentInfo: `Cargando información del entorno…`,
+    localAddons: `Addons locales`,
+    localHttpOption: `local (HTTP)`,
+    localSmtpTesting: `Pruebas de SMTP local`,
+    logs: `Logs`,
+    logsFor: `Logs de {name}`,
+    manageProjects: `Gestionar proyectos`,
+    managedViaGitman: `Se gestiona con <code style="color:var(--lk);">gitman.yaml</code> → <code style="color:var(--lk);">external_addons/</code>`,
+    masterPasswordLabel: `Contraseña maestra (admin_passwd)`,
+    masterPasswordPlaceholder: `admin — contraseña del gestor de bases de datos de Odoo`,
+    mode: `Modo`,
+    module: `Módulo`,
+    modulesSubtitle: `Addons locales y repositorios externos de Gitman`,
+    modulesTitle: `Módulos`,
+    name: `Nombre`,
+    navContainers: `Contenedores`,
+    navDashboard: `Panel`,
+    navDeploy: `Despliegue`,
+    navHelp: `Ayuda`,
+    navInstances: `Instancias`,
+    navModules: `Módulos`,
+    navPack: `Empaquetar`,
+    navProjects: `Proyectos`,
+    navServices: `Servicios`,
+    navSetup: `Configuración`,
+    newProjectNamePlaceholder: `my-odoo-project — nombre del directorio, sin espacios`,
+    noContainers: `Sin contenedores`,
+    noContainersFoundDesc: `Asegúrate de estar en un directorio de proyecto Rocketdoo y ejecuta <code style="color:var(--lk);">rkd up</code>`,
+    noContainersFoundTitle: `No se encontraron contenedores`,
+    noContainersRunning: `No hay contenedores en ejecución`,
+    noDatabasesFound: `No se encontraron bases de datos`,
+    noDeployTargetsFound: `No se encontraron destinos de despliegue`,
+    noExternalReposConfigured: `No hay repositorios externos configurados`,
+    noExternalReposConfiguredDesc: `Haz clic en <b>Agregar repo</b> para obtener módulos comunitarios o privados de Odoo vía gitman`,
+    noInstancesConfigured: `No hay instancias configuradas`,
+    noMatches: `Sin coincidencias`,
+    noModulesFound: `No se encontraron módulos`,
+    noProjectFoundDesc: `Inicializa un proyecto Rocketdoo para empezar`,
+    noProjectFoundTitle: `No se encontró ningún proyecto en este directorio`,
+    noProjectsFound: `No se encontraron proyectos`,
+    noProjectsFoundDesc: `Un proyecto Rocketdoo debe tener tanto <code style="color:var(--lk);">Dockerfile</code> como <code style="color:var(--lk);">docker-compose.yaml</code>`,
+    noSshKeysFoundHint: `No se encontraron claves SSH en ~/.ssh/ — genera una con <code style="color:var(--lk);">ssh-keygen -t ed25519</code>`,
+    noneOption: `— ninguna —`,
+    notConfigured: `Sin configurar`,
+    notFound: `No encontrado`,
+    notIncluded: `No incluido`,
+    odooPortLabel: `Puerto de Odoo`,
+    odooShOption: `odoo-sh — plataforma Odoo.sh`,
+    odooVersion: `Versión de Odoo`,
+    odooVersionLabel: `Versión de Odoo`,
+    openMailpit: `Abrir Mailpit`,
+    openOdoo: `Abrir Odoo`,
+    openProject: `Abrir proyecto`,
+    outputPathLabel: `Ruta de salida (opcional)`,
+    outputPathPlaceholder: `~/my-project.zip — por defecto: nombre automático en el directorio actual`,
+    override: `Override`,
+    packButton: `Empaquetar (rkd pack)`,
+    packEnvironment: `Empaquetar entorno`,
+    packEnvironmentDesc: `Crea un ZIP con el proyecto completo (código + backup de la base de datos + filestore) para compartir con otro desarrollador.`,
+    packSubtitle: `Empaqueta y comparte entornos Rocketdoo completos`,
+    packTitle: `Empaquetar / Desempaquetar`,
+    packingEllipsis: `Empaquetando…`,
+    path: `Ruta`,
+    portInUse: `Puerto en uso — elige otro`,
+    ports: `Puertos`,
+    postgresqlLabel: `PostgreSQL`,
+    postgresqlVersionLabel: `Versión de PostgreSQL`,
+    present: `Presente`,
+    production: `Producción`,
+    productionHttpsOption: `producción (HTTPS + Let's Encrypt)`,
+    project: `Proyecto`,
+    projectNameLabel: `Nombre del proyecto *`,
+    projectNamePlaceholder: `my-odoo-project — se usa como prefijo del nombre del contenedor`,
+    projectsFoundCount: `{count} proyecto(s) encontrado(s)`,
+    projectsSubtitle: `Descubre, navega y crea proyectos Rocketdoo en este host`,
+    projectsTitle: `Proyectos`,
+    qsDeployDesc: `Envía módulos a un destino VPS cuando esté listo para producción.`,
+    qsDeployTitle: `Desplegar`,
+    qsDevelopDesc: `Abre Odoo en el navegador, revisa los logs, agrega módulos.`,
+    qsDevelopTitle: `Desarrollar`,
+    qsInitializeDesc: `Ejecuta el asistente interactivo para configurar Docker y Odoo.`,
+    qsInitializeTitle: `Inicializar`,
+    qsNavigateDesc: `Usa Proyectos para abrir o cambiar al directorio de tu proyecto.`,
+    qsNavigateTitle: `Navegar`,
+    qsScaffoldDesc: `Copia los archivos base de la plantilla al directorio actual.`,
+    qsScaffoldTitle: `Scaffold`,
+    qsStartDesc: `Compila la imagen e inicia todos los contenedores en segundo plano.`,
+    qsStartTitle: `Iniciar`,
+    quickActions: `Acciones rápidas`,
+    quickStart: `Inicio rápido`,
+    rebuild: `Reconstruir`,
+    rebuildDockerHint: `Reconstruye la imagen Docker tras cambios en gitman`,
+    recommendedBySender: `recomendado por quien lo envió`,
+    refresh: `Recargar`,
+    repositoryConfiguration: `Configuración del repositorio`,
+    repositoryUrl: `URL del repositorio`,
+    restart: `Reiniciar`,
+    restartAlwaysOption: `always — reinicia ante cualquier salida`,
+    restartNoOption: `no — nunca reinicia automáticamente`,
+    restartPolicyLabel: `Política de reinicio`,
+    restartUnlessStoppedOption: `unless-stopped — reinicia salvo que se detenga manualmente`,
+    reverseProxyHttps: `Proxy inverso / HTTPS`,
+    runHelpFooter: `Ejecuta <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd --help</code> o
+      <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
+      para ver el detalle completo de opciones en la terminal.`,
+    runScaffold: `Ejecutar Scaffold (rkd scaffold)`,
+    runningCount: `{count} en ejecución`,
+    runningEllipsis: `ejecutando…`,
+    runningState: `En ejecución`,
+    saveChanges: `Guardar cambios`,
+    savingEllipsis: `Guardando…`,
+    scaffoldStepDesc: `Copia los archivos base de la plantilla al directorio actual. Ejecuta esto primero en un proyecto nuevo.`,
+    scaffoldingEllipsis: `Ejecutando Scaffold…`,
+    scan: `Escanear`,
+    scanDirPlaceholder: `~/workspace — directorio base para escanear recursivamente`,
+    scanningEllipsis: `Escaneando…`,
+    scanningForProjects: `Buscando proyectos…`,
+    searchModulesPlaceholder: `Buscar módulos…`,
+    selectAKeyOption: `— seleccionar una clave —`,
+    senderUsedKey: `Clave usada por quien lo envió`,
+    service: `Servicio`,
+    servicesSubtitle: `Servicios opcionales para desarrollo local`,
+    servicesTitle: `Servicios`,
+    sessionTokenRequired: `Se requiere un token de sesión`,
+    sessionTokenRequiredDesc: `Esta página no tiene un token de sesión válido. Abre la URL que imprime <code>rkd gui</code> en la terminal donde se está ejecutando — termina con <code>?token=...</code>.`,
+    setupSubtitle: `Ejecuta Scaffold e inicializa un nuevo proyecto Rocketdoo en el directorio activo`,
+    setupTitle: `Configuración`,
+    showAll: `Mostrar todos`,
+    sshKey: `Clave SSH`,
+    sshKeyFromDir: `Clave SSH (desde ~/.ssh/)`,
+    sshKeyFromDirShort: `Clave SSH desde ~/.ssh/`,
+    sshKeyPathLabel: `Ruta de la clave SSH`,
+    sshKeyPathPlaceholder: `~/.ssh/id_rsa — deja vacío para usar ssh-agent`,
+    sshPortLabel: `Puerto SSH`,
+    sshPrivateRepos: `SSH / Repos privados`,
+    staging: `Staging`,
+    start: `Iniciar`,
+    startAll: `Iniciar todo`,
+    startUnpack: `Iniciar desempaquetado`,
+    state: `En la base`,
+    status: `Estado`,
+    statusPaused: `pausado`,
+    statusRunning: `en ejecución`,
+    statusStopped: `detenido`,
+    statusUnknown: `desconocido`,
+    step1ScaffoldTemplates: `Paso 1 — Scaffold`,
+    step2InitializeProject: `Paso 2 — Inicializar proyecto`,
+    stop: `Detener`,
+    stoppedState: `Detenido`,
+    switchLanguage: `Cambiar a {code}`,
+    switchToDarkMode: `Cambiar a modo oscuro`,
+    switchToLightMode: `Cambiar a modo claro`,
+    switchingEllipsis: `Cambiando…`,
+    targetNameLabel: `Nombre del destino`,
+    targetNamePlaceholder: `production — identificador de este destino`,
+    templateAdvancedOption: `advanced — con herramientas adicionales`,
+    templateBasicOption: `basic — configuración estándar de Odoo con Docker`,
+    templateMinimalOption: `minimal — lo mínimo indispensable`,
+    templateType: `Tipo de plantilla`,
+    tryDifferentSearch: `Prueba con otro término de búsqueda`,
+    type: `Tipo`,
+    unnamedProject: `Proyecto sin nombre`,
+    unpackEnvironment: `Desempaquetar entorno`,
+    unpackEnvironmentDesc: `Restaura un entorno empaquetado previamente en el directorio actual. Requiere que exista <code style="background:var(--s);padding:1px 5px;border-radius:4px;color:var(--lk);font-size:11px;">rkd-shared.json</code>.`,
+    unpackingEllipsis: `Desempaquetando…`,
+    update: `Actualizar`,
+    userLabel: `Usuario`,
+    userPlaceholder: `ubuntu — usuario SSH en el VPS`,
+    usesPrivateRepositories: `Usa repositorios privados (requiere clave SSH)`,
+    validateModules: `Validar módulos`,
+    validationErrors: `Errores de validación`,
+    version: `Versión`,
+    viewReference: `Referencia de pantallas`,
+    vpsOption: `vps — servidor Linux autoalojado`,
+    vscodeDebugPortLabel: `Puerto de depuración de VSCode`,
+    vscodeDebugPortPlaceholder: `8888 — para conectar debugpy en remoto`,
+    waitingForOutput: `Esperando salida…`,
+    webPort: `Puerto web`,
+    willCreate: `Se creará:`,
+    workingDir: `Directorio de trabajo`,
+    dbLabel: `BD`,
+    hostIpPlaceholder: `10.0.0.1 o vps.example.com`,
+    mainNavigation: `Navegación principal`,
+    webUiLabel: `Interfaz web`,
+    loadFailed: `Error al cargar`,
+    failed: `Error`,
+    scanLabel: `Escaneo`,
+    scanFailed: `Error al escanear`,
+    moduleStatesLabel: `Estados de módulos`,
+    confirmModuleUpdate: `¿Actualizar el módulo "{module}" en la base de datos "{db}"?\n\nEsto ejecuta 'odoo -u {module}', que reaplica datos XML sin noupdate="1" y puede sobrescribir registros que editaste a mano.`,
+    updateReasonBusy: `Ya hay otra actualización en curso`,
+    updateReasonNoDb: `No hay una base de datos seleccionada`,
+    updateReasonNotInstalled: `El módulo no está instalado — ejecutar 'odoo -u' no haría nada`,
+    webRestarted: `web reiniciado`,
+    restartFailed: `Error al reiniciar`,
+    gitmanYamlCreated: `gitman.yaml creado`,
+    gitmanCreateFailed: `No se pudo crear gitman.yaml`,
+    nameAndUrlRequired: `El nombre y la URL son obligatorios`,
+    gitmanYamlSaved: `gitman.yaml guardado`,
+    saveFailed: `Error al guardar`,
+    buildCompleted: `Construcción completada`,
+    buildFailed: `Error al construir`,
+    mailpitDisabled: `Mailpit deshabilitado`,
+    mailpitEnabled: `Mailpit habilitado`,
+    traefikDisabled: `Traefik deshabilitado`,
+    traefikEnabled: `Traefik habilitado`,
+    scaffoldCompleteOutput: `✓ Scaffold completo.`,
+    scaffoldComplete: `Scaffold completo`,
+    projectNameRequired: `Se requiere el nombre del proyecto`,
+    projectInitializedOutput: `✓ Proyecto inicializado: {name}`,
+    projectInitialized: `Proyecto inicializado`,
+    deployFailed: `Error al desplegar`,
+    instanceDeployCompleted: `Despliegue de {env} completado`,
+    instanceDryRunCompleted: `Simulación de despliegue de {env} completada`,
+    dryRunPrefixOutput: `[simulación] `,
+    deployDoneOutput: `Despliegue realizado.\n`,
+    dryRunTargetDone: `Simulación de {target} realizada`,
+    deployTargetDone: `Despliegue de {target} realizado`,
+    validationErrorsFound: `Se encontraron errores de validación`,
+    deployYamlCreated: `deploy.yaml creado`,
+    packCompleted: `Empaquetado completado`,
+    packFailed: `Error al empaquetar`,
+    unpackInfoLoadFailed: `No se pudo cargar la información de desempaquetado`,
+    unpackCompleted: `Desempaquetado completado`,
+    unpackFailed: `Error al desempaquetar`,
+    noProjectsFoundInDir: `No se encontraron proyectos Rocketdoo en {dir}`,
+    projectOpenedSwitching: `Proyecto "{name}" abierto — cambiando al Panel`,
+    failedToOpenProject: `No se pudo abrir el proyecto`,
+    failedToCreateDirectory: `No se pudo crear el directorio`,
+    createdOpeningSetup: `{name} creado — abriendo Configuración…`,
+    connectionError: `[error de conexión]`,
+    connectionClosedUnexpectedly: `[conexión cerrada inesperadamente]`,
+    webSocketError: `[error de WebSocket — ¿el servidor está en ejecución?]`,
+    applyEdit: `Guardar`,
+  },
+  en: {
+    absolutePathPlaceholder: `/home/user/projects/my-project — absolute path`,
+    actions: `Actions`,
+    active: `Active`,
+    activeProjectDirectory: `Active Project Directory`,
+    add: `Add`,
+    addModulesHint: `Add Odoo modules to the addons/ directory`,
+    addRepo: `Add Repo`,
+    addRepository: `Add Repository`,
+    addTargetsHint: `Add targets to <code style="color:var(--lk);">.rkd/deploy.yaml</code>`,
+    allModulesValid: `All {count} modules valid`,
+    autoFilledFromUrl: `auto-filled from URL`,
+    available: `Available`,
+    branch: `Branch`,
+    branchRev: `Branch / Rev`,
+    build: `Build`,
+    buildingEllipsis: `Building…`,
+    cancel: `Cancel`,
+    change: `Change`,
+    checkPortAvailability: `Check port availability`,
+    clear: `Clear`,
+    cliBuild: `Rebuild Docker image and restart`,
+    cliDelIdentifier: `Remove .Identifier files generated by WSL2`,
+    cliDeployInit: `Configure module deployment targets`,
+    cliDeployListModules: `Scan and list Odoo modules in addons/`,
+    cliDeployRun: `Deploy modules to a configured target`,
+    cliDeployValidate: `Validate modules before deployment`,
+    cliDown: `Stop and remove containers (optionally delete volumes)`,
+    cliInfo: `Display current project configuration in tables`,
+    cliInit: `Interactive wizard — Dockerfile, docker-compose, odoo.conf`,
+    cliInstanceDeploy: `Deploy full Odoo instance to VPS`,
+    cliInstanceInit: `Configure stage/prod VPS environments`,
+    cliInstanceStatus: `Show configured deployment environments`,
+    cliLogs: `Stream container logs (live follow)`,
+    cliMail: `Toggle Mailpit SMTP testing server`,
+    cliMailOpen: `Open Mailpit web UI at localhost:8025`,
+    cliPack: `Package environment (code + DB) as a ZIP`,
+    cliQuickReference: `CLI Quick Reference`,
+    cliRestart: `Restart all services`,
+    cliScaffold: `Copy base template files into the current directory`,
+    cliStatus: `Show container status (docker compose ps)`,
+    cliStop: `Stop containers without removing them`,
+    cliTraefik: `Toggle Traefik reverse proxy`,
+    cliTraefikGuide: `Show /etc/hosts setup instructions`,
+    cliUnpack: `Restore an environment from a ZIP`,
+    cliUp: `Start all containers in detached mode`,
+    clickToManageProjects: `Click to manage projects`,
+    clonesInto: `Clones into`,
+    closeTerminal: `Close terminal`,
+    command: `Command`,
+    completed: `✓ completed`,
+    configureAndUnpack: `Configure & Unpack`,
+    configureDeploymentTargets: `Configure deployment targets with:`,
+    connect: `Connect`,
+    connectingTo: `Connecting to {label}…`,
+    container: `Container`,
+    containers: `Containers`,
+    containersRunningCount: `{running}/{total} container(s) running`,
+    containersSubtitle: `Manage Docker services for this project`,
+    containersTitle: `Containers`,
+    createAndSetup: `Create & Setup`,
+    createDeployConfig: `Create Deploy Config`,
+    createDeployConfigDesc: `Creates <code style="color:var(--lk);">.rkd/deploy.yaml</code> with your VPS target configuration.`,
+    createDeployYaml: `Create deploy.yaml`,
+    createNewProject: `Create New Project`,
+    createNewProjectDesc: `Creates a new directory in the scan folder → navigates to it → opens Setup so you can scaffold and initialize.`,
+    createProjectComment: `## Create a new project`,
+    creatingEllipsis: `Creating…`,
+    currentlyActive: `Currently active`,
+    dashboardSubtitle: `Project overview and quick controls`,
+    dashboardTitle: `Dashboard`,
+    database: `Database`,
+    databaseNameLabel: `Database name (optional)`,
+    databaseNamePlaceholder: `auto-detect — leave empty to detect automatically`,
+    dbBackupLabel: `DB backup`,
+    delete: `Delete`,
+    depends: `Depends`,
+    deploy: `Deploy`,
+    deploySubtitle: `Deploy Odoo modules to configured VPS targets`,
+    deployTitle: `Deploy`,
+    deployingEllipsis: `Deploying…`,
+    deploymentLabel: `Deployment`,
+    description: `Description`,
+    disableTraefik: `Disable Traefik`,
+    disabled: `Disabled`,
+    discover: `Discover`,
+    discoverProjects: `Discover Projects`,
+    documentation: `Documentation`,
+    domain: `Domain`,
+    down: `Down`,
+    dryRun: `Dry run`,
+    edit: `Edit`,
+    editRepository: `Edit Repository`,
+    editionLabel: `Edition`,
+    enableTraefik: `Enable Traefik`,
+    enabled: `Enabled`,
+    enablingEllipsis: `Enabling…`,
+    enterpriseHint: `requires access to Odoo Enterprise repo`,
+    environmentDetected: `Environment detected`,
+    equivalent: `Equivalent`,
+    equivalents: `Equivalents`,
+    exitCode: `✗ exit {code}`,
+    externalReposGitman: `External Repos (Gitman)`,
+    folderName: `Folder name`,
+    found: `Found`,
+    fullDocs: `Full Docs`,
+    gitmanRepos: `Gitman repos`,
+    gitmanYamlNotFound: `gitman.yaml not found`,
+    gitmanYamlNotFoundDesc: `This project has no <code style="color:var(--lk);">gitman.yaml</code>.<br>Create it to manage external Odoo repositories (community modules, OCA, etc.)`,
+    go: `Go`,
+    helpContainersDesc: `Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:var(--tx);">Logs</b> to open a live WebSocket stream for that container.`,
+    helpDashboardDesc: `Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:var(--tx);">Start</b> / <b style="color:var(--tx);">Stop</b> / <b style="color:var(--tx);">Build</b> buttons open a real-time terminal showing the full docker output.`,
+    helpDeployDesc: `Deploy specific Odoo <b style="color:var(--tx);">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:var(--tx);">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.`,
+    helpInstancesDesc: `Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:var(--tx);">stage</b> and <b style="color:var(--tx);">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.`,
+    helpModulesDesc: `Scans the <code style="color:var(--lk);font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:var(--tx);">External Repos</b> section shows and edits <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.`,
+    helpPackDesc: `Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:var(--tx);">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.`,
+    helpProjectsDesc: `Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.`,
+    helpServicesDesc: `<b style="color:var(--tx);">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:var(--lk);font-size:11px;">localhost:8025</code> to inspect them. <b style="color:var(--tx);">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.`,
+    helpSetupDesc: `<b style="color:var(--tx);">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:var(--tx);">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.`,
+    helpSubtitle: `Reference for all GUI features with their CLI equivalents`,
+    helpTitle: `Help & Quick Guide`,
+    host: `Host`,
+    hostIpLabel: `Host / IP`,
+    image: `Image`,
+    inactive: `Inactive`,
+    includeDbBackup: `Include database backup (pg_dump)`,
+    included: `Included`,
+    initStepDesc: `Generates Dockerfile, docker-compose.yaml, odoo.conf and launch.json from your answers below.`,
+    initializeGitmanYaml: `Initialize gitman.yaml`,
+    initializeProject: `Initialize Project (rkd init)`,
+    initializingEllipsis: `Initializing…`,
+    installable: `Installable`,
+    instancesSubtitle: `Deploy Odoo to remote VPS environments`,
+    instancesTitle: `Instances`,
+    invalidName: `Invalid name`,
+    letsEncryptEmail: `Let's Encrypt email`,
+    live: `Live`,
+    loadingEnvironmentInfo: `Loading environment info…`,
+    localAddons: `Local Addons`,
+    localHttpOption: `local (HTTP)`,
+    localSmtpTesting: `Local SMTP testing`,
+    logs: `Logs`,
+    logsFor: `Logs for {name}`,
+    manageProjects: `Manage projects`,
+    managedViaGitman: `Managed via <code style="color:var(--lk);">gitman.yaml</code> → <code style="color:var(--lk);">external_addons/</code>`,
+    masterPasswordLabel: `Master password (admin_passwd)`,
+    masterPasswordPlaceholder: `admin — Odoo database manager password`,
+    mode: `Mode`,
+    module: `Module`,
+    modulesSubtitle: `Local addons and external Gitman repositories`,
+    modulesTitle: `Modules`,
+    name: `Name`,
+    navContainers: `Containers`,
+    navDashboard: `Dashboard`,
+    navDeploy: `Deploy`,
+    navHelp: `Help`,
+    navInstances: `Instances`,
+    navModules: `Modules`,
+    navPack: `Pack`,
+    navProjects: `Projects`,
+    navServices: `Services`,
+    navSetup: `Setup`,
+    newProjectNamePlaceholder: `my-odoo-project — directory name, no spaces`,
+    noContainers: `No containers`,
+    noContainersFoundDesc: `Make sure you are in a Rocketdoo project directory and run <code style="color:var(--lk);">rkd up</code>`,
+    noContainersFoundTitle: `No containers found`,
+    noContainersRunning: `No containers running`,
+    noDatabasesFound: `No databases found`,
+    noDeployTargetsFound: `No deploy targets found`,
+    noExternalReposConfigured: `No external repos configured`,
+    noExternalReposConfiguredDesc: `Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman`,
+    noInstancesConfigured: `No instances configured`,
+    noMatches: `No matches`,
+    noModulesFound: `No modules found`,
+    noProjectFoundDesc: `Initialize a Rocketdoo project to get started`,
+    noProjectFoundTitle: `No project found in this directory`,
+    noProjectsFound: `No projects found`,
+    noProjectsFoundDesc: `A Rocketdoo project must have both <code style="color:var(--lk);">Dockerfile</code> and <code style="color:var(--lk);">docker-compose.yaml</code>`,
+    noSshKeysFoundHint: `No SSH keys found in ~/.ssh/ — generate one with <code style="color:var(--lk);">ssh-keygen -t ed25519</code>`,
+    noneOption: `— none —`,
+    notConfigured: `Not configured`,
+    notFound: `Not found`,
+    notIncluded: `Not included`,
+    odooPortLabel: `Odoo port`,
+    odooShOption: `odoo-sh — Odoo.sh platform`,
+    odooVersion: `Odoo Version`,
+    odooVersionLabel: `Odoo version`,
+    openMailpit: `Open Mailpit`,
+    openOdoo: `Open Odoo`,
+    openProject: `Open Project`,
+    outputPathLabel: `Output path (optional)`,
+    outputPathPlaceholder: `~/my-project.zip — default: auto-named in current dir`,
+    override: `Override`,
+    packButton: `Pack (rkd pack)`,
+    packEnvironment: `Pack Environment`,
+    packEnvironmentDesc: `Creates a ZIP with the full project (code + DB backup + filestore) to share with another developer.`,
+    packSubtitle: `Package and share complete Rocketdoo environments`,
+    packTitle: `Pack / Unpack`,
+    packingEllipsis: `Packing…`,
+    path: `Path`,
+    portInUse: `Port in use — choose another`,
+    ports: `Ports`,
+    postgresqlLabel: `PostgreSQL`,
+    postgresqlVersionLabel: `PostgreSQL version`,
+    present: `Present`,
+    production: `Production`,
+    productionHttpsOption: `production (HTTPS + Let's Encrypt)`,
+    project: `Project`,
+    projectNameLabel: `Project name *`,
+    projectNamePlaceholder: `my-odoo-project — used as container name prefix`,
+    projectsFoundCount: `{count} Project(s) Found`,
+    projectsSubtitle: `Discover, navigate and create Rocketdoo projects on this host`,
+    projectsTitle: `Projects`,
+    qsDeployDesc: `Push modules to a VPS target when ready for production.`,
+    qsDeployTitle: `Deploy`,
+    qsDevelopDesc: `Open Odoo in the browser, check logs, add modules.`,
+    qsDevelopTitle: `Develop`,
+    qsInitializeDesc: `Run the interactive wizard to configure Docker and Odoo.`,
+    qsInitializeTitle: `Initialize`,
+    qsNavigateDesc: `Use Projects to open or switch to your project directory.`,
+    qsNavigateTitle: `Navigate`,
+    qsScaffoldDesc: `Copy the base template files into the current directory.`,
+    qsScaffoldTitle: `Scaffold`,
+    qsStartDesc: `Build the image and start all containers in the background.`,
+    qsStartTitle: `Start`,
+    quickActions: `Quick Actions`,
+    quickStart: `Quick Start`,
+    rebuild: `Rebuild`,
+    rebuildDockerHint: `Rebuild Docker image after gitman changes`,
+    recommendedBySender: `recommended by sender`,
+    refresh: `Refresh`,
+    repositoryConfiguration: `Repository configuration`,
+    repositoryUrl: `Repository URL`,
+    restart: `Restart`,
+    restartAlwaysOption: `always — restart on any exit`,
+    restartNoOption: `no — never auto-restart`,
+    restartPolicyLabel: `Restart policy`,
+    restartUnlessStoppedOption: `unless-stopped — restart unless manually stopped`,
+    reverseProxyHttps: `Reverse proxy / HTTPS`,
+    runHelpFooter: `Run <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd --help</code> or
+      <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
+      for full option details in the terminal.`,
+    runScaffold: `Run Scaffold (rkd scaffold)`,
+    runningCount: `{count} running`,
+    runningEllipsis: `running…`,
+    runningState: `Running`,
+    saveChanges: `Save Changes`,
+    savingEllipsis: `Saving…`,
+    scaffoldStepDesc: `Copies base template files to the current directory. Run this first in a new project.`,
+    scaffoldingEllipsis: `Scaffolding…`,
+    scan: `Scan`,
+    scanDirPlaceholder: `~/workspace — base directory to scan recursively`,
+    scanningEllipsis: `Scanning…`,
+    scanningForProjects: `Scanning for projects…`,
+    searchModulesPlaceholder: `Search modules…`,
+    selectAKeyOption: `— select a key —`,
+    senderUsedKey: `Sender used key`,
+    service: `Service`,
+    servicesSubtitle: `Optional services for local development`,
+    servicesTitle: `Services`,
+    sessionTokenRequired: `Session token required`,
+    sessionTokenRequiredDesc: `This page has no valid session token. Open the URL printed by <code>rkd gui</code> in the terminal it is running from — it ends with <code>?token=...</code>.`,
+    setupSubtitle: `Scaffold and initialize a new Rocketdoo project in the active directory`,
+    setupTitle: `Setup`,
+    showAll: `Show all`,
+    sshKey: `SSH Key`,
+    sshKeyFromDir: `SSH key (from ~/.ssh/)`,
+    sshKeyFromDirShort: `SSH key from ~/.ssh/`,
+    sshKeyPathLabel: `SSH Key path`,
+    sshKeyPathPlaceholder: `~/.ssh/id_rsa — leave empty to use ssh-agent`,
+    sshPortLabel: `SSH Port`,
+    sshPrivateRepos: `SSH / Private repos`,
+    staging: `Staging`,
+    start: `Start`,
+    startAll: `Start All`,
+    startUnpack: `Start Unpack`,
+    state: `State`,
+    status: `Status`,
+    statusPaused: `paused`,
+    statusRunning: `running`,
+    statusStopped: `stopped`,
+    statusUnknown: `unknown`,
+    step1ScaffoldTemplates: `Step 1 — Scaffold Templates`,
+    step2InitializeProject: `Step 2 — Initialize Project`,
+    stop: `Stop`,
+    stoppedState: `Stopped`,
+    switchLanguage: `Switch to {code}`,
+    switchToDarkMode: `Switch to dark mode`,
+    switchToLightMode: `Switch to light mode`,
+    switchingEllipsis: `Switching…`,
+    targetNameLabel: `Target name`,
+    targetNamePlaceholder: `production — identifier for this target`,
+    templateAdvancedOption: `advanced — with extra tooling`,
+    templateBasicOption: `basic — standard Odoo setup with Docker`,
+    templateMinimalOption: `minimal — bare minimum`,
+    templateType: `Template type`,
+    tryDifferentSearch: `Try a different search term`,
+    type: `Type`,
+    unnamedProject: `Unnamed Project`,
+    unpackEnvironment: `Unpack Environment`,
+    unpackEnvironmentDesc: `Restore a previously packed environment in the current directory. Requires <code style="background:var(--s);padding:1px 5px;border-radius:4px;color:var(--lk);font-size:11px;">rkd-shared.json</code> to be present.`,
+    unpackingEllipsis: `Unpacking…`,
+    update: `Update`,
+    userLabel: `User`,
+    userPlaceholder: `ubuntu — SSH user on the VPS`,
+    usesPrivateRepositories: `Uses private repositories (SSH key required)`,
+    validateModules: `Validate Modules`,
+    validationErrors: `Validation errors`,
+    version: `Version`,
+    viewReference: `View Reference`,
+    vpsOption: `vps — self-hosted Linux server`,
+    vscodeDebugPortLabel: `VSCode debug port`,
+    vscodeDebugPortPlaceholder: `8888 — for debugpy remote attach`,
+    waitingForOutput: `Waiting for output…`,
+    webPort: `Web Port`,
+    willCreate: `Will create:`,
+    workingDir: `Working Dir`,
+    dbLabel: `DB`,
+    hostIpPlaceholder: `10.0.0.1 or vps.example.com`,
+    mainNavigation: `Main navigation`,
+    webUiLabel: `Web UI`,
+    loadFailed: `Load failed`,
+    failed: `Failed`,
+    scanLabel: `Scan`,
+    scanFailed: `Scan failed`,
+    moduleStatesLabel: `Module states`,
+    confirmModuleUpdate: `Update module "{module}" on database "{db}"?\n\nThis runs 'odoo -u {module}', which reapplies XML data without noupdate="1" and can overwrite records you edited by hand.`,
+    updateReasonBusy: `Another update is already running`,
+    updateReasonNoDb: `No database selected`,
+    updateReasonNotInstalled: `Module is not installed — 'odoo -u' on it would be a no-op`,
+    webRestarted: `web restarted`,
+    restartFailed: `Restart failed`,
+    gitmanYamlCreated: `gitman.yaml created`,
+    gitmanCreateFailed: `Could not create gitman.yaml`,
+    nameAndUrlRequired: `Name and URL are required`,
+    gitmanYamlSaved: `gitman.yaml saved`,
+    saveFailed: `Save failed`,
+    buildCompleted: `Build completed`,
+    buildFailed: `Build failed`,
+    mailpitDisabled: `Mailpit disabled`,
+    mailpitEnabled: `Mailpit enabled`,
+    traefikDisabled: `Traefik disabled`,
+    traefikEnabled: `Traefik enabled`,
+    scaffoldCompleteOutput: `✓ Scaffold complete.`,
+    scaffoldComplete: `Scaffold complete`,
+    projectNameRequired: `Project name required`,
+    projectInitializedOutput: `✓ Project initialized: {name}`,
+    projectInitialized: `Project initialized`,
+    deployFailed: `Deploy failed`,
+    instanceDeployCompleted: `{env} deploy completed`,
+    instanceDryRunCompleted: `{env} dry-run deploy completed`,
+    dryRunPrefixOutput: `[dry-run] `,
+    deployDoneOutput: `Deploy done.\n`,
+    dryRunTargetDone: `Dry run {target} done`,
+    deployTargetDone: `Deploy {target} done`,
+    validationErrorsFound: `Validation errors found`,
+    deployYamlCreated: `deploy.yaml created`,
+    packCompleted: `Pack completed`,
+    packFailed: `Pack failed`,
+    unpackInfoLoadFailed: `Could not load unpack info`,
+    unpackCompleted: `Unpack completed`,
+    unpackFailed: `Unpack failed`,
+    noProjectsFoundInDir: `No Rocketdoo projects found in {dir}`,
+    projectOpenedSwitching: `Project "{name}" opened — switching to Dashboard`,
+    failedToOpenProject: `Failed to open project`,
+    failedToCreateDirectory: `Failed to create directory`,
+    createdOpeningSetup: `Created {name} — opening Setup…`,
+    connectionError: `[connection error]`,
+    connectionClosedUnexpectedly: `[connection closed unexpectedly]`,
+    webSocketError: `[WebSocket error — is the server running?]`,
+    applyEdit: `Save`,
+  },
+}
+
+function readLang() {
+  try { return localStorage.getItem('rkd-lang') } catch (e) { return null }
+}
+function writeLang(value) {
+  try { localStorage.setItem('rkd-lang', value) } catch (e) { /* private window, etc. */ }
+}
+function detectLang() {
+  const nav = (navigator.language || '').toLowerCase()
+  return nav.startsWith('es') ? 'es' : 'en'
+}
+const lang = ref(readLang() || detectLang())
+watch(lang, writeLang)
+function toggleLang() {
+  lang.value = lang.value === 'es' ? 'en' : 'es'
+}
+function t(key, vars) {
+  const dict = L[lang.value] || L.en
+  const value = dict[key] ?? L.en[key] ?? key
+  if (!vars) return value
+  return Object.keys(vars).reduce((acc, k) => acc.split('{'+k+'}').join(vars[k]), value)
+}
+
 /* ── Module-level reactive state ─────────────────────────────────────────── */
 const notifs = ref([])
 const currentPath = ref('')
@@ -280,6 +1050,13 @@ function statusVar(s) {
   const m = {running:'--ok', stopped:'--er', paused:'--wn'}
   return 'var(' + (m[cstatus(s)] || '--gy') + ')'
 }
+function statusLabel(s) {
+  const v = cstatus(s)
+  if (v === 'running') return t('statusRunning')
+  if (v === 'stopped') return t('statusStopped')
+  if (v === 'paused') return t('statusPaused')
+  return t('statusUnknown')
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    LOG VIEWER COMPONENT
@@ -325,7 +1102,7 @@ const LogViewer = {
         if (raf) { cancelAnimationFrame(raf); raf = null }
         if (pending.length) flush()
       }
-      ws.onerror = () => { live.value = false; lines.value.push('[connection error]') }
+      ws.onerror = () => { live.value = false; lines.value.push(t('connectionError')) }
     }
     function stop() {
       if (raf) { cancelAnimationFrame(raf); raf = null }
@@ -344,15 +1121,15 @@ const LogViewer = {
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
         <span style="font-size:12px;font-weight:600;color:var(--tx);">{{ name }}</span>
         <span v-if="live" style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ok);">
-          <span class="dot dot-green" style="width:6px;height:6px;"></span> Live
+          <span class="dot dot-green" style="width:6px;height:6px;"></span> {{ $t('live') }}
         </span>
         <div style="margin-left:auto;display:flex;gap:6px;">
-          <button @click="live?stop():connect()" class="btn btn-ghost btn-sm" v-html="(live?I.stop:I.play)+' '+(live?'Stop':'Connect')"></button>
-          <button @click="lines=[]" class="btn btn-ghost btn-sm">Clear</button>
+          <button @click="live?stop():connect()" class="btn btn-ghost btn-sm" v-html="(live?I.stop:I.play)+' '+(live?$t('stop'):$t('connect'))"></button>
+          <button @click="lines=[]" class="btn btn-ghost btn-sm">{{ $t('clear') }}</button>
         </div>
       </div>
       <div ref="el" class="log-term">
-        <div v-if="!lines.length" style="color:var(--term-t);font-style:italic;">Waiting for output…</div>
+        <div v-if="!lines.length" style="color:var(--term-t);font-style:italic;">{{ $t('waitingForOutput') }}</div>
         <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
       </div>
     </div>
@@ -408,13 +1185,13 @@ const DockerTerminal = {
         // this, callers waiting on @done would be stuck forever.
         if (exitCode.value === null) {
           exitCode.value = 1
-          lines.value.push('[connection closed unexpectedly]')
+          lines.value.push(t('connectionClosedUnexpectedly'))
           emit('done', 1)
         }
       }
       ws.onerror = () => {
         running.value = false
-        lines.value.push('[WebSocket error — is the server running?]')
+        lines.value.push(t('webSocketError'))
       }
     })
     onUnmounted(() => {
@@ -438,13 +1215,13 @@ const DockerTerminal = {
         <span v-else-if="exitCode===0" v-html="I.check" style="width:13px;height:13px;color:var(--ok);flex-shrink:0;"></span>
         <span v-else v-html="I.warn" style="width:13px;height:13px;color:var(--er);flex-shrink:0;"></span>
         <code style="font-size:12px;color:var(--tx);flex:1;font-family:monospace;">{{ label }}</code>
-        <span v-if="running" style="font-size:11px;color:var(--mu);">running…</span>
-        <span v-else-if="exitCode===0" style="font-size:11px;color:var(--ok);">✓ completed</span>
-        <span v-else style="font-size:11px;color:var(--er);">✗ exit {{ exitCode }}</span>
-        <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" title="Close terminal" aria-label="Close terminal">✕</button>
+        <span v-if="running" style="font-size:11px;color:var(--mu);">{{ $t('runningEllipsis') }}</span>
+        <span v-else-if="exitCode===0" style="font-size:11px;color:var(--ok);">{{ $t('completed') }}</span>
+        <span v-else style="font-size:11px;color:var(--er);">{{ $t('exitCode', {code: exitCode}) }}</span>
+        <button @click="$emit('close')" class="btn btn-ghost btn-sm" style="padding:2px 8px;margin-left:8px;" :title="$t('closeTerminal')" :aria-label="$t('closeTerminal')">✕</button>
       </div>
       <div ref="el" class="log-term" style="height:320px;">
-        <div v-if="!lines.length" style="color:var(--term-t);font-style:italic;">Connecting to {{ label }}…</div>
+        <div v-if="!lines.length" style="color:var(--term-t);font-style:italic;">{{ $t('connectingTo', {label: label}) }}</div>
         <div v-for="(l,i) in lines" :key="i" :class="lineClass(l)">{{ l }}</div>
       </div>
     </div>
@@ -469,7 +1246,7 @@ const Dashboard = {
       try {
         const [p, c] = await Promise.all([api.get('/project'), api.get('/project/containers')])
         proj.value = p; ctrs.value = c.containers||[]
-      } catch(e) { notify('Load failed: '+e.message, 'err') }
+      } catch(e) { notify(t('loadFailed')+': '+e.message, 'err') }
       finally { busy.value = false }
     }
 
@@ -496,14 +1273,14 @@ const Dashboard = {
     const running = computed(() => ctrs.value.filter(c=>cstatus(c.State||c.Status)==='running').length)
 
     onActivated(load)
-    return { proj, ctrs, busy, act, logOf, running, termAction, load, docker, onTermDone, closeTerminal, dotClass, cstatus, statusBadgeClass, I }
+    return { proj, ctrs, busy, act, logOf, running, termAction, load, docker, onTermDone, closeTerminal, dotClass, cstatus, statusBadgeClass, statusLabel, I }
   },
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Dashboard</div><div class="page-sub">Project overview and quick controls</div></div>
+      <div><div class="page-title">{{ $t('dashboardTitle') }}</div><div class="page-sub">{{ $t('dashboardSubtitle') }}</div></div>
       <button class="btn btn-ghost" @click="load" :disabled="busy">
-        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> {{ $t('refresh') }}
       </button>
     </div>
 
@@ -515,31 +1292,31 @@ const Dashboard = {
       <!-- Stats -->
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-label">Containers</div>
+          <div class="stat-label">{{ $t('containers') }}</div>
           <div class="stat-value" :style="{color: running>0?'var(--ok)':'var(--gy)'}">
             {{ running }}<span style="font-size:16px;color:var(--su);"> / {{ ctrs.length }}</span>
           </div>
-          <div class="stat-note">{{ running }} running</div>
+          <div class="stat-note">{{ $t('runningCount', {count: running}) }}</div>
         </div>
         <div class="stat-card" v-if="proj?.exists">
-          <div class="stat-label">Odoo Version</div>
+          <div class="stat-label">{{ $t('odooVersion') }}</div>
           <div class="stat-value">{{ proj.odoo_version||'—' }}</div>
           <div class="stat-note" style="margin-top:7px;">
             <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-blue'">{{ proj.odoo_edition }}</span>
           </div>
         </div>
         <div class="stat-card" v-if="proj?.exists">
-          <div class="stat-label">PostgreSQL</div>
+          <div class="stat-label">{{ $t('postgresqlLabel') }}</div>
           <div class="stat-value">{{ proj.db_version||'—' }}</div>
-          <div class="stat-note">Database</div>
+          <div class="stat-note">{{ $t('database') }}</div>
         </div>
         <div class="stat-card" v-if="proj?.exists">
-          <div class="stat-label">Web Port</div>
+          <div class="stat-label">{{ $t('webPort') }}</div>
           <div class="stat-value">{{ proj.odoo_port||'—' }}</div>
           <div class="stat-note" style="margin-top:7px;">
             <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank"
                style="color:var(--lk);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
-              Open Odoo <span v-html="I.ext" style="width:10px;height:10px;"></span>
+              {{ $t('openOdoo') }} <span v-html="I.ext" style="width:10px;height:10px;"></span>
             </a>
           </div>
         </div>
@@ -548,53 +1325,53 @@ const Dashboard = {
       <!-- No project -->
       <div v-if="!proj?.exists" class="card empty" style="border-style:dashed;">
         <div v-html="I.rocket"></div>
-        <h3>No project found in this directory</h3>
-        <p>Initialize a Rocketdoo project to get started</p>
-        <div class="code-block"><div style="color:var(--term-t);">## Create a new project</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
+        <h3>{{ $t('noProjectFoundTitle') }}</h3>
+        <p>{{ $t('noProjectFoundDesc') }}</p>
+        <div class="code-block"><div style="color:var(--term-t);">{{ $t('createProjectComment') }}</div><div>$ rkd scaffold</div><div>$ rkd init</div></div>
       </div>
 
       <!-- Project card -->
       <div v-if="proj?.exists" style="margin-bottom:24px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">Project</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">{{ $t('project') }}</div>
         <div class="card" style="border-color:rgba(var(--br-rgb),0.3);">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
             <div>
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
                 <span v-html="I.rocket" style="width:18px;height:18px;color:var(--lk);flex-shrink:0;"></span>
-                <span style="font-size:17px;font-weight:700;color:var(--tx);">{{ proj.project_name||'Unnamed Project' }}</span>
+                <span style="font-size:17px;font-weight:700;color:var(--tx);">{{ proj.project_name||$t('unnamedProject') }}</span>
               </div>
               <div style="display:flex;flex-wrap:wrap;gap:6px;">
                 <span class="badge badge-blue">Odoo {{ proj.odoo_version }}</span>
                 <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-gray'">{{ proj.odoo_edition }}</span>
                 <span class="badge badge-gray" v-if="proj.db_version">PG {{ proj.db_version }}</span>
-                <span class="badge badge-yellow" v-if="proj.use_private_repos">SSH Key</span>
+                <span class="badge badge-yellow" v-if="proj.use_private_repos">{{ $t('sshKey') }}</span>
                 <span class="badge badge-blue" v-if="proj.use_third_party_repos">Gitman</span>
               </div>
             </div>
             <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank" class="btn btn-primary" style="text-decoration:none;flex-shrink:0;">
-              <span v-html="I.ext"></span> Open Odoo
+              <span v-html="I.ext"></span> {{ $t('openOdoo') }}
             </a>
           </div>
 
           <!-- Containers -->
           <div style="border-top:1px solid var(--ln);padding-top:14px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Containers</div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">{{ $t('containers') }}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;">
               <button type="button" v-for="c in ctrs" :key="c.Name||c.Service"
                    @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
                    :aria-expanded="logOf===(c.Name||c.Service)"
-                   :aria-label="'Logs for '+(c.Service||c.Name)"
+                   :aria-label="$t('logsFor', {name: c.Service||c.Name})"
                    :style="{background:'var(--s)',border:'1px solid '+(logOf===(c.Name||c.Service)?'var(--lk)':'var(--ln)'),borderRadius:'8px',padding:'10px 14px',cursor:'pointer',minWidth:'150px',transition:'all .15s',display:'block',font:'inherit',color:'inherit',textAlign:'left'}">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:6px;">
                   <span style="font-size:13px;font-weight:600;color:var(--tx);">{{ c.Service||c.Name }}</span>
                   <span class="badge" :class="statusBadgeClass(c.State||c.Status)">
-                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ cstatus(c.State||c.Status) }}
+                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ statusLabel(c.State||c.Status) }}
                   </span>
                 </div>
                 <div style="font-size:11px;color:var(--mu);font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
                 <div v-if="c.Ports" style="font-size:10px;color:var(--su);margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
               </button>
-              <div v-if="!ctrs.length" style="color:var(--su);font-size:13px;padding:8px 0;">No containers running</div>
+              <div v-if="!ctrs.length" style="color:var(--su);font-size:13px;padding:8px 0;">{{ $t('noContainersRunning') }}</div>
             </div>
           </div>
 
@@ -607,22 +1384,22 @@ const Dashboard = {
 
       <!-- Quick actions -->
       <div v-if="proj?.exists">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">Quick Actions</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">{{ $t('quickActions') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
           <button @click="docker('up')" class="btn btn-primary" :disabled="act!==''">
-            <span v-html="act==='up'?I.spin:I.play" :class="act==='up'?'spin':''"></span> Start All
+            <span v-html="act==='up'?I.spin:I.play" :class="act==='up'?'spin':''"></span> {{ $t('startAll') }}
           </button>
           <button @click="docker('restart')" class="btn btn-ghost" :disabled="act!==''">
-            <span v-html="act==='restart'?I.spin:I.restart" :class="act==='restart'?'spin':''"></span> Restart
+            <span v-html="act==='restart'?I.spin:I.restart" :class="act==='restart'?'spin':''"></span> {{ $t('restart') }}
           </button>
           <button @click="docker('stop')" class="btn btn-ghost" :disabled="act!==''">
-            <span v-html="act==='stop'?I.spin:I.stop" :class="act==='stop'?'spin':''"></span> Stop
+            <span v-html="act==='stop'?I.spin:I.stop" :class="act==='stop'?'spin':''"></span> {{ $t('stop') }}
           </button>
           <button @click="docker('build')" class="btn btn-ghost" :disabled="act!==''">
-            <span v-html="act==='build'?I.spin:I.build" :class="act==='build'?'spin':''"></span> Build
+            <span v-html="act==='build'?I.spin:I.build" :class="act==='build'?'spin':''"></span> {{ $t('build') }}
           </button>
           <button @click="docker('down')" class="btn btn-danger" :disabled="act!==''">
-            <span v-html="act==='down'?I.spin:I.x" :class="act==='down'?'spin':''"></span> Down
+            <span v-html="act==='down'?I.spin:I.x" :class="act==='down'?'spin':''"></span> {{ $t('down') }}
           </button>
         </div>
       </div>
@@ -650,7 +1427,7 @@ const Containers = {
     async function load() {
       busy.value = true
       try { const r = await api.get('/project/containers'); ctrs.value = r.containers||[] }
-      catch(e) { notify('Load failed','err') }
+      catch(e) { notify(t('loadFailed'),'err') }
       finally { busy.value = false }
     }
 
@@ -659,20 +1436,20 @@ const Containers = {
       try {
         const r = await api.post('/docker/service/'+cmd, { service: svc })
         if (r.ok) { notify(svc+': '+cmd); setTimeout(load, 1500) }
-        else notify(r.stderr||'Failed','err')
+        else notify(r.stderr||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { delete acts.value[key] }
     }
 
     onActivated(load)
-    return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, statusBadgeClass, statusVar, I }
+    return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, statusBadgeClass, statusVar, statusLabel, I }
   },
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Containers</div><div class="page-sub">Manage Docker services for this project</div></div>
+      <div><div class="page-title">{{ $t('containersTitle') }}</div><div class="page-sub">{{ $t('containersSubtitle') }}</div></div>
       <button class="btn btn-ghost" @click="load" :disabled="busy">
-        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> {{ $t('refresh') }}
       </button>
     </div>
 
@@ -683,15 +1460,15 @@ const Containers = {
     <template v-else>
       <div v-if="!ctrs.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.containers"></div>
-        <h3>No containers found</h3>
-        <p>Make sure you are in a Rocketdoo project directory and run <code style="color:var(--lk);">rkd up</code></p>
+        <h3>{{ $t('noContainersFoundTitle') }}</h3>
+        <p v-html="$t('noContainersFoundDesc')"></p>
       </div>
 
       <div v-else class="card-flat">
         <table class="table">
           <thead>
             <tr>
-              <th>Status</th><th>Service</th><th>Image</th><th>Ports</th><th style="text-align:right">Actions</th>
+              <th>{{ $t('status') }}</th><th>{{ $t('service') }}</th><th>{{ $t('image') }}</th><th>{{ $t('ports') }}</th><th style="text-align:right">{{ $t('actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -699,7 +1476,7 @@ const Containers = {
               <tr>
                 <td :style="{borderLeft: '3px solid ' + statusVar(c.State||c.Status)}">
                   <span class="badge" :class="statusBadgeClass(c.State||c.Status)">
-                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ cstatus(c.State||c.Status) }}
+                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ statusLabel(c.State||c.Status) }}
                   </span>
                 </td>
                 <td>
@@ -710,17 +1487,17 @@ const Containers = {
                 <td style="font-family:monospace;font-size:11px;color:var(--mu);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
                 <td style="text-align:right;">
                   <div style="display:flex;gap:5px;justify-content:flex-end;">
-                    <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" title="Start" aria-label="Start" :disabled="acts[(c.Service||c.Name)+'start']">
+                    <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" :title="$t('start')" :aria-label="$t('start')" :disabled="acts[(c.Service||c.Name)+'start']">
                       <span v-html="acts[(c.Service||c.Name)+'start']?I.spin:I.play" :class="acts[(c.Service||c.Name)+'start']?'spin':''"></span>
                     </button>
-                    <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" title="Stop" aria-label="Stop" :disabled="acts[(c.Service||c.Name)+'stop']">
+                    <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" :title="$t('stop')" :aria-label="$t('stop')" :disabled="acts[(c.Service||c.Name)+'stop']">
                       <span v-html="acts[(c.Service||c.Name)+'stop']?I.spin:I.stop" :class="acts[(c.Service||c.Name)+'stop']?'spin':''"></span>
                     </button>
-                    <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" title="Restart" aria-label="Restart" :disabled="acts[(c.Service||c.Name)+'restart']">
+                    <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" :title="$t('restart')" :aria-label="$t('restart')" :disabled="acts[(c.Service||c.Name)+'restart']">
                       <span v-html="acts[(c.Service||c.Name)+'restart']?I.spin:I.restart" :class="acts[(c.Service||c.Name)+'restart']?'spin':''"></span>
                     </button>
                     <button @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
-                            class="btn btn-ghost btn-sm" title="Logs" aria-label="Logs"
+                            class="btn btn-ghost btn-sm" :title="$t('logs')" :aria-label="$t('logs')"
                             :style="logOf===(c.Name||c.Service)?'color:var(--lk);border-color:var(--lk);':''">
                       <span v-html="I.logs"></span>
                     </button>
@@ -760,8 +1537,8 @@ const Modules = {
       try {
         const r = await api.get('/modules?include_all='+all.value)
         mods.value = r.modules || []
-        if (r.error) notify('Scan: '+r.error, 'err')
-      } catch(e) { notify('Scan failed','err') }
+        if (r.error) notify(t('scanLabel')+': '+r.error, 'err')
+      } catch(e) { notify(t('scanFailed'),'err') }
       finally { busy.value = false }
       loadGitman()
     }
@@ -778,7 +1555,8 @@ const Modules = {
         dbs.value = r.databases || []
         dbError.value = r.error || ''
       } catch(e) { dbs.value = []; dbError.value = e.message }
-      const saved = localStorage.getItem('rkd-db')
+      let saved = null
+      try { saved = localStorage.getItem('rkd-db') } catch (e) { /* private window, etc. */ }
       db.value = dbs.value.includes(saved) ? saved : (dbs.value[0] || '')
     }
 
@@ -787,7 +1565,7 @@ const Modules = {
       try {
         const r = await api.get('/odoo/module-states?db='+encodeURIComponent(db.value))
         states.value = r.states || {}
-        if (r.error) notify('Module states: '+r.error, 'err')
+        if (r.error) notify(t('moduleStatesLabel')+': '+r.error, 'err')
       } catch(e) { states.value = {} }
     }
 
@@ -799,7 +1577,7 @@ const Modules = {
     }
 
     watch(db, v => {
-      if (v) localStorage.setItem('rkd-db', v)
+      if (v) { try { localStorage.setItem('rkd-db', v) } catch (e) { /* private window, etc. */ } }
       loadStates()
     })
 
@@ -814,25 +1592,21 @@ const Modules = {
       return !!db.value && stateOf(m) === 'installed' && !updating.value
     }
     function updateReason(m) {
-      if (updating.value) return 'Another update is already running'
-      if (!db.value) return 'No database selected'
-      if (stateOf(m) !== 'installed') return "Module is not installed — 'odoo -u' on it would be a no-op"
+      if (updating.value) return t('updateReasonBusy')
+      if (!db.value) return t('updateReasonNoDb')
+      if (stateOf(m) !== 'installed') return t('updateReasonNotInstalled')
       return ''
     }
     function startUpdate(m) {
       if (!canUpdate(m)) return
-      const ok = confirm(
-        `Update module "${m.name}" on database "${db.value}"?\n\n` +
-        `This runs 'odoo -u ${m.name}', which reapplies XML data without noupdate="1" ` +
-        `and can overwrite records you edited by hand.`
-      )
+      const ok = confirm(t('confirmModuleUpdate', { module: m.name, db: db.value }))
       if (!ok) return
       updating.value = m.name
     }
     async function onUpdateDone() {
       try {
         const r = await api.post('/docker/service/restart', { service: 'web' })
-        notify(r.ok ? 'web restarted' : (r.stderr || 'Restart failed'), r.ok ? 'ok' : 'err')
+        notify(r.ok ? t('webRestarted') : (r.stderr || t('restartFailed')), r.ok ? 'ok' : 'err')
       } catch(e) { notify(e.message, 'err') }
       await loadStates()
       updating.value = null
@@ -868,8 +1642,8 @@ const Modules = {
         if (r.ok) {
           gitExists.value   = true
           gitOriginal.value = []
-          notify('gitman.yaml created')
-        } else notify(r.error || 'Could not create gitman.yaml', 'err')
+          notify(t('gitmanYamlCreated'))
+        } else notify(r.error || t('gitmanCreateFailed'), 'err')
       } catch(e) { notify(e.message, 'err') }
       finally { gitSaving.value = false }
     }
@@ -891,7 +1665,7 @@ const Modules = {
     }
     function confirmGitForm() {
       const f = gitForm.value
-      if (!f.name.trim() || !f.repo.trim()) { notify('Name and URL are required','err'); return }
+      if (!f.name.trim() || !f.repo.trim()) { notify(t('nameAndUrlRequired'),'err'); return }
       const entry = { name: f.name.trim(), repo: f.repo.trim(), rev: f.rev.trim() || 'main', type: 'git' }
       if (f.idx === -1) { gitSources.value.push(entry) }
       else              { gitSources.value[f.idx] = entry }
@@ -903,8 +1677,8 @@ const Modules = {
         const r = await api.post('/gitman', { sources: gitSources.value })
         if (r.ok) {
           gitOriginal.value = JSON.parse(JSON.stringify(gitSources.value))
-          notify('gitman.yaml saved')
-        } else notify(r.error || 'Save failed', 'err')
+          notify(t('gitmanYamlSaved'))
+        } else notify(r.error || t('saveFailed'), 'err')
       } catch(e) { notify(e.message,'err') }
       finally { gitSaving.value = false }
     }
@@ -912,7 +1686,7 @@ const Modules = {
       rebuildBusy.value = true
       try {
         const r = await api.post('/docker/build')
-        r.ok ? notify('Build completed') : notify(r.stderr || 'Build failed','err')
+        r.ok ? notify(t('buildCompleted')) : notify(r.stderr || t('buildFailed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { rebuildBusy.value = false }
     }
@@ -931,31 +1705,31 @@ const Modules = {
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Modules</div><div class="page-sub">Local addons and external Gitman repositories</div></div>
+      <div><div class="page-title">{{ $t('modulesTitle') }}</div><div class="page-sub">{{ $t('modulesSubtitle') }}</div></div>
       <div style="display:flex;gap:10px;align-items:center;">
         <div v-if="dbs.length" style="display:flex;align-items:center;gap:6px;">
-          <label style="font-size:11px;color:var(--mu);">DB</label>
+          <label style="font-size:11px;color:var(--mu);">{{ $t('dbLabel') }}</label>
           <select v-model="db" class="input" style="width:auto;padding:5px 8px;font-size:12px;">
             <option v-for="d in dbs" :key="d" :value="d">{{ d }}</option>
           </select>
         </div>
-        <div v-else style="font-size:12px;color:var(--er);" :title="dbError">{{ dbError || 'No databases found' }}</div>
+        <div v-else style="font-size:12px;color:var(--er);" :title="dbError">{{ dbError || $t('noDatabasesFound') }}</div>
         <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--su);cursor:pointer;">
-          <input type="checkbox" v-model="all" style="accent-color:var(--br);"> Show all
+          <input type="checkbox" v-model="all" style="accent-color:var(--br);"> {{ $t('showAll') }}
         </label>
         <button class="btn btn-ghost" @click="load" :disabled="busy">
-          <span v-html="I.refresh" :class="busy?'spin':''"></span> Scan
+          <span v-html="I.refresh" :class="busy?'spin':''"></span> {{ $t('scan') }}
         </button>
       </div>
     </div>
 
     <!-- ── Local Addons ────────────────────────────────────────────────── -->
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-      Local Addons <span class="badge badge-blue">{{ mods.length }}</span>
+      {{ $t('localAddons') }} <span class="badge badge-blue">{{ mods.length }}</span>
     </div>
 
     <div style="margin-bottom:18px;">
-      <input v-model="q" class="input" placeholder="Search modules…" style="max-width:340px;" />
+      <input v-model="q" class="input" :placeholder="$t('searchModulesPlaceholder')" style="max-width:340px;" />
     </div>
 
     <div v-if="busy" style="text-align:center;padding:60px 0;color:var(--mu);">
@@ -965,29 +1739,29 @@ const Modules = {
     <template v-else>
       <div v-if="!filtered.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.modules"></div>
-        <h3>{{ mods.length ? 'No matches' : 'No modules found' }}</h3>
-        <p>{{ mods.length ? 'Try a different search term' : 'Add Odoo modules to the addons/ directory' }}</p>
+        <h3>{{ mods.length ? $t('noMatches') : $t('noModulesFound') }}</h3>
+        <p>{{ mods.length ? $t('tryDifferentSearch') : $t('addModulesHint') }}</p>
       </div>
       <div v-else class="card-flat">
         <table class="table">
           <thead>
-            <tr><th>Module</th><th>Path</th><th>Version</th><th>Status</th><th>State</th><th>Depends</th><th></th></tr>
+            <tr><th>{{ $t('module') }}</th><th>{{ $t('path') }}</th><th>{{ $t('version') }}</th><th>{{ $t('installable') }}</th><th>{{ $t('state') }}</th><th>{{ $t('depends') }}</th><th></th></tr>
           </thead>
           <tbody>
             <tr v-for="m in filtered" :key="m.name">
               <td>
                 <div style="font-family:monospace;font-size:13px;font-weight:600;color:var(--tx);">{{ m.name }}</div>
-                <div v-if="m.has_invalid_name" style="font-size:11px;color:var(--wn);margin-top:2px;">⚠ Invalid name</div>
+                <div v-if="m.has_invalid_name" style="font-size:11px;color:var(--wn);margin-top:2px;">⚠ {{ $t('invalidName') }}</div>
               </td>
               <td style="font-family:monospace;font-size:11px;color:var(--mu);">{{ m.path }}</td>
               <td style="font-size:12px;color:var(--mu);">{{ m.version||'—' }}</td>
-              <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?'Installable':'Disabled' }}</span></td>
+              <td><span class="badge" :class="m.installable?'badge-green':'badge-gray'">{{ m.installable?$t('installable'):$t('disabled') }}</span></td>
               <td><span class="badge" :class="stateBadgeClass(stateOf(m))">{{ stateOf(m) }}</span></td>
               <td style="font-size:11px;color:var(--su);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" :title="m.depends.join(', ')">{{ m.depends.join(', ')||'—' }}</td>
               <td style="text-align:right;">
                 <button @click="startUpdate(m)" class="btn btn-ghost btn-sm" :disabled="!canUpdate(m)" :title="updateReason(m)">
                   <span v-html="updating===m.name?I.spin:I.refresh" :class="updating===m.name?'spin':''"></span>
-                  Update{{ db ? ' ('+db+')' : '' }}
+                  {{ $t('update') }}{{ db ? ' ('+db+')' : '' }}
                 </button>
               </td>
             </tr>
@@ -1005,20 +1779,20 @@ const Modules = {
     <div style="margin-top:36px;padding-top:24px;border-top:1px solid var(--ln);">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);">External Repos (Gitman)</div>
-          <div style="font-size:12px;color:var(--mu);margin-top:3px;">Managed via <code style="color:var(--lk);">gitman.yaml</code> → <code style="color:var(--lk);">external_addons/</code></div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);">{{ $t('externalReposGitman') }}</div>
+          <div style="font-size:12px;color:var(--mu);margin-top:3px;" v-html="$t('managedViaGitman')"></div>
         </div>
         <div style="display:flex;gap:8px;flex-shrink:0;">
           <button v-if="gitDirty && gitExists" @click="saveGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
             <span v-html="gitSaving?I.spin:I.check" :class="gitSaving?'spin':''"></span>
-            {{ gitSaving ? 'Saving…' : 'Save Changes' }}
+            {{ gitSaving ? $t('savingEllipsis') : $t('saveChanges') }}
           </button>
-          <button v-if="gitExists" @click="rebuildDocker" class="btn btn-ghost btn-sm" :disabled="rebuildBusy" title="Rebuild Docker image after gitman changes">
+          <button v-if="gitExists" @click="rebuildDocker" class="btn btn-ghost btn-sm" :disabled="rebuildBusy" :title="$t('rebuildDockerHint')">
             <span v-html="rebuildBusy?I.spin:I.build" :class="rebuildBusy?'spin':''"></span>
-            {{ rebuildBusy ? 'Building…' : 'Rebuild' }}
+            {{ rebuildBusy ? $t('buildingEllipsis') : $t('rebuild') }}
           </button>
           <button v-if="gitExists" @click="addGitRepo" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">
-            <span v-html="I.plus"></span> Add Repo
+            <span v-html="I.plus"></span> {{ $t('addRepo') }}
           </button>
         </div>
       </div>
@@ -1026,33 +1800,33 @@ const Modules = {
       <!-- Inline Add/Edit form -->
       <div v-if="gitForm" class="card" style="margin-bottom:14px;border-color:rgba(var(--br-rgb),0.4);">
         <div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:14px;">
-          {{ gitForm.idx === -1 ? 'Add Repository' : 'Edit Repository' }}
+          {{ gitForm.idx === -1 ? $t('addRepository') : $t('editRepository') }}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <div>
-            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">Repository URL</label>
+            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('repositoryUrl') }}</label>
             <input v-model="gitForm.repo" @blur="autoName" class="input" placeholder="https://github.com/org/repo.git" />
           </div>
           <div>
-            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">Folder name</label>
-            <input v-model="gitForm.name" class="input" placeholder="auto-filled from URL" />
+            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('folderName') }}</label>
+            <input v-model="gitForm.name" class="input" :placeholder="$t('autoFilledFromUrl')" />
           </div>
         </div>
         <div style="display:grid;grid-template-columns:140px 1fr;gap:10px;margin-bottom:14px;align-items:end;">
           <div>
-            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">Branch / Rev</label>
+            <label style="font-size:11px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('branchRev') }}</label>
             <input v-model="gitForm.rev" class="input" placeholder="18.0" />
           </div>
           <div style="font-size:12px;color:var(--mu);padding-bottom:9px;">
-            Clones into <code style="color:var(--lk);">external_addons/{{ gitForm.name || '&lt;name&gt;' }}</code>
+            {{ $t('clonesInto') }} <code style="color:var(--lk);">external_addons/{{ gitForm.name || '&lt;name&gt;' }}</code>
           </div>
         </div>
         <div style="display:flex;gap:8px;">
           <button @click="confirmGitForm" class="btn btn-primary btn-sm">
-            <span v-html="I.check"></span> {{ gitForm.idx === -1 ? 'Add' : 'Update' }}
+            <span v-html="I.check"></span> {{ gitForm.idx === -1 ? $t('add') : $t('applyEdit') }}
           </button>
           <button @click="gitForm=null" class="btn btn-ghost btn-sm">
-            <span v-html="I.x"></span> Cancel
+            <span v-html="I.x"></span> {{ $t('cancel') }}
           </button>
         </div>
       </div>
@@ -1065,26 +1839,23 @@ const Modules = {
         <!-- gitman.yaml does not exist yet -->
         <div v-if="!gitExists && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:32px 20px;">
           <div v-html="I.link" style="width:32px;height:32px;color:var(--su);margin:0 auto 12px;"></div>
-          <div style="font-size:15px;font-weight:700;color:var(--tx);margin-bottom:6px;">gitman.yaml not found</div>
-          <div style="font-size:12px;color:var(--su);margin-bottom:18px;">
-            This project has no <code style="color:var(--lk);">gitman.yaml</code>.<br>
-            Create it to manage external Odoo repositories (community modules, OCA, etc.)
-          </div>
+          <div style="font-size:15px;font-weight:700;color:var(--tx);margin-bottom:6px;">{{ $t('gitmanYamlNotFound') }}</div>
+          <div style="font-size:12px;color:var(--su);margin-bottom:18px;" v-html="$t('gitmanYamlNotFoundDesc')"></div>
           <button @click="initGitman" class="btn btn-primary btn-sm" :disabled="gitSaving">
             <span v-html="gitSaving ? I.spin : I.plus" :class="gitSaving ? 'spin' : ''"></span>
-            {{ gitSaving ? 'Creating…' : 'Initialize gitman.yaml' }}
+            {{ gitSaving ? $t('creatingEllipsis') : $t('initializeGitmanYaml') }}
           </button>
         </div>
         <!-- gitman.yaml exists but has no repos yet -->
         <div v-else-if="gitExists && !gitSources.length && !gitForm" class="card" style="border-style:dashed;text-align:center;padding:28px 20px;">
           <div v-html="I.link" style="width:30px;height:30px;color:var(--su);margin:0 auto 10px;"></div>
-          <div style="font-size:14px;font-weight:600;color:var(--mu);margin-bottom:5px;">No external repos configured</div>
-          <div style="font-size:12px;color:var(--su);">Click <b>Add Repo</b> to fetch Odoo community or private modules via gitman</div>
+          <div style="font-size:14px;font-weight:600;color:var(--mu);margin-bottom:5px;">{{ $t('noExternalReposConfigured') }}</div>
+          <div style="font-size:12px;color:var(--su);" v-html="$t('noExternalReposConfiguredDesc')"></div>
         </div>
         <div v-else-if="gitSources.length" class="card-flat">
           <table class="table">
             <thead>
-              <tr><th>Name</th><th>Repository URL</th><th>Branch</th><th style="text-align:right">Actions</th></tr>
+              <tr><th>{{ $t('name') }}</th><th>{{ $t('repositoryUrl') }}</th><th>{{ $t('branch') }}</th><th style="text-align:right">{{ $t('actions') }}</th></tr>
             </thead>
             <tbody>
               <tr v-for="(s, idx) in gitSources" :key="idx">
@@ -1093,8 +1864,8 @@ const Modules = {
                 <td><span class="badge badge-blue">{{ s.rev }}</span></td>
                 <td style="text-align:right;">
                   <div style="display:flex;gap:5px;justify-content:flex-end;">
-                    <button @click="editGitRepo(idx)" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">Edit</button>
-                    <button @click="deleteGitRepo(idx)" class="btn btn-danger btn-sm">Delete</button>
+                    <button @click="editGitRepo(idx)" class="btn btn-ghost btn-sm" :disabled="gitForm!==null">{{ $t('edit') }}</button>
+                    <button @click="deleteGitRepo(idx)" class="btn btn-danger btn-sm">{{ $t('delete') }}</button>
                   </div>
                 </td>
               </tr>
@@ -1119,7 +1890,7 @@ const Instances = {
     async function load() {
       busy.value = true
       try { const r = await api.get('/instances'); inst.value = r.instances||[] }
-      catch(e) { notify('Load failed','err') }
+      catch(e) { notify(t('loadFailed'),'err') }
       finally { busy.value = false }
     }
 
@@ -1127,8 +1898,8 @@ const Instances = {
       dep.value[env] = true
       try {
         const r = await api.post('/instances/deploy', { env, dry_run: !!dry.value[env] })
-        if (r.ok) notify(env+' deploy '+(dry.value[env]?'(dry-run) ':'')+'completed')
-        else notify(r.error||'Deploy failed','err')
+        if (r.ok) notify(dry.value[env] ? t('instanceDryRunCompleted', { env: env }) : t('instanceDeployCompleted', { env: env }))
+        else notify(r.error||t('deployFailed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { dep.value[env] = false }
     }
@@ -1139,9 +1910,9 @@ const Instances = {
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Instances</div><div class="page-sub">Deploy Odoo to remote VPS environments</div></div>
+      <div><div class="page-title">{{ $t('instancesTitle') }}</div><div class="page-sub">{{ $t('instancesSubtitle') }}</div></div>
       <button class="btn btn-ghost" @click="load" :disabled="busy">
-        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> {{ $t('refresh') }}
       </button>
     </div>
 
@@ -1152,8 +1923,8 @@ const Instances = {
     <template v-else>
       <div v-if="!inst.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.instances"></div>
-        <h3>No instances configured</h3>
-        <p>Configure deployment targets with:</p>
+        <h3>{{ $t('noInstancesConfigured') }}</h3>
+        <p>{{ $t('configureDeploymentTargets') }}</p>
         <div class="code-block">$ rkd instance init</div>
       </div>
 
@@ -1164,28 +1935,28 @@ const Instances = {
               <span v-html="I.instances" style="width:18px;height:18px;color:var(--lk);"></span>
               <span style="font-size:16px;font-weight:700;color:var(--tx);text-transform:capitalize;">{{ i.env }}</span>
             </div>
-            <span class="badge" :class="i.env==='prod'?'badge-red':'badge-blue'">{{ i.env==='prod'?'Production':'Staging' }}</span>
+            <span class="badge" :class="i.env==='prod'?'badge-red':'badge-blue'">{{ i.env==='prod'?$t('production'):$t('staging') }}</span>
           </div>
 
           <div style="display:grid;gap:7px;margin-bottom:18px;font-size:12px;">
-            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Host</span><span style="color:var(--tx);font-family:monospace;">{{ i.host||'—' }}</span></div>
-            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Domain</span>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('host') }}</span><span style="color:var(--tx);font-family:monospace;">{{ i.host||'—' }}</span></div>
+            <div v-if="i.domain" style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('domain') }}</span>
               <a :href="'https://'+i.domain" target="_blank" style="color:var(--lk);text-decoration:none;font-family:monospace;display:flex;align-items:center;gap:4px;">
                 {{ i.domain }} <span v-html="I.ext" style="width:10px;height:10px;"></span>
               </a>
             </div>
             <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Odoo</span><span style="color:var(--tx);">{{ i.odoo_version||'—' }}</span></div>
-            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Type</span><span class="badge badge-gray">{{ i.type }}</span></div>
-            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Path</span><span style="color:var(--mu);font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('type') }}</span><span class="badge badge-gray">{{ i.type }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('path') }}</span><span style="color:var(--mu);font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
           </div>
 
           <div style="border-top:1px solid var(--ln);padding-top:14px;display:flex;align-items:center;gap:10px;">
             <button @click="deploy(i.env)" class="btn btn-primary" :disabled="dep[i.env]">
               <span v-html="dep[i.env]?I.spin:I.deploy" :class="dep[i.env]?'spin':''"></span>
-              {{ dep[i.env]?'Deploying…':'Deploy' }}
+              {{ dep[i.env]?$t('deployingEllipsis'):$t('deploy') }}
             </button>
             <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mu);cursor:pointer;">
-              <input type="checkbox" v-model="dry[i.env]" style="accent-color:var(--br);"> Dry run
+              <input type="checkbox" v-model="dry[i.env]" style="accent-color:var(--br);"> {{ $t('dryRun') }}
             </label>
           </div>
         </div>
@@ -1210,7 +1981,7 @@ const Services = {
       try {
         const [m,t] = await Promise.all([api.get('/mail/status'), api.get('/traefik/status')])
         mail.value = m; traefik.value = t
-      } catch(e) { notify('Load failed','err') }
+      } catch(e) { notify(t('loadFailed'),'err') }
       finally { busy.value = false }
     }
 
@@ -1218,8 +1989,8 @@ const Services = {
       mailBusy.value = true
       try {
         const r = await api.post(mail.value.enabled ? '/mail/off' : '/mail/on')
-        if (r.ok) { notify('Mailpit '+(mail.value.enabled?'disabled':'enabled')); await load() }
-        else notify(r.error||'Failed','err')
+        if (r.ok) { notify(mail.value.enabled ? t('mailpitDisabled') : t('mailpitEnabled')); await load() }
+        else notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { mailBusy.value = false }
     }
@@ -1228,8 +1999,8 @@ const Services = {
       traefikBusy.value = true
       try {
         const r = await api.post('/traefik/off')
-        if (r.ok) { notify('Traefik disabled'); await load() }
-        else notify(r.error||'Failed','err')
+        if (r.ok) { notify(t('traefikDisabled')); await load() }
+        else notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { traefikBusy.value = false }
     }
@@ -1241,8 +2012,8 @@ const Services = {
       traefikOnBusy.value = true
       try {
         const r = await api.post('/traefik/on', traefikForm.value)
-        if (r.ok) { notify('Traefik enabled'); await load() }
-        else notify(r.error||'Failed','err')
+        if (r.ok) { notify(t('traefikEnabled')); await load() }
+        else notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { traefikOnBusy.value = false }
     }
@@ -1253,9 +2024,9 @@ const Services = {
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Services</div><div class="page-sub">Optional services for local development</div></div>
+      <div><div class="page-title">{{ $t('servicesTitle') }}</div><div class="page-sub">{{ $t('servicesSubtitle') }}</div></div>
       <button class="btn btn-ghost" @click="load" :disabled="busy">
-        <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+        <span v-html="I.refresh" :class="busy?'spin':''"></span> {{ $t('refresh') }}
       </button>
     </div>
 
@@ -1274,7 +2045,7 @@ const Services = {
             </div>
             <div>
               <div style="font-size:15px;font-weight:700;color:var(--tx);">Mailpit</div>
-              <div style="font-size:12px;color:var(--mu);">Local SMTP testing</div>
+              <div style="font-size:12px;color:var(--mu);">{{ $t('localSmtpTesting') }}</div>
             </div>
           </div>
           <label class="toggle" :style="mailBusy?'opacity:.5;pointer-events:none':''">
@@ -1284,17 +2055,17 @@ const Services = {
         </div>
 
         <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Service</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?'Enabled':'Disabled' }}</span></div>
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Container</span>
-            <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:var(--mu);">{{ mail.running?'Running':'Stopped' }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">{{ $t('service') }}</span><span class="badge" :class="mail.enabled?'badge-green':'badge-gray'">{{ mail.enabled?$t('enabled'):$t('disabled') }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">{{ $t('container') }}</span>
+            <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:var(--mu);">{{ mail.running?$t('runningState'):$t('stoppedState') }}</span></div>
           </div>
           <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">SMTP</span><span style="color:var(--tx);font-family:monospace;">:1025</span></div>
-          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Web UI</span><span style="color:var(--tx);font-family:monospace;">:8025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('webUiLabel') }}</span><span style="color:var(--tx);font-family:monospace;">:8025</span></div>
         </div>
 
         <div style="border-top:1px solid var(--ln);padding-top:12px;">
           <a href="http://localhost:8025" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
-            <span v-html="I.ext"></span> Open Mailpit
+            <span v-html="I.ext"></span> {{ $t('openMailpit') }}
           </a>
         </div>
       </div>
@@ -1308,46 +2079,46 @@ const Services = {
             </div>
             <div>
               <div style="font-size:15px;font-weight:700;color:var(--tx);">Traefik</div>
-              <div style="font-size:12px;color:var(--mu);">Reverse proxy / HTTPS</div>
+              <div style="font-size:12px;color:var(--mu);">{{ $t('reverseProxyHttps') }}</div>
             </div>
           </div>
-          <span class="badge" :class="traefik.enabled?'badge-green':'badge-gray'">{{ traefik.enabled?'Active':'Inactive' }}</span>
+          <span class="badge" :class="traefik.enabled?'badge-green':'badge-gray'">{{ traefik.enabled?$t('active'):$t('inactive') }}</span>
         </div>
 
         <div style="display:grid;gap:7px;margin-bottom:16px;font-size:12px;">
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Mode</span>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">{{ $t('mode') }}</span>
             <span v-if="traefik.mode" class="badge" :class="traefik.mode==='production'?'badge-purple':'badge-blue'">{{ traefik.mode }}</span>
-            <span v-else style="color:var(--su);">Not configured</span>
+            <span v-else style="color:var(--su);">{{ $t('notConfigured') }}</span>
           </div>
-          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Domain</span><span style="color:var(--tx);font-family:monospace;">{{ traefik.domain }}</span></div>
-          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">Override</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?'Present':'Not found' }}</span></div>
+          <div v-if="traefik.domain" style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('domain') }}</span><span style="color:var(--tx);font-family:monospace;">{{ traefik.domain }}</span></div>
+          <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">{{ $t('override') }}</span><span class="badge" :class="traefik.override_exists?'badge-green':'badge-gray'">{{ traefik.override_exists?$t('present'):$t('notFound') }}</span></div>
         </div>
 
         <div style="border-top:1px solid var(--ln);padding-top:12px;">
           <button v-if="traefik.enabled" @click="traefikOff" class="btn btn-danger" :disabled="traefikBusy">
-            <span v-html="traefikBusy?I.spin:I.x" :class="traefikBusy?'spin':''"></span> Disable Traefik
+            <span v-html="traefikBusy?I.spin:I.x" :class="traefikBusy?'spin':''"></span> {{ $t('disableTraefik') }}
           </button>
           <div v-else style="font-size:12px;">
             <div style="display:grid;gap:9px;margin-bottom:12px;">
               <div>
-                <label style="color:var(--mu);display:block;margin-bottom:4px;">Mode</label>
+                <label style="color:var(--mu);display:block;margin-bottom:4px;">{{ $t('mode') }}</label>
                 <select v-model="traefikForm.mode" class="input" style="width:auto;">
-                  <option value="local">local (HTTP)</option>
-                  <option value="production">production (HTTPS + Let's Encrypt)</option>
+                  <option value="local">{{ $t('localHttpOption') }}</option>
+                  <option value="production">{{ $t('productionHttpsOption') }}</option>
                 </select>
               </div>
               <div>
-                <label style="color:var(--mu);display:block;margin-bottom:4px;">Domain</label>
+                <label style="color:var(--mu);display:block;margin-bottom:4px;">{{ $t('domain') }}</label>
                 <input v-model="traefikForm.domain" class="input" placeholder="myodoo.local" />
               </div>
               <div v-if="traefikForm.mode==='production'">
-                <label style="color:var(--mu);display:block;margin-bottom:4px;">Let's Encrypt email</label>
+                <label style="color:var(--mu);display:block;margin-bottom:4px;">{{ $t('letsEncryptEmail') }}</label>
                 <input v-model="traefikForm.email" type="email" class="input" placeholder="you@example.com" />
               </div>
             </div>
             <button @click="traefikOn" class="btn btn-primary btn-sm" :disabled="traefikOnBusy">
               <span v-html="traefikOnBusy?I.spin:I.globe" :class="traefikOnBusy?'spin':''"></span>
-              {{ traefikOnBusy ? 'Enabling…' : 'Enable Traefik' }}
+              {{ traefikOnBusy ? $t('enablingEllipsis') : $t('enableTraefik') }}
             </button>
           </div>
         </div>
@@ -1386,12 +2157,12 @@ const Setup = {
       scaffBusy.value = true; output.value = ''
       try {
         const r = await api.post('/setup/scaffold', { template: form.value.template, force: false })
-        output.value = r.ok ? '✓ Scaffold complete.' : '✗ '+r.error
-        r.ok ? notify('Scaffold complete') : notify(r.error||'Failed','err')
+        output.value = r.ok ? t('scaffoldCompleteOutput') : '✗ '+r.error
+        r.ok ? notify(t('scaffoldComplete')) : notify(r.error||t('failed'),'err')
       } finally { scaffBusy.value = false }
     }
     async function initProject() {
-      if (!form.value.project_name.trim()) { notify('Project name required','err'); return }
+      if (!form.value.project_name.trim()) { notify(t('projectNameRequired'),'err'); return }
       busy.value = true; output.value = ''
       try {
         const r = await api.post('/setup/init', {
@@ -1403,8 +2174,8 @@ const Setup = {
           ssh_key_name: form.value.ssh_key_name || null,
           use_third_party_repos: form.value.use_third_party_repos,
         })
-        if (r.ok) { output.value = '✓ Project initialized: '+r.project_name; notify('Project initialized') }
-        else { output.value = '✗ '+r.error+(r.detail?'\n'+r.detail:''); notify(r.error||'Failed','err') }
+        if (r.ok) { output.value = t('projectInitializedOutput', { name: r.project_name }); notify(t('projectInitialized')) }
+        else { output.value = '✗ '+r.error+(r.detail?'\n'+r.detail:''); notify(r.error||t('failed'),'err') }
       } finally { busy.value = false }
     }
     onActivated(loadKeys)
@@ -1413,98 +2184,98 @@ const Setup = {
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Setup</div><div class="page-sub">Scaffold and initialize a new Rocketdoo project in the active directory</div></div>
+      <div><div class="page-title">{{ $t('setupTitle') }}</div><div class="page-sub">{{ $t('setupSubtitle') }}</div></div>
     </div>
     <div style="display:grid;gap:20px;max-width:700px;">
       <div class="card">
         <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.rocket" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Step 1 — Scaffold Templates
+          <span v-html="I.rocket" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> {{ $t('step1ScaffoldTemplates') }}
         </div>
-        <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">Copies base template files to the current directory. Run this first in a new project.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">{{ $t('scaffoldStepDesc') }}</div>
         <div style="margin-bottom:14px;">
-          <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:6px;">Template type</label>
+          <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:6px;">{{ $t('templateType') }}</label>
           <select v-model="form.template" class="input" style="width:auto;">
-            <option value="basic">basic — standard Odoo setup with Docker</option>
-            <option value="advanced">advanced — with extra tooling</option>
-            <option value="minimal">minimal — bare minimum</option>
+            <option value="basic">{{ $t('templateBasicOption') }}</option>
+            <option value="advanced">{{ $t('templateAdvancedOption') }}</option>
+            <option value="minimal">{{ $t('templateMinimalOption') }}</option>
           </select>
         </div>
         <button @click="scaffold" class="btn btn-ghost" :disabled="scaffBusy">
           <span v-html="scaffBusy?I.spin:I.build" :class="scaffBusy?'spin':''"></span>
-          {{ scaffBusy ? 'Scaffolding…' : 'Run Scaffold (rkd scaffold)' }}
+          {{ scaffBusy ? $t('scaffoldingEllipsis') : $t('runScaffold') }}
         </button>
       </div>
       <div class="card">
         <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.setup" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Step 2 — Initialize Project
+          <span v-html="I.setup" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> {{ $t('step2InitializeProject') }}
         </div>
-        <div style="font-size:12px;color:var(--mu);margin-bottom:14px;">Generates Dockerfile, docker-compose.yaml, odoo.conf and launch.json from your answers below.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:14px;">{{ $t('initStepDesc') }}</div>
         <div style="display:grid;gap:12px;">
           <div>
-            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Project name *</label>
-            <input v-model="form.project_name" class="input" placeholder="my-odoo-project — used as container name prefix" />
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('projectNameLabel') }}</label>
+            <input v-model="form.project_name" class="input" :placeholder="$t('projectNamePlaceholder')" />
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Odoo version</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('odooVersionLabel') }}</label>
               <select v-model="form.odoo_version" class="input">
                 <option>15.0</option><option>16.0</option><option>17.0</option><option>18.0</option><option>19.0</option>
               </select>
             </div>
             <div>
-              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Edition</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('editionLabel') }}</label>
               <select v-model="form.odoo_edition" class="input">
-                <option>Community</option><option>Enterprise — requires access to Odoo Enterprise repo</option>
+                <option value="Community">Community</option><option value="Enterprise">Enterprise — {{ $t('enterpriseHint') }}</option>
               </select>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">PostgreSQL version</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('postgresqlVersionLabel') }}</label>
               <select v-model="form.db_version" class="input"><option>13</option><option>14</option><option>15</option><option>16</option></select>
             </div>
             <div>
-              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Restart policy</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('restartPolicyLabel') }}</label>
               <select v-model="form.restart" class="input">
-                <option value="unless-stopped">unless-stopped — restart unless manually stopped</option>
-                <option value="always">always — restart on any exit</option>
-                <option value="no">no — never auto-restart</option>
+                <option value="unless-stopped">{{ $t('restartUnlessStoppedOption') }}</option>
+                <option value="always">{{ $t('restartAlwaysOption') }}</option>
+                <option value="no">{{ $t('restartNoOption') }}</option>
               </select>
             </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div>
-              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Odoo port</label>
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('odooPortLabel') }}</label>
               <div style="display:flex;gap:7px;">
                 <input v-model="form.odoo_port" type="number" class="input" placeholder="8069" @blur="checkPort('odoo_port')" />
-                <button @click="checkPort('odoo_port')" class="btn btn-ghost btn-sm" title="Check port availability" aria-label="Check port availability">
+                <button @click="checkPort('odoo_port')" class="btn btn-ghost btn-sm" :title="$t('checkPortAvailability')" :aria-label="$t('checkPortAvailability')">
                   <span v-html="I.check" :style="{color:portStatus.odoo_port===true?'var(--ok)':portStatus.odoo_port===false?'var(--er)':'inherit'}"></span>
                 </button>
               </div>
-              <div v-if="portStatus.odoo_port===false" style="font-size:11px;color:var(--er);margin-top:3px;">Port in use — choose another</div>
-              <div v-if="portStatus.odoo_port===true" style="font-size:11px;color:var(--ok);margin-top:3px;">Available</div>
+              <div v-if="portStatus.odoo_port===false" style="font-size:11px;color:var(--er);margin-top:3px;">{{ $t('portInUse') }}</div>
+              <div v-if="portStatus.odoo_port===true" style="font-size:11px;color:var(--ok);margin-top:3px;">{{ $t('available') }}</div>
             </div>
             <div>
-              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">VSCode debug port</label>
-              <input v-model="form.vsc_port" type="number" class="input" placeholder="8888 — for debugpy remote attach" />
+              <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('vscodeDebugPortLabel') }}</label>
+              <input v-model="form.vsc_port" type="number" class="input" :placeholder="$t('vscodeDebugPortPlaceholder')" />
             </div>
           </div>
           <div>
-            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Master password (admin_passwd)</label>
-            <input v-model="form.admin_passwd" type="password" class="input" placeholder="admin — Odoo database manager password" />
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('masterPasswordLabel') }}</label>
+            <input v-model="form.admin_passwd" type="password" class="input" :placeholder="$t('masterPasswordPlaceholder')" />
           </div>
           <div style="display:flex;gap:20px;">
             <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mu);cursor:pointer;">
-              <input type="checkbox" v-model="form.use_private_repos" style="accent-color:var(--br);"> SSH / Private repos
+              <input type="checkbox" v-model="form.use_private_repos" style="accent-color:var(--br);"> {{ $t('sshPrivateRepos') }}
             </label>
             <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mu);cursor:pointer;">
-              <input type="checkbox" v-model="form.use_third_party_repos" style="accent-color:var(--br);"> Gitman repos
+              <input type="checkbox" v-model="form.use_third_party_repos" style="accent-color:var(--br);"> {{ $t('gitmanRepos') }}
             </label>
           </div>
           <div v-if="form.use_private_repos">
-            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">SSH key (from ~/.ssh/)</label>
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('sshKeyFromDir') }}</label>
             <select v-model="form.ssh_key_name" class="input">
-              <option value="">— none —</option>
+              <option value="">{{ $t('noneOption') }}</option>
               <option v-for="k in sshKeys" :key="k" :value="k">{{ k }}</option>
             </select>
           </div>
@@ -1512,7 +2283,7 @@ const Setup = {
         <div style="margin-top:18px;border-top:1px solid var(--ln);padding-top:14px;">
           <button @click="initProject" class="btn btn-primary" :disabled="busy">
             <span v-html="busy?I.spin:I.play" :class="busy?'spin':''"></span>
-            {{ busy ? 'Initializing…' : 'Initialize Project (rkd init)' }}
+            {{ busy ? $t('initializingEllipsis') : $t('initializeProject') }}
           </button>
         </div>
       </div>
@@ -1543,15 +2314,15 @@ const Deploy = {
       try {
         const [t,c] = await Promise.all([api.get('/deploy/targets'), api.get('/deploy/config')])
         targets.value = t.targets||[]; hasConfig.value = c.exists
-      } catch { notify('Load failed','err') }
+      } catch { notify(t('loadFailed'),'err') }
       finally { busy.value = false }
     }
     async function deployTarget(target, dry_run=false) {
       const k = target+dry_run; depBusy.value[k] = true; output.value = ''
       try {
         const r = await api.post('/deploy/run', { target, dry_run, modules:[], skip_backup:false, skip_validation:false })
-        output.value = r.ok ? '✓ '+(dry_run?'[dry-run] ':'')+'Deploy done.\n'+(r.result||r.message||'') : '✗ '+r.error
-        r.ok ? notify((dry_run?'Dry run':'Deploy')+' '+target+' done') : notify(r.error||'Failed','err')
+        output.value = r.ok ? '✓ '+(dry_run?t('dryRunPrefixOutput'):'')+t('deployDoneOutput')+(r.result||r.message||'') : '✗ '+r.error
+        r.ok ? notify(dry_run ? t('dryRunTargetDone', { target: target }) : t('deployTargetDone', { target: target })) : notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err'); output.value = '✗ '+e.message }
       finally { delete depBusy.value[k] }
     }
@@ -1560,7 +2331,7 @@ const Deploy = {
       try {
         const r = await api.post('/deploy/validate')
         validation.value = r
-        r.ok ? notify('All '+r.total+' modules valid') : notify('Validation errors found','err')
+        r.ok ? notify(t('allModulesValid', {count: r.total})) : notify(t('validationErrorsFound'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { valBusy.value = false }
     }
@@ -1568,8 +2339,8 @@ const Deploy = {
       initBusy.value = true
       try {
         const r = await api.post('/deploy/init', { ...initForm.value, ssh_port: Number(initForm.value.ssh_port) })
-        if (r.ok) { notify('deploy.yaml created'); await load() }
-        else notify(r.error||'Failed','err')
+        if (r.ok) { notify(t('deployYamlCreated')); await load() }
+        else notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { initBusy.value = false }
     }
@@ -1579,13 +2350,13 @@ const Deploy = {
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Deploy</div><div class="page-sub">Deploy Odoo modules to configured VPS targets</div></div>
+      <div><div class="page-title">{{ $t('deployTitle') }}</div><div class="page-sub">{{ $t('deploySubtitle') }}</div></div>
       <div style="display:flex;gap:10px;">
         <button class="btn btn-ghost" @click="validate" :disabled="valBusy">
-          <span v-html="valBusy?I.spin:I.check" :class="valBusy?'spin':''"></span> Validate Modules
+          <span v-html="valBusy?I.spin:I.check" :class="valBusy?'spin':''"></span> {{ $t('validateModules') }}
         </button>
         <button class="btn btn-ghost" @click="load" :disabled="busy">
-          <span v-html="I.refresh" :class="busy?'spin':''"></span> Refresh
+          <span v-html="I.refresh" :class="busy?'spin':''"></span> {{ $t('refresh') }}
         </button>
       </div>
     </div>
@@ -1593,7 +2364,7 @@ const Deploy = {
     <div v-if="validation" class="card" :style="{borderColor:validation.ok?'rgba(var(--ok-rgb),0.3)':'rgba(var(--er-rgb),0.3)',marginBottom:'20px'}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <span v-html="validation.ok?I.check:I.warn" :style="{width:'16px',height:'16px',color:validation.ok?'var(--ok)':'var(--er)',flexShrink:0}"></span>
-        <span style="font-size:14px;font-weight:600;color:var(--tx);">{{ validation.ok ? 'All '+validation.total+' modules valid' : 'Validation errors' }}</span>
+        <span style="font-size:14px;font-weight:600;color:var(--tx);">{{ validation.ok ? $t('allModulesValid', {count: validation.total}) : $t('validationErrors') }}</span>
       </div>
       <div v-if="!validation.ok" style="font-size:12px;color:var(--er);">
         <div v-for="(errs,mod) in validation.errors" :key="mod" style="margin-bottom:3px;">
@@ -1609,43 +2380,43 @@ const Deploy = {
     <template v-else>
       <div v-if="!hasConfig" class="card" style="max-width:600px;margin-bottom:20px;">
         <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.deploy" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Create Deploy Config
+          <span v-html="I.deploy" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> {{ $t('createDeployConfig') }}
         </div>
-        <div style="font-size:12px;color:var(--mu);margin-bottom:14px;">Creates <code style="color:var(--lk);">.rkd/deploy.yaml</code> with your VPS target configuration.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:14px;" v-html="$t('createDeployConfigDesc')"></div>
         <div style="display:grid;gap:11px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Target name</label>
-              <input v-model="initForm.target_name" class="input" placeholder="production — identifier for this target" /></div>
-            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Type</label>
-              <select v-model="initForm.target_type" class="input"><option value="vps">vps — self-hosted Linux server</option><option value="odoo-sh">odoo-sh — Odoo.sh platform</option></select></div>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('targetNameLabel') }}</label>
+              <input v-model="initForm.target_name" class="input" :placeholder="$t('targetNamePlaceholder')" /></div>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('type') }}</label>
+              <select v-model="initForm.target_type" class="input"><option value="vps">{{ $t('vpsOption') }}</option><option value="odoo-sh">{{ $t('odooShOption') }}</option></select></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 80px;gap:10px;">
-            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Host / IP</label>
-              <input v-model="initForm.host" class="input" placeholder="10.0.0.1 or vps.example.com" /></div>
-            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">SSH Port</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('hostIpLabel') }}</label>
+              <input v-model="initForm.host" class="input" :placeholder="$t('hostIpPlaceholder')" /></div>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('sshPortLabel') }}</label>
               <input v-model="initForm.ssh_port" type="number" class="input" placeholder="22" /></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">User</label>
-              <input v-model="initForm.user" class="input" placeholder="ubuntu — SSH user on the VPS" /></div>
-            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">Deployment</label>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('userLabel') }}</label>
+              <input v-model="initForm.user" class="input" :placeholder="$t('userPlaceholder')" /></div>
+            <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('deploymentLabel') }}</label>
               <select v-model="initForm.deployment_type" class="input"><option value="docker">docker</option><option value="native">native</option></select></div>
           </div>
-          <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">SSH Key path</label>
-            <input v-model="initForm.ssh_key" class="input" placeholder="~/.ssh/id_rsa — leave empty to use ssh-agent" /></div>
+          <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('sshKeyPathLabel') }}</label>
+            <input v-model="initForm.ssh_key" class="input" :placeholder="$t('sshKeyPathPlaceholder')" /></div>
         </div>
         <div style="margin-top:14px;border-top:1px solid var(--ln);padding-top:12px;">
           <button @click="initDeploy" class="btn btn-primary" :disabled="initBusy">
             <span v-html="initBusy?I.spin:I.play" :class="initBusy?'spin':''"></span>
-            {{ initBusy ? 'Creating…' : 'Create deploy.yaml' }}
+            {{ initBusy ? $t('creatingEllipsis') : $t('createDeployYaml') }}
           </button>
         </div>
       </div>
 
       <div v-else-if="!targets.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.deploy"></div>
-        <h3>No deploy targets found</h3>
-        <p>Add targets to <code style="color:var(--lk);">.rkd/deploy.yaml</code></p>
+        <h3>{{ $t('noDeployTargetsFound') }}</h3>
+        <p v-html="$t('addTargetsHint')"></p>
       </div>
 
       <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;margin-bottom:20px;">
@@ -1656,14 +2427,14 @@ const Deploy = {
             <span class="badge badge-blue" style="margin-left:auto;">{{ t.type }}</span>
           </div>
           <div style="font-size:12px;margin-bottom:14px;">
-            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:48px;">Host</span><span style="color:var(--tx);font-family:monospace;">{{ t.host||'—' }}</span></div>
+            <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:48px;">{{ $t('host') }}</span><span style="color:var(--tx);font-family:monospace;">{{ t.host||'—' }}</span></div>
           </div>
           <div style="border-top:1px solid var(--ln);padding-top:12px;display:flex;gap:8px;">
             <button @click="deployTarget(t.name,false)" class="btn btn-primary btn-sm" :disabled="depBusy[t.name+'false']">
-              <span v-html="depBusy[t.name+'false']?I.spin:I.deploy" :class="depBusy[t.name+'false']?'spin':''"></span> Deploy
+              <span v-html="depBusy[t.name+'false']?I.spin:I.deploy" :class="depBusy[t.name+'false']?'spin':''"></span> {{ $t('deploy') }}
             </button>
             <button @click="deployTarget(t.name,true)" class="btn btn-ghost btn-sm" :disabled="depBusy[t.name+'true']">
-              <span v-html="depBusy[t.name+'true']?I.spin:I.play" :class="depBusy[t.name+'true']?'spin':''"></span> Dry run
+              <span v-html="depBusy[t.name+'true']?I.spin:I.play" :class="depBusy[t.name+'true']?'spin':''"></span> {{ $t('dryRun') }}
             </button>
           </div>
         </div>
@@ -1705,7 +2476,7 @@ const Pack = {
         if (packForm.value.db_name) body.db_name = packForm.value.db_name
         const r = await api.post('/pack/pack', body)
         output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
-        r.ok ? notify('Pack completed') : notify(r.stderr||'Pack failed','err')
+        r.ok ? notify(t('packCompleted')) : notify(r.stderr||t('packFailed'),'err')
         if (r.ok) await load()
       } finally { packBusy.value = false }
     }
@@ -1716,7 +2487,7 @@ const Pack = {
         unpackInfo.value = r
         unpackForm.value.use_ssh = !!(r.meta && r.meta.uses_private_repos)
         unpackForm.value.ssh_key = (r.ssh_keys && r.ssh_keys.length) ? r.ssh_keys[0] : ''
-      } catch { notify('Could not load unpack info','err') }
+      } catch { notify(t('unpackInfoLoadFailed'),'err') }
       finally { loadingInfo.value = false }
     }
     async function runUnpack() {
@@ -1728,7 +2499,7 @@ const Pack = {
         }
         const r = await api.post('/pack/unpack', body)
         output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
-        r.ok ? notify('Unpack completed') : notify(r.stderr||'Unpack failed','err')
+        r.ok ? notify(t('unpackCompleted')) : notify(r.stderr||t('unpackFailed'),'err')
         if (r.ok) { showUnpackWizard.value = false; await load() }
       } finally { unpackBusy.value = false }
     }
@@ -1740,22 +2511,22 @@ const Pack = {
   template: `
   <div class="page fade-in">
     <div class="page-header">
-      <div><div class="page-title">Pack / Unpack</div><div class="page-sub">Package and share complete Rocketdoo environments</div></div>
+      <div><div class="page-title">{{ $t('packTitle') }}</div><div class="page-sub">{{ $t('packSubtitle') }}</div></div>
     </div>
     <div style="display:grid;gap:20px;max-width:680px;">
       <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
         <div class="stat-card">
-          <div class="stat-label">Project</div>
+          <div class="stat-label">{{ $t('project') }}</div>
           <div style="display:flex;align-items:center;gap:7px;margin-top:8px;">
             <span class="dot" :class="status.project_exists?'dot-green':'dot-red'"></span>
-            <span style="color:var(--tx);">{{ status.project_exists?'Found':'Not found' }}</span>
+            <span style="color:var(--tx);">{{ status.project_exists?$t('found'):$t('notFound') }}</span>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-label">rkd-shared.json</div>
           <div style="display:flex;align-items:center;gap:7px;margin-top:8px;">
             <span class="dot" :class="status.shared_json_found?'dot-green':'dot-gray'"></span>
-            <span style="color:var(--tx);">{{ status.shared_json_found?'Found':'Not found' }}</span>
+            <span style="color:var(--tx);">{{ status.shared_json_found?$t('found'):$t('notFound') }}</span>
           </div>
         </div>
       </div>
@@ -1763,72 +2534,69 @@ const Pack = {
       <!-- Pack card -->
       <div class="card">
         <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:14px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.pack" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> Pack Environment
+          <span v-html="I.pack" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span> {{ $t('packEnvironment') }}
         </div>
-        <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">Creates a ZIP with the full project (code + DB backup + filestore) to share with another developer.</div>
+        <div style="font-size:12px;color:var(--mu);margin-bottom:12px;">{{ $t('packEnvironmentDesc') }}</div>
         <div style="display:grid;gap:11px;margin-bottom:14px;">
           <label style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mu);cursor:pointer;">
-            <input type="checkbox" v-model="packForm.include_db" style="accent-color:var(--br);"> Include database backup (pg_dump)
+            <input type="checkbox" v-model="packForm.include_db" style="accent-color:var(--br);"> {{ $t('includeDbBackup') }}
           </label>
           <div>
-            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Output path (optional)</label>
-            <input v-model="packForm.output_path" class="input" placeholder="~/my-project.zip — default: auto-named in current dir" />
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('outputPathLabel') }}</label>
+            <input v-model="packForm.output_path" class="input" :placeholder="$t('outputPathPlaceholder')" />
           </div>
           <div>
-            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">Database name (optional)</label>
-            <input v-model="packForm.db_name" class="input" placeholder="auto-detect — leave empty to detect automatically" />
+            <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('databaseNameLabel') }}</label>
+            <input v-model="packForm.db_name" class="input" :placeholder="$t('databaseNamePlaceholder')" />
           </div>
         </div>
         <button @click="pack" class="btn btn-primary" :disabled="packBusy||!status.project_exists">
           <span v-html="packBusy?I.spin:I.pack" :class="packBusy?'spin':''"></span>
-          {{ packBusy ? 'Packing…' : 'Pack (rkd pack)' }}
+          {{ packBusy ? $t('packingEllipsis') : $t('packButton') }}
         </button>
       </div>
 
       <!-- Unpack card -->
       <div class="card">
         <div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:10px;display:flex;align-items:center;gap:8px;">
-          <span v-html="I.pack" style="width:16px;height:16px;color:var(--pu);flex-shrink:0;"></span> Unpack Environment
+          <span v-html="I.pack" style="width:16px;height:16px;color:var(--pu);flex-shrink:0;"></span> {{ $t('unpackEnvironment') }}
         </div>
-        <div style="font-size:13px;color:var(--mu);margin-bottom:14px;">
-          Restore a previously packed environment in the current directory.
-          Requires <code style="background:var(--s);padding:1px 5px;border-radius:4px;color:var(--lk);font-size:11px;">rkd-shared.json</code> to be present.
+        <div style="font-size:13px;color:var(--mu);margin-bottom:14px;" v-html="$t('unpackEnvironmentDesc')">
         </div>
 
         <!-- Wizard panel (shown after clicking Configure) -->
         <div v-if="showUnpackWizard" style="border:1px solid var(--ln2);border-radius:8px;padding:16px;margin-bottom:14px;background:var(--s);">
-          <div v-if="loadingInfo" style="color:var(--mu);font-size:13px;">Loading environment info…</div>
+          <div v-if="loadingInfo" style="color:var(--mu);font-size:13px;">{{ $t('loadingEnvironmentInfo') }}</div>
           <template v-else>
             <!-- Environment metadata -->
             <div v-if="unpackInfo.meta && unpackInfo.meta.project_name" style="margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--ln);">
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--su);margin-bottom:7px;">Environment detected</div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--su);margin-bottom:7px;">{{ $t('environmentDetected') }}</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                <div style="font-size:12px;color:var(--mu);">Project: <span style="color:var(--tx);">{{ unpackInfo.meta.project_name }}</span></div>
+                <div style="font-size:12px;color:var(--mu);">{{ $t('project') }}: <span style="color:var(--tx);">{{ unpackInfo.meta.project_name }}</span></div>
                 <div style="font-size:12px;color:var(--mu);">Odoo: <span style="color:var(--tx);">{{ unpackInfo.meta.odoo_version }}</span></div>
-                <div style="font-size:12px;color:var(--mu);">Edition: <span style="color:var(--tx);">{{ unpackInfo.meta.odoo_edition||'Community' }}</span></div>
-                <div style="font-size:12px;color:var(--mu);">DB backup: <span :style="{color: unpackInfo.meta.has_db_backup?'var(--ok)':'var(--gy)'}">{{ unpackInfo.meta.has_db_backup?'Included':'Not included' }}</span></div>
+                <div style="font-size:12px;color:var(--mu);">{{ $t('editionLabel') }}: <span style="color:var(--tx);">{{ unpackInfo.meta.odoo_edition||'Community' }}</span></div>
+                <div style="font-size:12px;color:var(--mu);">{{ $t('dbBackupLabel') }}: <span :style="{color: unpackInfo.meta.has_db_backup?'var(--ok)':'var(--gy)'}">{{ unpackInfo.meta.has_db_backup?$t('included'):$t('notIncluded') }}</span></div>
               </div>
             </div>
 
             <!-- SSH Configuration -->
             <div style="margin-bottom:14px;">
-              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--su);margin-bottom:10px;">🔐 Repository configuration</div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--su);margin-bottom:10px;">🔐 {{ $t('repositoryConfiguration') }}</div>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx);cursor:pointer;margin-bottom:10px;">
                 <input type="checkbox" v-model="unpackForm.use_ssh" style="accent-color:var(--br);">
-                Uses private repositories (SSH key required)
-                <span v-if="unpackInfo.meta && unpackInfo.meta.uses_private_repos" class="badge badge-yellow" style="font-size:9px;">recommended by sender</span>
+                {{ $t('usesPrivateRepositories') }}
+                <span v-if="unpackInfo.meta && unpackInfo.meta.uses_private_repos" class="badge badge-yellow" style="font-size:9px;">{{ $t('recommendedBySender') }}</span>
               </label>
               <div v-if="unpackForm.use_ssh">
-                <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">SSH key from ~/.ssh/</label>
+                <label style="font-size:12px;color:var(--mu);display:block;margin-bottom:5px;">{{ $t('sshKeyFromDirShort') }}</label>
                 <select v-model="unpackForm.ssh_key" class="input">
-                  <option value="">— select a key —</option>
+                  <option value="">{{ $t('selectAKeyOption') }}</option>
                   <option v-for="k in unpackInfo.ssh_keys" :key="k" :value="k">{{ k }}</option>
                 </select>
-                <div v-if="!unpackInfo.ssh_keys.length" style="font-size:11px;color:var(--er);margin-top:5px;">
-                  No SSH keys found in ~/.ssh/ — generate one with <code style="color:var(--lk);">ssh-keygen -t ed25519</code>
+                <div v-if="!unpackInfo.ssh_keys.length" style="font-size:11px;color:var(--er);margin-top:5px;" v-html="$t('noSshKeysFoundHint')">
                 </div>
                 <div v-if="unpackInfo.meta && unpackInfo.meta.ssh_key_name" style="font-size:11px;color:var(--mu);margin-top:5px;">
-                  Sender used key: <span style="color:var(--wn);">{{ unpackInfo.meta.ssh_key_name }}</span>
+                  {{ $t('senderUsedKey') }}: <span style="color:var(--wn);">{{ unpackInfo.meta.ssh_key_name }}</span>
                 </div>
               </div>
             </div>
@@ -1838,16 +2606,16 @@ const Pack = {
               <button @click="runUnpack" class="btn btn-primary"
                 :disabled="unpackBusy || (unpackForm.use_ssh && !unpackForm.ssh_key)">
                 <span v-html="unpackBusy?I.spin:I.play" :class="unpackBusy?'spin':''"></span>
-                {{ unpackBusy ? 'Unpacking…' : 'Start Unpack' }}
+                {{ unpackBusy ? $t('unpackingEllipsis') : $t('startUnpack') }}
               </button>
-              <button @click="showUnpackWizard=false" class="btn btn-ghost" :disabled="unpackBusy">Cancel</button>
+              <button @click="showUnpackWizard=false" class="btn btn-ghost" :disabled="unpackBusy">{{ $t('cancel') }}</button>
             </div>
           </template>
         </div>
 
         <button v-if="!showUnpackWizard" @click="openUnpackWizard" class="btn btn-ghost" :disabled="!status.shared_json_found">
           <span v-html="I.play" style="width:13px;height:13px;"></span>
-          Configure &amp; Unpack
+          {{ $t('configureAndUnpack') }}
         </button>
       </div>
 
@@ -1889,8 +2657,8 @@ const Projects = {
         projects.value = r.projects || []
         scanned.value = true
         if (r.error) notify(r.error, 'err')
-        else if (r.total > 0) notify('Found ' + r.total + ' project' + (r.total !== 1 ? 's' : ''))
-        else notify('No Rocketdoo projects found in ' + r.base_dir, 'err')
+        else if (r.total > 0) notify(t('projectsFoundCount', {count: r.total}))
+        else notify(t('noProjectsFoundInDir', {dir: r.base_dir}), 'err')
       } catch(e) { notify(e.message, 'err') }
       finally { busy.value = false }
     }
@@ -1903,9 +2671,9 @@ const Projects = {
           currentPath.value = r.path
           customPath.value = r.path
           projects.value = projects.value.map(p => ({ ...p, is_current: p.path === r.path }))
-          notify('Project "' + r.name + '" opened — switching to Dashboard')
+          notify(t('projectOpenedSwitching', { name: r.name }))
           setTimeout(() => { view.value = 'dashboard' }, 400)
-        } else notify(r.error || 'Failed to open project', 'err')
+        } else notify(r.error || t('failedToOpenProject'), 'err')
       } catch(e) { notify(e.message, 'err') }
       finally { navBusy.value[path] = false }
     }
@@ -1918,14 +2686,14 @@ const Projects = {
 
     async function createProject() {
       const name = newName.value.trim()
-      if (!name) { notify('Project name required', 'err'); return }
+      if (!name) { notify(t('projectNameRequired'), 'err'); return }
       createBusy.value = true
       try {
         const mkr = await api.post('/workspace/mkdir', { name, base_dir: scanDir.value })
-        if (!mkr.ok) { notify(mkr.error || 'Failed to create directory', 'err'); return }
+        if (!mkr.ok) { notify(mkr.error || t('failedToCreateDirectory'), 'err'); return }
         const navr = await api.post('/workspace/navigate', { path: mkr.path })
         if (navr.ok) { currentPath.value = navr.path; customPath.value = navr.path }
-        notify('Created ' + mkr.name + ' — opening Setup…')
+        notify(t('createdOpeningSetup', { name: mkr.name }))
         newName.value = ''
         // Small delay so the notify is visible before switching
         setTimeout(() => { view.value = 'setup' }, 600)
@@ -1948,87 +2716,87 @@ const Projects = {
   <div class="page fade-in">
     <div class="page-header">
       <div>
-        <div class="page-title">Projects</div>
-        <div class="page-sub">Discover, navigate and create Rocketdoo projects on this host</div>
+        <div class="page-title">{{ $t('projectsTitle') }}</div>
+        <div class="page-sub">{{ $t('projectsSubtitle') }}</div>
       </div>
       <button class="btn btn-ghost" @click="discover" :disabled="busy">
         <span v-html="busy?I.spin:I.search" :class="busy?'spin':''"></span>
-        {{ busy ? 'Scanning…' : 'Scan' }}
+        {{ busy ? $t('scanningEllipsis') : $t('scan') }}
       </button>
     </div>
 
     <!-- ── Active project directory ──────────────────────────────────────── -->
     <div style="margin-bottom:24px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Active Project Directory</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">{{ $t('activeProjectDirectory') }}</div>
       <div class="card">
         <div v-if="!editing" style="display:flex;align-items:center;gap:12px;">
           <span v-html="I.folder" style="width:18px;height:18px;color:var(--lk);flex-shrink:0;"></span>
           <span style="font-family:monospace;font-size:13px;color:var(--tx);flex:1;word-break:break-all;">{{ currentPath || '…' }}</span>
-          <button @click="editing=true" class="btn btn-ghost btn-sm">Change</button>
+          <button @click="editing=true" class="btn btn-ghost btn-sm">{{ $t('change') }}</button>
         </div>
         <div v-else style="display:flex;gap:8px;align-items:center;">
           <input v-model="customPath" class="input"
-                 placeholder="/home/user/projects/my-project — absolute path"
+                 :placeholder="$t('absolutePathPlaceholder')"
                  @keyup.enter="navigateCustom"
                  style="font-family:monospace;font-size:12px;" />
-          <button @click="navigateCustom" class="btn btn-primary btn-sm">Go</button>
-          <button @click="editing=false" class="btn btn-ghost btn-sm">Cancel</button>
+          <button @click="navigateCustom" class="btn btn-primary btn-sm">{{ $t('go') }}</button>
+          <button @click="editing=false" class="btn btn-ghost btn-sm">{{ $t('cancel') }}</button>
         </div>
       </div>
     </div>
 
     <!-- ── Create new project ────────────────────────────────────────────── -->
     <div style="margin-bottom:28px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Create New Project</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">{{ $t('createNewProject') }}</div>
       <div class="card">
         <div style="font-size:13px;color:var(--mu);margin-bottom:14px;">
-          Creates a new directory in the scan folder → navigates to it → opens Setup so you can scaffold and initialize.
+          {{ $t('createNewProjectDesc') }}
         </div>
         <div style="display:flex;gap:10px;margin-bottom:10px;">
           <input v-model="newName" class="input"
-                 placeholder="my-odoo-project — directory name, no spaces"
+                 :placeholder="$t('newProjectNamePlaceholder')"
                  @keyup.enter="createProject"
                  style="font-family:monospace;" />
           <button @click="createProject" class="btn btn-primary"
                   :disabled="createBusy || !newName.trim()"
                   style="white-space:nowrap;flex-shrink:0;">
             <span v-html="createBusy?I.spin:I.plus" :class="createBusy?'spin':''"></span>
-            {{ createBusy ? 'Creating…' : 'Create & Setup' }}
+            {{ createBusy ? $t('creatingEllipsis') : $t('createAndSetup') }}
           </button>
         </div>
         <div style="font-size:11px;color:var(--su);">
-          Will create:
+          {{ $t('willCreate') }}
           <span style="font-family:monospace;color:var(--mu);">{{ scanDir }}/{{ newName || '&lt;name&gt;' }}</span>
         </div>
       </div>
     </div>
 
     <!-- ── Discover section ──────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">Discover Projects</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">{{ $t('discoverProjects') }}</div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
       <input v-model="scanDir" class="input"
-             placeholder="~/workspace — base directory to scan recursively"
+             :placeholder="$t('scanDirPlaceholder')"
              @keyup.enter="discover" />
       <button @click="discover" class="btn btn-ghost" :disabled="busy" style="white-space:nowrap;flex-shrink:0;">
-        <span v-html="busy?I.spin:I.search" :class="busy?'spin':''"></span> Discover
+        <span v-html="busy?I.spin:I.search" :class="busy?'spin':''"></span> {{ $t('discover') }}
       </button>
     </div>
 
     <div v-if="busy" style="text-align:center;padding:60px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
-      <div style="margin-top:12px;font-size:13px;">Scanning for projects…</div>
+      <div style="margin-top:12px;font-size:13px;">{{ $t('scanningForProjects') }}</div>
     </div>
 
     <template v-else>
       <div v-if="scanned && !projects.length" class="card empty" style="border-style:dashed;">
         <div v-html="I.compass"></div>
-        <h3>No projects found</h3>
-        <p>A Rocketdoo project must have both <code style="color:var(--lk);">Dockerfile</code> and <code style="color:var(--lk);">docker-compose.yaml</code></p>
+        <h3>{{ $t('noProjectsFound') }}</h3>
+        <p v-html="$t('noProjectsFoundDesc')"></p>
       </div>
 
       <div v-else-if="projects.length">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:14px;">
-          {{ projects.length }} Project{{ projects.length !== 1 ? 's' : '' }} Found
+          {{ $t('projectsFoundCount', {count: projects.length}) }}
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
           <div v-for="p in projects" :key="p.path"
@@ -2042,15 +2810,15 @@ const Projects = {
                 <div style="font-size:10px;color:var(--su);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
                      :title="p.path">{{ p.path }}</div>
               </div>
-              <span v-if="p.is_current" class="badge badge-blue" style="margin-left:8px;flex-shrink:0;">Active</span>
+              <span v-if="p.is_current" class="badge badge-blue" style="margin-left:8px;flex-shrink:0;">{{ $t('active') }}</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
               <span class="dot"
                     :class="p.running>0 ? 'dot-green' : p.containers>0 ? 'dot-red' : 'dot-gray'"></span>
               <span style="font-size:12px;color:var(--mu);">
                 {{ p.containers > 0
-                   ? p.running + '/' + p.containers + ' container' + (p.containers!==1?'s':'') + ' running'
-                   : 'No containers' }}
+                   ? $t('containersRunningCount', {running: p.running, total: p.containers})
+                   : $t('noContainers') }}
               </span>
             </div>
             <div style="border-top:1px solid var(--ln);padding-top:12px;">
@@ -2060,11 +2828,11 @@ const Projects = {
                       :disabled="navBusy[p.path]">
                 <span v-html="navBusy[p.path]?I.spin:I.folder"
                       :class="navBusy[p.path]?'spin':''"></span>
-                {{ navBusy[p.path] ? 'Switching…' : 'Open Project' }}
+                {{ navBusy[p.path] ? $t('switchingEllipsis') : $t('openProject') }}
               </button>
               <div v-else style="display:flex;align-items:center;gap:6px;">
                 <span class="dot dot-green" style="width:6px;height:6px;"></span>
-                <span style="font-size:12px;color:var(--ok);font-weight:500;">Currently active</span>
+                <span style="font-size:12px;color:var(--ok);font-weight:500;">{{ $t('currentlyActive') }}</span>
               </div>
             </div>
           </div>
@@ -2083,26 +2851,26 @@ const Help = {
   <div class="page fade-in">
     <div class="page-header" style="margin-bottom:24px;">
       <div>
-        <div class="page-title">Help &amp; Quick Guide</div>
-        <div class="page-sub">Reference for all GUI features with their CLI equivalents</div>
+        <div class="page-title">{{ $t('helpTitle') }}</div>
+        <div class="page-sub">{{ $t('helpSubtitle') }}</div>
       </div>
       <a href="https://rkd-docs.readthedocs.io" target="_blank" class="btn btn-ghost" style="text-decoration:none;flex-shrink:0;">
-        <span v-html="I.ext"></span> Full Docs
+        <span v-html="I.ext"></span> {{ $t('fullDocs') }}
       </a>
     </div>
 
     <!-- ── Quick Start ───────────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">Quick Start</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">{{ $t('quickStart') }}</div>
     <div class="card-flat" style="margin-bottom:28px;">
       <div style="padding:20px 24px;">
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;">
           <div v-for="(step,i) in [
-            {n:1, title:'Navigate', desc:'Use Projects to open or switch to your project directory.', cli:'cd my-project'},
-            {n:2, title:'Scaffold', desc:'Copy the base template files into the current directory.', cli:'rkd scaffold'},
-            {n:3, title:'Initialize', desc:'Run the interactive wizard to configure Docker and Odoo.', cli:'rkd init'},
-            {n:4, title:'Start', desc:'Build the image and start all containers in the background.', cli:'rkd up -d'},
-            {n:5, title:'Develop', desc:'Open Odoo in the browser, check logs, add modules.', cli:'http://localhost:8069'},
-            {n:6, title:'Deploy', desc:'Push modules to a VPS target when ready for production.', cli:'rkd deploy run -t prod'},
+            {n:1, title:$t('qsNavigateTitle'), desc:$t('qsNavigateDesc'), cli:'cd my-project'},
+            {n:2, title:$t('qsScaffoldTitle'), desc:$t('qsScaffoldDesc'), cli:'rkd scaffold'},
+            {n:3, title:$t('qsInitializeTitle'), desc:$t('qsInitializeDesc'), cli:'rkd init'},
+            {n:4, title:$t('qsStartTitle'), desc:$t('qsStartDesc'), cli:'rkd up -d'},
+            {n:5, title:$t('qsDevelopTitle'), desc:$t('qsDevelopDesc'), cli:'http://localhost:8069'},
+            {n:6, title:$t('qsDeployTitle'), desc:$t('qsDeployDesc'), cli:'rkd deploy run -t prod'},
           ]" :key="i"
           style="display:flex;gap:14px;padding:14px 16px;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln);">
             <div style="width:26px;height:26px;border-radius:50%;background:rgba(var(--br-rgb),0.25);border:1px solid rgba(var(--br-rgb),0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:700;color:var(--lk);">{{ step.n }}</div>
@@ -2117,17 +2885,17 @@ const Help = {
     </div>
 
     <!-- ── View Reference ────────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">View Reference</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">{{ $t('viewReference') }}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:28px;">
 
       <!-- Projects -->
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.compass" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Projects</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navProjects') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalent</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">{{ $t('helpProjectsDesc') }}</p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalent') }}</div>
         <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:4px 9px;display:inline-block;">cd /path/to/project &amp;&amp; rkd gui</code>
       </div>
 
@@ -2135,10 +2903,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.dashboard" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Dashboard</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navDashboard') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:var(--tx);">Start</b> / <b style="color:var(--tx);">Stop</b> / <b style="color:var(--tx);">Build</b> buttons open a real-time terminal showing the full docker output.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpDashboardDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd up -d</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd down</code>
@@ -2151,10 +2919,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.containers" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Containers</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navContainers') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:var(--tx);">Logs</b> to open a live WebSocket stream for that container.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpContainersDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd status</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd logs web -f</code>
@@ -2166,10 +2934,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.modules" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Modules</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navModules') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Scans the <code style="color:var(--lk);font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:var(--tx);">External Repos</b> section shows and edits <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpModulesDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy list-modules</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">gitman update</code>
@@ -2180,10 +2948,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.instances" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Instances</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navInstances') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:var(--tx);">stage</b> and <b style="color:var(--tx);">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpInstancesDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance init</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd instance deploy --env stage</code>
@@ -2194,10 +2962,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.services" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Services</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navServices') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;"><b style="color:var(--tx);">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:var(--lk);font-size:11px;">localhost:8025</code> to inspect them. <b style="color:var(--tx);">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpServicesDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd mail on/off</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd traefik on/off</code>
@@ -2208,10 +2976,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.deploy" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Deploy</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navDeploy') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Deploy specific Odoo <b style="color:var(--tx);">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:var(--tx);">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpDeployDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy init</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd deploy run -t prod</code>
@@ -2222,10 +2990,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.pack" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Pack</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navPack') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;">Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:var(--tx);">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpPackDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd pack</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd unpack</code>
@@ -2236,10 +3004,10 @@ const Help = {
       <div class="card" style="padding:16px 18px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <span v-html="I.setup" style="width:15px;height:15px;color:var(--lk);flex-shrink:0;"></span>
-          <span style="font-size:13px;font-weight:700;color:var(--tx);">Setup</span>
+          <span style="font-size:13px;font-weight:700;color:var(--tx);">{{ $t('navSetup') }}</span>
         </div>
-        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;"><b style="color:var(--tx);">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:var(--tx);">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.</p>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">Equivalents</div>
+        <p style="font-size:12px;color:var(--mu);line-height:1.55;margin-bottom:10px;" v-html="$t('helpSetupDesc')"></p>
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:5px;">{{ $t('equivalents') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:5px;">
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd scaffold</code>
           <code style="font-size:11px;color:var(--term-t);background:var(--term-b);border:1px solid var(--term-ln);border-radius:5px;padding:3px 8px;font-family:monospace;">rkd init</code>
@@ -2250,41 +3018,41 @@ const Help = {
     </div><!-- /grid -->
 
     <!-- ── CLI Quick Reference ────────────────────────────────────────────── -->
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">CLI Quick Reference</div>
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">{{ $t('cliQuickReference') }}</div>
     <div class="card-flat" style="margin-bottom:8px;">
       <table class="table">
         <thead>
           <tr>
-            <th style="width:38%;">Command</th>
-            <th>Description</th>
+            <th style="width:38%;">{{ $t('command') }}</th>
+            <th>{{ $t('description') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="([cmd,desc],i) in [
-            ['rkd scaffold',                    'Copy base template files into the current directory'],
-            ['rkd init',                        'Interactive wizard — Dockerfile, docker-compose, odoo.conf'],
-            ['rkd info',                        'Display current project configuration in tables'],
-            ['rkd up -d',                       'Start all containers in detached mode'],
-            ['rkd down [-v]',                   'Stop and remove containers (optionally delete volumes)'],
-            ['rkd restart',                     'Restart all services'],
-            ['rkd build --rebuild',             'Rebuild Docker image and restart'],
-            ['rkd status',                      'Show container status (docker compose ps)'],
-            ['rkd stop',                        'Stop containers without removing them'],
-            ['rkd logs [service] -f',           'Stream container logs (live follow)'],
-            ['rkd mail on / off / status',      'Toggle Mailpit SMTP testing server'],
-            ['rkd mail open',                   'Open Mailpit web UI at localhost:8025'],
-            ['rkd traefik on / off / status',   'Toggle Traefik reverse proxy'],
-            ['rkd traefik guide',               'Show /etc/hosts setup instructions'],
-            ['rkd deploy init',                 'Configure module deployment targets'],
-            ['rkd deploy list-modules',         'Scan and list Odoo modules in addons/'],
-            ['rkd deploy run -t TARGET',        'Deploy modules to a configured target'],
-            ['rkd deploy validate',             'Validate modules before deployment'],
-            ['rkd instance init',               'Configure stage/prod VPS environments'],
-            ['rkd instance deploy --env STAGE', 'Deploy full Odoo instance to VPS'],
-            ['rkd instance status',             'Show configured deployment environments'],
-            ['rkd pack',                        'Package environment (code + DB) as a ZIP'],
-            ['rkd unpack',                      'Restore an environment from a ZIP'],
-            ['rkd del -i',                      'Remove .Identifier files generated by WSL2'],
+            ['rkd scaffold',                    $t('cliScaffold')],
+            ['rkd init',                        $t('cliInit')],
+            ['rkd info',                        $t('cliInfo')],
+            ['rkd up -d',                       $t('cliUp')],
+            ['rkd down [-v]',                   $t('cliDown')],
+            ['rkd restart',                     $t('cliRestart')],
+            ['rkd build --rebuild',             $t('cliBuild')],
+            ['rkd status',                      $t('cliStatus')],
+            ['rkd stop',                        $t('cliStop')],
+            ['rkd logs [service] -f',           $t('cliLogs')],
+            ['rkd mail on / off / status',      $t('cliMail')],
+            ['rkd mail open',                   $t('cliMailOpen')],
+            ['rkd traefik on / off / status',   $t('cliTraefik')],
+            ['rkd traefik guide',               $t('cliTraefikGuide')],
+            ['rkd deploy init',                 $t('cliDeployInit')],
+            ['rkd deploy list-modules',         $t('cliDeployListModules')],
+            ['rkd deploy run -t TARGET',        $t('cliDeployRun')],
+            ['rkd deploy validate',             $t('cliDeployValidate')],
+            ['rkd instance init',               $t('cliInstanceInit')],
+            ['rkd instance deploy --env STAGE', $t('cliInstanceDeploy')],
+            ['rkd instance status',             $t('cliInstanceStatus')],
+            ['rkd pack',                        $t('cliPack')],
+            ['rkd unpack',                      $t('cliUnpack')],
+            ['rkd del -i',                      $t('cliDelIdentifier')],
           ]" :key="i">
             <td style="font-family:monospace;font-size:12px;color:var(--lk);white-space:nowrap;">{{ cmd }}</td>
             <td style="font-size:12px;color:var(--mu);">{{ desc }}</td>
@@ -2293,10 +3061,7 @@ const Help = {
       </table>
     </div>
 
-    <div style="text-align:center;padding:16px 0 4px;font-size:12px;color:var(--su);">
-      Run <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd --help</code> or
-      <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
-      for full option details in the terminal.
+    <div style="text-align:center;padding:16px 0 4px;font-size:12px;color:var(--su);" v-html="$t('runHelpFooter')">
     </div>
   </div>`
 }
@@ -2307,18 +3072,18 @@ const Help = {
 const App = {
   components: { Projects, Dashboard, Containers, Modules, Instances, Services, Setup, Deploy, Pack, Help },
   setup() {
-    const nav = [
-      { id:'projects',   label:'Projects',   icon: I.compass    },
-      { id:'dashboard',  label:'Dashboard',  icon: I.dashboard  },
-      { id:'containers', label:'Containers', icon: I.containers },
-      { id:'modules',    label:'Modules',    icon: I.modules    },
-      { id:'instances',  label:'Instances',  icon: I.instances  },
-      { id:'services',   label:'Services',   icon: I.services   },
-      { id:'deploy',     label:'Deploy',     icon: I.deploy     },
-      { id:'setup',      label:'Setup',      icon: I.setup      },
-      { id:'pack',       label:'Pack',       icon: I.pack       },
-      { id:'help',       label:'Help',       icon: I.help       },
-    ]
+    const nav = computed(() => [
+      { id:'projects',   label:t('navProjects'),   icon: I.compass    },
+      { id:'dashboard',  label:t('navDashboard'),  icon: I.dashboard  },
+      { id:'containers', label:t('navContainers'), icon: I.containers },
+      { id:'modules',    label:t('navModules'),    icon: I.modules    },
+      { id:'instances',  label:t('navInstances'),  icon: I.instances  },
+      { id:'services',   label:t('navServices'),   icon: I.services   },
+      { id:'deploy',     label:t('navDeploy'),     icon: I.deploy     },
+      { id:'setup',      label:t('navSetup'),      icon: I.setup      },
+      { id:'pack',       label:t('navPack'),       icon: I.pack       },
+      { id:'help',       label:t('navHelp'),       icon: I.help       },
+    ])
     const viewMap = {
       projects:'Projects', dashboard:'Dashboard', containers:'Containers',
       modules:'Modules', instances:'Instances', services:'Services',
@@ -2373,16 +3138,14 @@ const App = {
       }
       init()
     })
-    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion, authError }
+    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion, authError, lang, toggleLang }
   },
   template: `
   <div v-if="authError" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
     <div class="card" style="max-width:460px;text-align:center;">
       <span v-html="I.warn" style="width:32px;height:32px;color:var(--wn);display:inline-block;margin-bottom:12px;"></span>
-      <h2 style="font-size:16px;margin-bottom:8px;">Session token required</h2>
-      <p style="color:var(--mu);font-size:13px;line-height:1.6;">
-        This page has no valid session token. Open the URL printed by <code>rkd gui</code>
-        in the terminal it is running from — it ends with <code>?token=...</code>.
+      <h2 style="font-size:16px;margin-bottom:8px;">{{ $t('sessionTokenRequired') }}</h2>
+      <p style="color:var(--mu);font-size:13px;line-height:1.6;" v-html="$t('sessionTokenRequiredDesc')">
       </p>
     </div>
   </div>
@@ -2400,12 +3163,12 @@ const App = {
       </div>
 
       <!-- Active path pill -->
-      <button type="button" v-if="currentPath" class="active-path" @click="view='projects'" title="Click to manage projects" aria-label="Manage projects">
-        <div class="active-path-label">Working Dir</div>
+      <button type="button" v-if="currentPath" class="active-path" @click="view='projects'" :title="$t('clickToManageProjects')" :aria-label="$t('manageProjects')">
+        <div class="active-path-label">{{ $t('workingDir') }}</div>
         <div class="active-path-val">{{ currentPath.split('/').slice(-2).join('/') || currentPath }}</div>
       </button>
 
-      <nav class="nav" aria-label="Main navigation">
+      <nav class="nav" :aria-label="$t('mainNavigation')">
         <button type="button" v-for="n in nav" :key="n.id"
              class="nav-item" :class="{ active: view===n.id }"
              :aria-current="view===n.id ? 'page' : null"
@@ -2417,17 +3180,26 @@ const App = {
 
       <div class="sidebar-footer">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <span style="color:var(--su);">Rocketdoo GUI<span v-if="rkdVersion"> v{{ rkdVersion }}</span></span>
-          <button @click="toggleTheme" class="btn btn-ghost btn-sm"
-                  :title="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
-                  :aria-label="darkMode ? 'Switch to light mode' : 'Switch to dark mode'"
-                  style="padding:3px 8px;border-radius:6px;">
-            <span v-html="darkMode ? I.sun : I.moon" style="width:14px;height:14px;display:block;"></span>
-          </button>
+          <span style="color:var(--su);">Rocketdoo<span v-if="rkdVersion"> v{{ rkdVersion }}</span></span>
+          <div style="display:flex;gap:4px;">
+            <button @click="toggleLang" class="btn btn-ghost btn-sm"
+                    :title="$t('switchLanguage', {code: lang==='es' ? 'EN' : 'ES'})"
+                    :aria-label="$t('switchLanguage', {code: lang==='es' ? 'EN' : 'ES'})"
+                    style="padding:3px 8px;border-radius:6px;gap:4px;">
+              <span v-html="I.globe" style="width:13px;height:13px;display:block;"></span>
+              <span style="font-size:11px;font-weight:700;">{{ lang==='es' ? 'EN' : 'ES' }}</span>
+            </button>
+            <button @click="toggleTheme" class="btn btn-ghost btn-sm"
+                    :title="darkMode ? $t('switchToLightMode') : $t('switchToDarkMode')"
+                    :aria-label="darkMode ? $t('switchToLightMode') : $t('switchToDarkMode')"
+                    style="padding:3px 8px;border-radius:6px;">
+              <span v-html="darkMode ? I.sun : I.moon" style="width:14px;height:14px;display:block;"></span>
+            </button>
+          </div>
         </div>
         <a href="https://rkd-docs.readthedocs.io" target="_blank"
            style="color:var(--lk);text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:4px;">
-          <span v-html="I.ext" style="width:10px;height:10px;"></span> Documentation
+          <span v-html="I.ext" style="width:10px;height:10px;"></span> {{ $t('documentation') }}
         </a>
       </div>
     </aside>
@@ -2449,6 +3221,8 @@ const App = {
   </div>`
 }
 
-createApp(App).mount('#app')
+const app = createApp(App)
+app.config.globalProperties.$t = t
+app.mount('#app')
 </script>
 </body>
