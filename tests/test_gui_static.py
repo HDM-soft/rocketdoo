@@ -612,12 +612,14 @@ def test_i18n_no_untranslated_text_between_tags():
     )
 
 
-def _balanced_call_args(code, open_paren_idx):
-    """The substring strictly between the `(` at `open_paren_idx` and its matching `)`, tracking
-    string/template-literal state so a `)` or nested `(` inside a literal (including `${...}`
-    inside a backtick) never miscounts as the call's own parens."""
+def _balanced_span(code, open_idx, open_ch, close_ch):
+    """The substring strictly between the `open_ch` at `open_idx` and its matching `close_ch`,
+    tracking string/template-literal state so a stray bracket inside a literal (including
+    `${...}` inside a backtick) never miscounts as one of the span's own brackets. Shared by
+    `_balanced_call_args` (parens, around a call's arguments) and `_balanced_brace_block`
+    (braces, around an object literal or a `const X = { ... }` component body)."""
     depth = 0
-    i = open_paren_idx
+    i = open_idx
     in_str = None
     template_expr_depth = 0
     n = len(code)
@@ -646,14 +648,24 @@ def _balanced_call_args(code, open_paren_idx):
             in_str = c
             i += 1
             continue
-        if c == "(":
+        if c == open_ch:
             depth += 1
-        elif c == ")":
+        elif c == close_ch:
             depth -= 1
             if depth == 0:
-                return code[open_paren_idx + 1 : i]
+                return code[open_idx + 1 : i]
         i += 1
-    raise ValueError("unbalanced parentheses")
+    raise ValueError(f"unbalanced {open_ch!r}/{close_ch!r}")
+
+
+def _balanced_call_args(code, open_paren_idx):
+    """The substring strictly between the `(` at `open_paren_idx` and its matching `)`."""
+    return _balanced_span(code, open_paren_idx, "(", ")")
+
+
+def _balanced_brace_block(code, open_brace_idx):
+    """The substring strictly between the `{` at `open_brace_idx` and its matching `}`."""
+    return _balanced_span(code, open_brace_idx, "{", "}")
 
 
 def _untranslated_words_in_literal(raw_literal, extra_allowed=frozenset()):
@@ -762,3 +774,122 @@ def test_i18n_interpolation_placeholders_match_call_sites():
             if names != es_placeholders:
                 failures.append(f"{key}: call site passes {sorted(names)}, dict declares {sorted(es_placeholders)}")
     assert not failures, "\n".join(failures)
+
+
+LANG_ATTR_SYNC_RE = re.compile(r"document\.documentElement\.lang\s*=\s*(?:lang\.value|value)\b")
+LANG_WATCH_RE = re.compile(r"watch\(lang,\s*\([^)]*\)\s*=>\s*\{(.*?)\}\)", re.S)
+
+
+def test_document_lang_attribute_follows_selected_language():
+    """`<html lang>` has to track the chosen interface language on first paint and on every
+    change via `toggleLang()`, or a screen reader keeps applying the wrong language's
+    pronunciation rules to translated text. `document.documentElement.lang` must be set once at
+    `lang` ref creation and again inside the `watch(lang, ...)` callback that already persists
+    the choice to `localStorage`."""
+    script = _script_block(_text()).group(1)
+    assert len(LANG_ATTR_SYNC_RE.findall(script)) >= 2, (
+        "expected document.documentElement.lang to be assigned both at init and inside the `lang` watcher"
+    )
+    watch_match = LANG_WATCH_RE.search(script)
+    assert watch_match, "expected a `watch(lang, (value) => { ... })` callback"
+    assert LANG_ATTR_SYNC_RE.search(watch_match.group(1)), (
+        "the `lang` watcher must update document.documentElement.lang, not just localStorage"
+    )
+
+
+# I2 (T5 review): T5 introduced a component (`ServiceTable`) shared by two screens, and neither
+# of the two gaps below was caught by any existing invariant — removing `Dashboard`'s dead
+# `openOdoo` key, or shrinking `ServiceTable`'s `colspan` to the wrong number, both left every
+# other test green.
+RETURN_OBJECT_RE = re.compile(r"\breturn\s*\{")
+
+
+def _setup_return_keys_per_template(script):
+    """For each `template:` literal, the keys of the `return {...}` object that immediately
+    precedes it — found positionally rather than by matching each component by name, because
+    every component in this file is shaped `setup() { ... return {...} }, template: \\`...\\``
+    with nothing else in between, so the last `return {` before a given `template:` always
+    belongs to that same component. Yields `(template_body, [key, ...])` per component; a plain
+    identifier (`proj`) and an aliased one (`busy: projBusy`) both contribute their *key*
+    (`proj`, `busy`) — the key is what the template actually references, never the alias."""
+    results = []
+    search_start = 0
+    for match in TEMPLATE_LITERAL_RE.finditer(script):
+        segment = script[search_start : match.start()]
+        return_matches = list(RETURN_OBJECT_RE.finditer(segment))
+        if return_matches:
+            open_idx = return_matches[-1].end() - 1
+            obj_body = _balanced_brace_block(segment, open_idx)
+            keys = []
+            for entry in _split_top_level(obj_body, ","):
+                key = entry.strip().split(":", 1)[0].strip()
+                if re.fullmatch(r"[a-zA-Z_$][\w$]*", key):
+                    keys.append(key)
+            results.append((match.group(1), keys))
+        search_start = match.end()
+    return results
+
+
+def _split_top_level(text, sep):
+    """`text.split(sep)`, but a `sep` inside a bracketed sub-expression or a string/template
+    literal doesn't count — the same nesting a real parser would respect, needed because a
+    returned value can itself be a call like `t('key', {a, b})`."""
+    parts, current, depth, in_str = [], [], 0, None
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if in_str:
+            current.append(c)
+            if c == "\\" and i + 1 < n:
+                i += 1
+                current.append(text[i])
+            elif c == in_str:
+                in_str = None
+            i += 1
+            continue
+        if c in "'\"`":
+            in_str = c
+        elif c in "{[(":
+            depth += 1
+        elif c in "}])":
+            depth -= 1
+        if c == sep and depth == 0:
+            parts.append("".join(current))
+            current = []
+            i += 1
+            continue
+        current.append(c)
+        i += 1
+    parts.append("".join(current))
+    return parts
+
+
+def test_setup_return_keys_are_all_used_in_their_own_template():
+    script = _script_block(_text()).group(1)
+    violations = []
+    for template_body, keys in _setup_return_keys_per_template(script):
+        for key in keys:
+            if not re.search(r"\b" + re.escape(key) + r"\b", template_body):
+                violations.append(key)
+    assert not violations, (
+        "setup() returns a key never referenced in its own template (dead code, or a rename "
+        f"that missed the template): {sorted(set(violations))}"
+    )
+
+
+TABLE_RE = re.compile(r"<thead>(.*?)</thead>.*?<tbody>(.*?)</tbody>", re.S)
+
+
+def test_table_colspan_matches_its_own_header_count():
+    """A `colspan` that doesn't match its table's own `<th>` count breaks the layout the moment
+    that row renders — exactly what shrinking `ServiceTable`'s sixth column (Time) would do
+    without anyone noticing, since it is shared by two screens and no test looked at either."""
+    text = _text()
+    violations = []
+    for match in TABLE_RE.finditer(text):
+        thead, tbody = match.groups()
+        th_count = len(re.findall(r"<th\b", thead))
+        for cs in re.finditer(r'colspan="(\d+)"', tbody):
+            if int(cs.group(1)) != th_count:
+                violations.append(f"colspan={cs.group(1)} but <thead> has {th_count} <th>")
+    assert not violations, "\n".join(violations)

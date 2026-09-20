@@ -32,6 +32,12 @@ body { background: var(--b); color: var(--tx); font-family: system-ui, -apple-sy
 .main { flex: 1; overflow-y: auto; }
 .page { padding: 32px 36px; max-width: 1120px; }
 
+/* Top bar (RF11: permanent project context on every screen) */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 12px 36px; background: var(--b); border-bottom: 1px solid var(--ln); }
+.topbar-context { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 220px; }
+.topbar-name { font-size: 13px; font-weight: 700; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
 /* Sidebar logo */
 .logo-area { padding: 22px 18px 18px; border-bottom: 1px solid var(--ln); display: flex; align-items: center; gap: 10px; }
 .logo-icon { width: 38px; height: 38px; background: linear-gradient(135deg, var(--br) 0%, var(--pu) 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 20px rgba(var(--br-rgb),0.4); }
@@ -47,10 +53,13 @@ body { background: var(--b); color: var(--tx); font-family: system-ui, -apple-sy
 
 /* Sidebar nav */
 .nav { flex: 1; padding: 12px 10px; }
+.nav-group-label { padding: 14px 12px 4px; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--su); }
+.nav-group-label:first-child { padding-top: 2px; }
 .nav-item { display: flex; align-items: center; gap: 10px; background: none; font-family: inherit; padding: 9px 12px; border-radius: 8px; cursor: pointer; color: var(--mu); font-size: 13px; font-weight: 500; margin-bottom: 2px; transition: all .15s; border: 1px solid transparent; user-select: none; }
 .nav-item:hover { background: rgba(var(--br-rgb),0.1); color: var(--tx); }
 .nav-item.active { background: rgba(var(--br-rgb),0.18); color: var(--lk); border-color: rgba(var(--br-rgb),0.3); }
 .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.nav-count { font-size: 10px; font-weight: 700; background: rgba(var(--br-rgb),0.18); color: var(--lk); padding: 1px 6px; border-radius: 10px; flex-shrink: 0; }
 .nav-sep { height: 1px; background: var(--ln); margin: 8px 10px; }
 .sidebar-footer { padding: 14px 18px; border-top: 1px solid var(--ln); font-size: 11px; color: var(--su); line-height: 1.7; }
 
@@ -61,7 +70,7 @@ body { background: var(--b); color: var(--tx); font-family: system-ui, -apple-sy
 .card-header { padding: 12px 20px; border-bottom: 1px solid var(--ln); display: flex; align-items: center; justify-content: space-between; }
 
 /* Badges */
-.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
 .badge-blue   { background: rgba(var(--br-rgb),0.22); color: var(--lk); }
 .badge-green  { background: rgba(var(--ok-rgb),0.18);  color: var(--ok); }
 .badge-red    { background: rgba(var(--er-rgb),0.18);  color: var(--er); }
@@ -104,7 +113,7 @@ body { background: var(--b); color: var(--tx); font-family: system-ui, -apple-sy
 
 /* Table */
 .table { width: 100%; border-collapse: collapse; }
-.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--su); border-bottom: 1px solid var(--ln); }
+.table th { text-align: left; padding: 10px 18px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--su); border-bottom: 1px solid var(--ln); white-space: nowrap; }
 .table td { padding: 13px 18px; border-bottom: 1px solid var(--ln); vertical-align: middle; }
 .table tr:last-child td { border-bottom: none; }
 .table tr:hover td { background: rgba(var(--br-rgb),0.04); }
@@ -218,6 +227,7 @@ const L = {
     absolutePathPlaceholder: `/home/user/projects/my-project — ruta absoluta`,
     actions: `Acciones`,
     active: `Activo`,
+    activeContainersPill: `{running} de {total} activos`,
     activeProjectDirectory: `Directorio de proyecto activo`,
     add: `Agregar`,
     addModulesHint: `Agrega módulos de Odoo al directorio addons/`,
@@ -285,7 +295,6 @@ const L = {
     currentlyActive: `Actualmente activo`,
     dashboardSubtitle: `Resumen del proyecto y controles rápidos`,
     dashboardTitle: `Panel`,
-    database: `Base de datos`,
     databaseNameLabel: `Nombre de la base de datos (opcional)`,
     databaseNamePlaceholder: `auto-detectar — deja vacío para detectarla automáticamente`,
     dbBackupLabel: `Backup de la BD`,
@@ -325,7 +334,7 @@ const L = {
     gitmanYamlNotFoundDesc: `Este proyecto no tiene <code style="color:var(--lk);">gitman.yaml</code>.<br>Créalo para gestionar repositorios externos de Odoo (módulos de la comunidad, OCA, etc.)`,
     go: `Ir`,
     helpContainersDesc: `Tabla de todos los servicios (web, db, mailpit…) con su estado, imagen y puertos. Inicia, detén o reinicia un solo servicio sin afectar a los demás. Haz clic en <b style="color:var(--tx);">Logs</b> para abrir un stream en vivo por WebSocket de ese contenedor.`,
-    helpDashboardDesc: `Resumen del proyecto con estadísticas (versión de Odoo, PG, puertos), pastillas de estado de contenedores, visor de logs en línea y acciones rápidas de docker compose. Los botones <b style="color:var(--tx);">Iniciar</b> / <b style="color:var(--tx);">Detener</b> / <b style="color:var(--tx);">Compilar</b> abren una terminal en tiempo real con la salida completa de docker.`,
+    helpDashboardDesc: `Resumen del proyecto (versión de Odoo, edición, PG, puerto) y tabla de servicios con estado, imagen, puertos y acciones propias por fila. Los botones <b style="color:var(--tx);">Iniciar</b> / <b style="color:var(--tx);">Detener</b> / <b style="color:var(--tx);">Compilar</b> abren una terminal en tiempo real con la salida completa de docker.`,
     helpDeployDesc: `Despliega <b style="color:var(--tx);">módulos</b> específicos de Odoo (no la instancia completa) a un destino VPS u Odoo.sh configurado. Primero configura un destino con <b style="color:var(--tx);">Init</b>, luego selecciona módulos y ejecuta un despliegue. Admite simulación, backups y validación antes de enviar.`,
     helpInstancesDesc: `Despliega una instancia completa de Odoo (Dockerfile + docker-compose + odoo.conf) a un VPS remoto vía SSH. Admite entornos <b style="color:var(--tx);">stage</b> y <b style="color:var(--tx);">prod</b>, despliegue con Docker o nativo, y un modo de simulación (dry-run) para previsualizar qué se enviará antes de transferir archivos.`,
     helpModulesDesc: `Escanea el directorio <code style="color:var(--lk);font-size:11px;">addons/</code> y lista todos los módulos de Odoo con su versión y dependencias. La sección <b style="color:var(--tx);">Repositorios externos</b> muestra y edita <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — agrega, edita o elimina repos y luego dispara una reconstrucción de Docker para traer los cambios al contenedor.`,
@@ -356,7 +365,6 @@ const L = {
     localHttpOption: `local (HTTP)`,
     localSmtpTesting: `Pruebas de SMTP local`,
     logs: `Logs`,
-    logsFor: `Logs de {name}`,
     manageProjects: `Gestionar proyectos`,
     managedViaGitman: `Se gestiona con <code style="color:var(--lk);">gitman.yaml</code> → <code style="color:var(--lk);">external_addons/</code>`,
     masterPasswordLabel: `Contraseña maestra (admin_passwd)`,
@@ -369,6 +377,9 @@ const L = {
     navContainers: `Contenedores`,
     navDashboard: `Panel`,
     navDeploy: `Despliegue`,
+    navGroupEnvironment: `Entorno`,
+    navGroupProject: `Proyecto`,
+    navGroupPublish: `Publicar`,
     navHelp: `Ayuda`,
     navInstances: `Instancias`,
     navModules: `Módulos`,
@@ -397,9 +408,9 @@ const L = {
     notConfigured: `Sin configurar`,
     notFound: `No encontrado`,
     notIncluded: `No incluido`,
+    odooNotRunning: `Odoo no está corriendo`,
     odooPortLabel: `Puerto de Odoo`,
     odooShOption: `odoo-sh — plataforma Odoo.sh`,
-    odooVersion: `Versión de Odoo`,
     odooVersionLabel: `Versión de Odoo`,
     openMailpit: `Abrir Mailpit`,
     openOdoo: `Abrir Odoo`,
@@ -416,7 +427,6 @@ const L = {
     path: `Ruta`,
     portInUse: `Puerto en uso — elige otro`,
     ports: `Puertos`,
-    postgresqlLabel: `PostgreSQL`,
     postgresqlVersionLabel: `Versión de PostgreSQL`,
     present: `Presente`,
     production: `Producción`,
@@ -457,7 +467,6 @@ const L = {
       <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
       para ver el detalle completo de opciones en la terminal.`,
     runScaffold: `Ejecutar Scaffold (rkd scaffold)`,
-    runningCount: `{count} en ejecución`,
     runningEllipsis: `ejecutando…`,
     runningState: `En ejecución`,
     saveChanges: `Guardar cambios`,
@@ -510,6 +519,7 @@ const L = {
     templateBasicOption: `basic — configuración estándar de Odoo con Docker`,
     templateMinimalOption: `minimal — lo mínimo indispensable`,
     templateType: `Tipo de plantilla`,
+    time: `Tiempo`,
     tryDifferentSearch: `Prueba con otro término de búsqueda`,
     type: `Tipo`,
     unnamedProject: `Proyecto sin nombre`,
@@ -590,6 +600,7 @@ const L = {
     absolutePathPlaceholder: `/home/user/projects/my-project — absolute path`,
     actions: `Actions`,
     active: `Active`,
+    activeContainersPill: `{running} of {total} active`,
     activeProjectDirectory: `Active Project Directory`,
     add: `Add`,
     addModulesHint: `Add Odoo modules to the addons/ directory`,
@@ -657,7 +668,6 @@ const L = {
     currentlyActive: `Currently active`,
     dashboardSubtitle: `Project overview and quick controls`,
     dashboardTitle: `Dashboard`,
-    database: `Database`,
     databaseNameLabel: `Database name (optional)`,
     databaseNamePlaceholder: `auto-detect — leave empty to detect automatically`,
     dbBackupLabel: `DB backup`,
@@ -697,7 +707,7 @@ const L = {
     gitmanYamlNotFoundDesc: `This project has no <code style="color:var(--lk);">gitman.yaml</code>.<br>Create it to manage external Odoo repositories (community modules, OCA, etc.)`,
     go: `Go`,
     helpContainersDesc: `Table of all services (web, db, mailpit…) with their state, image, and ports. Start, stop, or restart a single service without affecting others. Click <b style="color:var(--tx);">Logs</b> to open a live WebSocket stream for that container.`,
-    helpDashboardDesc: `Project overview with stats (Odoo version, PG, ports), container status pills, inline log viewer, and quick docker compose actions. The <b style="color:var(--tx);">Start</b> / <b style="color:var(--tx);">Stop</b> / <b style="color:var(--tx);">Build</b> buttons open a real-time terminal showing the full docker output.`,
+    helpDashboardDesc: `Project overview (Odoo version, edition, PG, port) and a service table with status, image, ports and its own actions per row. The <b style="color:var(--tx);">Start</b> / <b style="color:var(--tx);">Stop</b> / <b style="color:var(--tx);">Build</b> buttons open a real-time terminal showing the full docker output.`,
     helpDeployDesc: `Deploy specific Odoo <b style="color:var(--tx);">modules</b> (not the full instance) to a configured VPS or Odoo.sh target. First configure a target with <b style="color:var(--tx);">Init</b>, then select modules and run a deployment. Supports dry-run, backups, and validation before pushing.`,
     helpInstancesDesc: `Deploy a full Odoo instance (Dockerfile + docker-compose + odoo.conf) to a remote VPS via SSH. Supports <b style="color:var(--tx);">stage</b> and <b style="color:var(--tx);">prod</b> environments, Docker or native deployment, and a dry-run mode to preview what will be sent before transferring any files.`,
     helpModulesDesc: `Scans the <code style="color:var(--lk);font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:var(--tx);">External Repos</b> section shows and edits <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.`,
@@ -728,7 +738,6 @@ const L = {
     localHttpOption: `local (HTTP)`,
     localSmtpTesting: `Local SMTP testing`,
     logs: `Logs`,
-    logsFor: `Logs for {name}`,
     manageProjects: `Manage projects`,
     managedViaGitman: `Managed via <code style="color:var(--lk);">gitman.yaml</code> → <code style="color:var(--lk);">external_addons/</code>`,
     masterPasswordLabel: `Master password (admin_passwd)`,
@@ -741,6 +750,9 @@ const L = {
     navContainers: `Containers`,
     navDashboard: `Dashboard`,
     navDeploy: `Deploy`,
+    navGroupEnvironment: `Environment`,
+    navGroupProject: `Project`,
+    navGroupPublish: `Publish`,
     navHelp: `Help`,
     navInstances: `Instances`,
     navModules: `Modules`,
@@ -769,9 +781,9 @@ const L = {
     notConfigured: `Not configured`,
     notFound: `Not found`,
     notIncluded: `Not included`,
+    odooNotRunning: `Odoo isn't running`,
     odooPortLabel: `Odoo port`,
     odooShOption: `odoo-sh — Odoo.sh platform`,
-    odooVersion: `Odoo Version`,
     odooVersionLabel: `Odoo version`,
     openMailpit: `Open Mailpit`,
     openOdoo: `Open Odoo`,
@@ -788,7 +800,6 @@ const L = {
     path: `Path`,
     portInUse: `Port in use — choose another`,
     ports: `Ports`,
-    postgresqlLabel: `PostgreSQL`,
     postgresqlVersionLabel: `PostgreSQL version`,
     present: `Present`,
     production: `Production`,
@@ -829,7 +840,6 @@ const L = {
       <code style="color:var(--term-t);font-size:11px;background:var(--term-b);border:1px solid var(--term-ln);border-radius:4px;padding:2px 7px;">rkd &lt;command&gt; --help</code>
       for full option details in the terminal.`,
     runScaffold: `Run Scaffold (rkd scaffold)`,
-    runningCount: `{count} running`,
     runningEllipsis: `running…`,
     runningState: `Running`,
     saveChanges: `Save Changes`,
@@ -882,6 +892,7 @@ const L = {
     templateBasicOption: `basic — standard Odoo setup with Docker`,
     templateMinimalOption: `minimal — bare minimum`,
     templateType: `Template type`,
+    time: `Time`,
     tryDifferentSearch: `Try a different search term`,
     type: `Type`,
     unnamedProject: `Unnamed Project`,
@@ -971,7 +982,11 @@ function detectLang() {
   return nav.startsWith('es') ? 'es' : 'en'
 }
 const lang = ref(readLang() || detectLang())
-watch(lang, writeLang)
+document.documentElement.lang = lang.value
+watch(lang, (value) => {
+  writeLang(value)
+  document.documentElement.lang = value
+})
 function toggleLang() {
   lang.value = lang.value === 'es' ? 'en' : 'es'
 }
@@ -1056,6 +1071,45 @@ function statusLabel(s) {
   if (v === 'stopped') return t('statusStopped')
   if (v === 'paused') return t('statusPaused')
   return t('statusUnknown')
+}
+
+/* ── Shared project/container context (RF11: the top bar reads this on every
+   screen, not just the Dashboard) ──────────────────────────────────────── */
+const proj = ref(null)
+const ctrs = ref([])
+const projBusy = ref(true)
+// M7: `projBusy` used to gate the whole Dashboard/Containers content behind a `v-if`, so every
+// background refresh (a row action, a project switch) unmounted `ServiceTable` — closing any
+// open log viewer and its WebSocket. `projLoaded` gates that full-page spinner instead: true
+// after the *first* successful load, so later refreshes keep the existing content mounted while
+// they run, the same way `Modules`/`Instances`/etc. already behave with their own `busy`.
+const projLoaded = ref(false)
+const running = computed(() => ctrs.value.filter(c => cstatus(c.State||c.Status)==='running').length)
+// I1: the primary-action toggle (top bar "Open Odoo" vs. the Dashboard's "Start All") has to
+// track the container that actually serves Odoo, not the raw running count — with only `db`
+// up, `running` is already 1 even though there is nothing listening on `odoo_port` yet.
+const odooUp = computed(() => {
+  const name = proj.value && proj.value.odoo_container
+  const c = ctrs.value.find(c => name && c.Name === name) || ctrs.value.find(c => c.Service === 'web')
+  return !!c && cstatus(c.State||c.Status) === 'running'
+})
+const moduleCount = ref(null)
+const instanceCount = ref(null)
+
+async function loadProjectContext() {
+  projBusy.value = true
+  try {
+    const [p, c] = await Promise.all([api.get('/project'), api.get('/project/containers')])
+    proj.value = p; ctrs.value = c.containers||[]
+  } catch(e) { notify(t('loadFailed')+': '+e.message, 'err') }
+  finally { projBusy.value = false; projLoaded.value = true }
+}
+async function loadNavCounts() {
+  try { const r = await api.get('/modules'); moduleCount.value = (r.modules||[]).length } catch(e) { /* nav badge only */ }
+  try { const r = await api.get('/instances'); instanceCount.value = (r.instances||[]).length } catch(e) { /* nav badge only */ }
+}
+function openOdoo() {
+  if (proj.value && proj.value.odoo_port) window.open('http://localhost:'+proj.value.odoo_port, '_blank', 'noopener')
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1229,26 +1283,92 @@ const DockerTerminal = {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   SERVICE TABLE — per-row status/image/ports/time + start/stop/restart/logs,
+   shared by the Dashboard's project card and the Containers page so the two
+   don't drift into two different row layouts for the same data.
+══════════════════════════════════════════════════════════════════════════ */
+const ServiceTable = {
+  components: { LogViewer },
+  props: { containers: { type: Array, default: () => [] } },
+  emits: ['changed'],
+  setup(props, { emit }) {
+    const acts  = ref({})
+    const logOf = ref(null)
+
+    async function action(svc, cmd) {
+      const key = svc+cmd; acts.value[key] = true
+      try {
+        const r = await api.post('/docker/service/'+cmd, { service: svc })
+        if (r.ok) { notify(svc+': '+cmd); setTimeout(() => emit('changed'), 1500) }
+        else notify(r.stderr||t('failed'),'err')
+      } catch(e) { notify(e.message,'err') }
+      finally { delete acts.value[key] }
+    }
+
+    return { acts, logOf, action, dotClass, statusBadgeClass, statusVar, statusLabel, I }
+  },
+  template: `
+  <div style="overflow-x:auto;">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{{ $t('status') }}</th><th>{{ $t('service') }}</th><th>{{ $t('image') }}</th><th>{{ $t('ports') }}</th><th>{{ $t('time') }}</th><th style="text-align:right">{{ $t('actions') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <template v-for="c in containers" :key="c.Name||c.Service">
+        <tr>
+          <td :style="{borderLeft: '3px solid ' + statusVar(c.State||c.Status)}">
+            <span class="badge" :class="statusBadgeClass(c.State||c.Status)">
+              <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ statusLabel(c.State||c.Status) }}
+            </span>
+          </td>
+          <td style="max-width:140px;">
+            <div :title="c.Service||c.Name" style="font-size:14px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.Service||c.Name }}</div>
+            <div :title="c.Name" style="font-size:11px;color:var(--su);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ c.Name }}</div>
+          </td>
+          <td :title="c.Image||'—'" style="font-family:monospace;font-size:12px;color:var(--mu);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ (c.Image||'—').split('/').pop() }}</td>
+          <td style="font-family:monospace;font-size:11px;color:var(--mu);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
+          <td :title="c.Status||'—'" style="font-size:11px;color:var(--su);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Status||'—' }}</td>
+          <td style="text-align:right;">
+            <div style="display:flex;gap:5px;justify-content:flex-end;">
+              <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" :title="$t('start')" :aria-label="$t('start')" :disabled="acts[(c.Service||c.Name)+'start']">
+                <span v-html="acts[(c.Service||c.Name)+'start']?I.spin:I.play" :class="acts[(c.Service||c.Name)+'start']?'spin':''"></span>
+              </button>
+              <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" :title="$t('stop')" :aria-label="$t('stop')" :disabled="acts[(c.Service||c.Name)+'stop']">
+                <span v-html="acts[(c.Service||c.Name)+'stop']?I.spin:I.stop" :class="acts[(c.Service||c.Name)+'stop']?'spin':''"></span>
+              </button>
+              <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" :title="$t('restart')" :aria-label="$t('restart')" :disabled="acts[(c.Service||c.Name)+'restart']">
+                <span v-html="acts[(c.Service||c.Name)+'restart']?I.spin:I.restart" :class="acts[(c.Service||c.Name)+'restart']?'spin':''"></span>
+              </button>
+              <button @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
+                      class="btn btn-ghost btn-sm" :title="$t('logs')" :aria-label="$t('logs')"
+                      :aria-expanded="logOf===(c.Name||c.Service)"
+                      :style="logOf===(c.Name||c.Service)?'color:var(--lk);border-color:var(--lk);':''">
+                <span v-html="I.logs"></span>
+              </button>
+            </div>
+          </td>
+        </tr>
+        <tr v-if="logOf===(c.Name||c.Service)" :key="(c.Name||c.Service)+'-log'">
+          <td colspan="6" style="background:var(--s);padding:14px 18px;">
+            <LogViewer :name="c.Name||c.Service" />
+          </td>
+        </tr>
+      </template>
+    </tbody>
+  </table>
+  </div>`
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    DASHBOARD
 ══════════════════════════════════════════════════════════════════════════ */
 const Dashboard = {
-  components: { LogViewer, DockerTerminal },
+  components: { ServiceTable, DockerTerminal },
   setup() {
-    const proj       = ref(null)
-    const ctrs       = ref([])
-    const busy       = ref(true)
     const act        = ref('')
-    const logOf      = ref(null)
     const termAction = ref(null)
-
-    async function load() {
-      busy.value = true
-      try {
-        const [p, c] = await Promise.all([api.get('/project'), api.get('/project/containers')])
-        proj.value = p; ctrs.value = c.containers||[]
-      } catch(e) { notify(t('loadFailed')+': '+e.message, 'err') }
-      finally { busy.value = false }
-    }
 
     function docker(cmd) {
       act.value      = cmd
@@ -1258,22 +1378,24 @@ const Dashboard = {
       act.value = ''
       if (code === 0) {
         // Auto-close terminal then refresh — order matters: clear first to avoid remount loop
-        setTimeout(() => { termAction.value = null; load() }, 1800)
+        setTimeout(() => { termAction.value = null; loadProjectContext() }, 1800)
       } else {
         // On failure keep terminal open so the user can read the error, but still refresh status
-        setTimeout(load, 1000)
+        setTimeout(loadProjectContext, 1000)
       }
     }
     function closeTerminal() {
       termAction.value = null
       act.value        = ''
-      load()
+      loadProjectContext()
     }
 
-    const running = computed(() => ctrs.value.filter(c=>cstatus(c.State||c.Status)==='running').length)
-
-    onActivated(load)
-    return { proj, ctrs, busy, act, logOf, running, termAction, load, docker, onTermDone, closeTerminal, dotClass, cstatus, statusBadgeClass, statusLabel, I }
+    onActivated(loadProjectContext)
+    return {
+      proj, ctrs, odooUp,
+      busy: projBusy, loaded: projLoaded, act, termAction,
+      load: loadProjectContext, docker, onTermDone, closeTerminal, I,
+    }
   },
   template: `
   <div class="page fade-in">
@@ -1284,44 +1406,11 @@ const Dashboard = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
+    <div v-if="busy && !loaded" style="text-align:center;padding:80px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
     <template v-else>
-      <!-- Stats -->
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-label">{{ $t('containers') }}</div>
-          <div class="stat-value" :style="{color: running>0?'var(--ok)':'var(--gy)'}">
-            {{ running }}<span style="font-size:16px;color:var(--su);"> / {{ ctrs.length }}</span>
-          </div>
-          <div class="stat-note">{{ $t('runningCount', {count: running}) }}</div>
-        </div>
-        <div class="stat-card" v-if="proj?.exists">
-          <div class="stat-label">{{ $t('odooVersion') }}</div>
-          <div class="stat-value">{{ proj.odoo_version||'—' }}</div>
-          <div class="stat-note" style="margin-top:7px;">
-            <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-blue'">{{ proj.odoo_edition }}</span>
-          </div>
-        </div>
-        <div class="stat-card" v-if="proj?.exists">
-          <div class="stat-label">{{ $t('postgresqlLabel') }}</div>
-          <div class="stat-value">{{ proj.db_version||'—' }}</div>
-          <div class="stat-note">{{ $t('database') }}</div>
-        </div>
-        <div class="stat-card" v-if="proj?.exists">
-          <div class="stat-label">{{ $t('webPort') }}</div>
-          <div class="stat-value">{{ proj.odoo_port||'—' }}</div>
-          <div class="stat-note" style="margin-top:7px;">
-            <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank"
-               style="color:var(--lk);text-decoration:none;font-size:12px;display:inline-flex;align-items:center;gap:4px;">
-              {{ $t('openOdoo') }} <span v-html="I.ext" style="width:10px;height:10px;"></span>
-            </a>
-          </div>
-        </div>
-      </div>
-
       <!-- No project -->
       <div v-if="!proj?.exists" class="card empty" style="border-style:dashed;">
         <div v-html="I.rocket"></div>
@@ -1334,59 +1423,42 @@ const Dashboard = {
       <div v-if="proj?.exists" style="margin-bottom:24px;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">{{ $t('project') }}</div>
         <div class="card" style="border-color:rgba(var(--br-rgb),0.3);">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;">
-            <div>
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                <span v-html="I.rocket" style="width:18px;height:18px;color:var(--lk);flex-shrink:0;"></span>
-                <span style="font-size:17px;font-weight:700;color:var(--tx);">{{ proj.project_name||$t('unnamedProject') }}</span>
-              </div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                <span class="badge badge-blue">Odoo {{ proj.odoo_version }}</span>
-                <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-gray'">{{ proj.odoo_edition }}</span>
-                <span class="badge badge-gray" v-if="proj.db_version">PG {{ proj.db_version }}</span>
-                <span class="badge badge-yellow" v-if="proj.use_private_repos">{{ $t('sshKey') }}</span>
-                <span class="badge badge-blue" v-if="proj.use_third_party_repos">Gitman</span>
-              </div>
+          <div style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span v-html="I.rocket" style="width:18px;height:18px;color:var(--lk);flex-shrink:0;"></span>
+              <span style="font-size:17px;font-weight:700;color:var(--tx);">{{ proj.project_name||$t('unnamedProject') }}</span>
             </div>
-            <a v-if="proj.odoo_port" :href="'http://localhost:'+proj.odoo_port" target="_blank" class="btn btn-primary" style="text-decoration:none;flex-shrink:0;">
-              <span v-html="I.ext"></span> {{ $t('openOdoo') }}
-            </a>
+            <!-- Metadata strip: rarely-changing facts (version, edition, DB, port) as compact
+                 tags instead of the four full-size stat cards this replaced (RF10). -->
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span class="badge badge-blue">Odoo {{ proj.odoo_version }}</span>
+              <span class="badge" :class="proj.odoo_edition==='Enterprise'?'badge-purple':'badge-gray'">{{ proj.odoo_edition }}</span>
+              <span class="badge badge-gray" v-if="proj.db_version">PG {{ proj.db_version }}</span>
+              <span class="badge badge-gray" v-if="proj.odoo_port">{{ $t('webPort') }} {{ proj.odoo_port }}</span>
+              <span class="badge badge-yellow" v-if="proj.use_private_repos">{{ $t('sshKey') }}</span>
+              <span class="badge badge-blue" v-if="proj.use_third_party_repos">Gitman</span>
+            </div>
           </div>
 
-          <!-- Containers -->
+          <!-- Services: the space the four stat cards freed up now goes here, since this is
+               what actually changes screen to screen. -->
           <div style="border-top:1px solid var(--ln);padding-top:14px;">
             <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:10px;">{{ $t('containers') }}</div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;">
-              <button type="button" v-for="c in ctrs" :key="c.Name||c.Service"
-                   @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
-                   :aria-expanded="logOf===(c.Name||c.Service)"
-                   :aria-label="$t('logsFor', {name: c.Service||c.Name})"
-                   :style="{background:'var(--s)',border:'1px solid '+(logOf===(c.Name||c.Service)?'var(--lk)':'var(--ln)'),borderRadius:'8px',padding:'10px 14px',cursor:'pointer',minWidth:'150px',transition:'all .15s',display:'block',font:'inherit',color:'inherit',textAlign:'left'}">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:6px;">
-                  <span style="font-size:13px;font-weight:600;color:var(--tx);">{{ c.Service||c.Name }}</span>
-                  <span class="badge" :class="statusBadgeClass(c.State||c.Status)">
-                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ statusLabel(c.State||c.Status) }}
-                  </span>
-                </div>
-                <div style="font-size:11px;color:var(--mu);font-family:monospace;">{{ (c.Image||'').split('/').pop() }}</div>
-                <div v-if="c.Ports" style="font-size:10px;color:var(--su);margin-top:2px;font-family:monospace;">{{ c.Ports.split(',')[0] }}</div>
-              </button>
-              <div v-if="!ctrs.length" style="color:var(--su);font-size:13px;padding:8px 0;">{{ $t('noContainersRunning') }}</div>
+            <div v-if="!ctrs.length" style="color:var(--su);font-size:13px;">{{ $t('noContainersRunning') }}</div>
+            <div v-else class="card-flat" style="border:1px solid var(--ln);">
+              <ServiceTable :containers="ctrs" @changed="load" />
             </div>
-          </div>
-
-          <!-- Inline logs -->
-          <div v-if="logOf" style="margin-top:14px;border-top:1px solid var(--ln);padding-top:14px;">
-            <LogViewer :name="logOf" />
           </div>
         </div>
       </div>
 
-      <!-- Quick actions -->
+      <!-- Quick actions: exactly one filled button here, and only when the top bar's "Open
+           Odoo" isn't already the highlighted action (RF10) — down: Start All is primary; up:
+           it demotes to ghost because Open Odoo (top bar) is the one that matters. -->
       <div v-if="proj?.exists">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--su);margin-bottom:12px;">{{ $t('quickActions') }}</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          <button @click="docker('up')" class="btn btn-primary" :disabled="act!==''">
+          <button @click="docker('up')" :class="odooUp ? 'btn btn-ghost' : 'btn btn-primary'" :disabled="act!==''">
             <span v-html="act==='up'?I.spin:I.play" :class="act==='up'?'spin':''"></span> {{ $t('startAll') }}
           </button>
           <button @click="docker('restart')" class="btn btn-ghost" :disabled="act!==''">
@@ -1417,32 +1489,10 @@ const Dashboard = {
    CONTAINERS
 ══════════════════════════════════════════════════════════════════════════ */
 const Containers = {
-  components: { LogViewer },
+  components: { ServiceTable },
   setup() {
-    const ctrs = ref([])
-    const busy = ref(true)
-    const acts = ref({})
-    const logOf = ref(null)
-
-    async function load() {
-      busy.value = true
-      try { const r = await api.get('/project/containers'); ctrs.value = r.containers||[] }
-      catch(e) { notify(t('loadFailed'),'err') }
-      finally { busy.value = false }
-    }
-
-    async function action(svc, cmd) {
-      const key = svc+cmd; acts.value[key] = true
-      try {
-        const r = await api.post('/docker/service/'+cmd, { service: svc })
-        if (r.ok) { notify(svc+': '+cmd); setTimeout(load, 1500) }
-        else notify(r.stderr||t('failed'),'err')
-      } catch(e) { notify(e.message,'err') }
-      finally { delete acts.value[key] }
-    }
-
-    onActivated(load)
-    return { ctrs, busy, acts, logOf, load, action, dotClass, cstatus, statusBadgeClass, statusVar, statusLabel, I }
+    onActivated(loadProjectContext)
+    return { ctrs, busy: projBusy, loaded: projLoaded, load: loadProjectContext, I }
   },
   template: `
   <div class="page fade-in">
@@ -1453,7 +1503,7 @@ const Containers = {
       </button>
     </div>
 
-    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
+    <div v-if="busy && !loaded" style="text-align:center;padding:80px 0;color:var(--mu);">
       <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
     </div>
 
@@ -1465,53 +1515,7 @@ const Containers = {
       </div>
 
       <div v-else class="card-flat">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>{{ $t('status') }}</th><th>{{ $t('service') }}</th><th>{{ $t('image') }}</th><th>{{ $t('ports') }}</th><th style="text-align:right">{{ $t('actions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="c in ctrs" :key="c.Name||c.Service">
-              <tr>
-                <td :style="{borderLeft: '3px solid ' + statusVar(c.State||c.Status)}">
-                  <span class="badge" :class="statusBadgeClass(c.State||c.Status)">
-                    <span class="dot" :class="dotClass(c.State||c.Status)" style="width:6px;height:6px;"></span>{{ statusLabel(c.State||c.Status) }}
-                  </span>
-                </td>
-                <td>
-                  <div style="font-size:14px;font-weight:600;color:var(--tx);">{{ c.Service||c.Name }}</div>
-                  <div style="font-size:11px;color:var(--su);font-family:monospace;">{{ c.Name }}</div>
-                </td>
-                <td style="font-family:monospace;font-size:12px;color:var(--mu);">{{ c.Image||'—' }}</td>
-                <td style="font-family:monospace;font-size:11px;color:var(--mu);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ c.Ports||'—' }}</td>
-                <td style="text-align:right;">
-                  <div style="display:flex;gap:5px;justify-content:flex-end;">
-                    <button @click="action(c.Service||c.Name,'start')" class="btn btn-ghost btn-sm" :title="$t('start')" :aria-label="$t('start')" :disabled="acts[(c.Service||c.Name)+'start']">
-                      <span v-html="acts[(c.Service||c.Name)+'start']?I.spin:I.play" :class="acts[(c.Service||c.Name)+'start']?'spin':''"></span>
-                    </button>
-                    <button @click="action(c.Service||c.Name,'stop')" class="btn btn-ghost btn-sm" :title="$t('stop')" :aria-label="$t('stop')" :disabled="acts[(c.Service||c.Name)+'stop']">
-                      <span v-html="acts[(c.Service||c.Name)+'stop']?I.spin:I.stop" :class="acts[(c.Service||c.Name)+'stop']?'spin':''"></span>
-                    </button>
-                    <button @click="action(c.Service||c.Name,'restart')" class="btn btn-ghost btn-sm" :title="$t('restart')" :aria-label="$t('restart')" :disabled="acts[(c.Service||c.Name)+'restart']">
-                      <span v-html="acts[(c.Service||c.Name)+'restart']?I.spin:I.restart" :class="acts[(c.Service||c.Name)+'restart']?'spin':''"></span>
-                    </button>
-                    <button @click="logOf=logOf===(c.Name||c.Service)?null:(c.Name||c.Service)"
-                            class="btn btn-ghost btn-sm" :title="$t('logs')" :aria-label="$t('logs')"
-                            :style="logOf===(c.Name||c.Service)?'color:var(--lk);border-color:var(--lk);':''">
-                      <span v-html="I.logs"></span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              <tr v-if="logOf===(c.Name||c.Service)" :key="(c.Name||c.Service)+'-log'">
-                <td colspan="5" style="background:var(--s);padding:14px 18px;">
-                  <LogViewer :name="c.Name||c.Service" />
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
+        <ServiceTable :containers="ctrs" @changed="load" />
       </div>
     </template>
   </div>`
@@ -1537,6 +1541,9 @@ const Modules = {
       try {
         const r = await api.get('/modules?include_all='+all.value)
         mods.value = r.modules || []
+        // Keep the nav badge meaning "installable modules" (loadNavCounts()'s own criterion) —
+        // don't let toggling "show all" here silently redefine what the sidebar counts (M4).
+        if (!all.value) moduleCount.value = mods.value.length
         if (r.error) notify(t('scanLabel')+': '+r.error, 'err')
       } catch(e) { notify(t('scanFailed'),'err') }
       finally { busy.value = false }
@@ -1688,14 +1695,14 @@ const Modules = {
         const r = await api.post('/docker/build')
         r.ok ? notify(t('buildCompleted')) : notify(r.stderr || t('buildFailed'),'err')
       } catch(e) { notify(e.message,'err') }
-      finally { rebuildBusy.value = false }
+      finally { rebuildBusy.value = false; loadProjectContext() }
     }
 
     watch(all, load)
     onActivated(() => { load(); loadDbs() })
     return {
       mods, busy, all, q, filtered, load,
-      dbs, dbError, db, states, stateOf, stateBadgeClass,
+      dbs, dbError, db, stateOf, stateBadgeClass,
       updating, updateUrl, updateLabel, canUpdate, updateReason, startUpdate, onUpdateDone,
       gitSources, gitExists, gitBusy, gitSaving, rebuildBusy, gitForm, gitDirty,
       addGitRepo, editGitRepo, deleteGitRepo, autoName, confirmGitForm,
@@ -1889,7 +1896,7 @@ const Instances = {
 
     async function load() {
       busy.value = true
-      try { const r = await api.get('/instances'); inst.value = r.instances||[] }
+      try { const r = await api.get('/instances'); inst.value = r.instances||[]; instanceCount.value = inst.value.length }
       catch(e) { notify(t('loadFailed'),'err') }
       finally { busy.value = false }
     }
@@ -1992,7 +1999,7 @@ const Services = {
         if (r.ok) { notify(mail.value.enabled ? t('mailpitDisabled') : t('mailpitEnabled')); await load() }
         else notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
-      finally { mailBusy.value = false }
+      finally { mailBusy.value = false; loadProjectContext() }
     }
 
     async function traefikOff() {
@@ -2002,7 +2009,7 @@ const Services = {
         if (r.ok) { notify(t('traefikDisabled')); await load() }
         else notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
-      finally { traefikBusy.value = false }
+      finally { traefikBusy.value = false; loadProjectContext() }
     }
 
     const traefikForm = ref({ mode: 'local', domain: 'myodoo.local', email: '' })
@@ -2015,7 +2022,7 @@ const Services = {
         if (r.ok) { notify(t('traefikEnabled')); await load() }
         else notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err') }
-      finally { traefikOnBusy.value = false }
+      finally { traefikOnBusy.value = false; loadProjectContext() }
     }
 
     onActivated(load)
@@ -2159,7 +2166,7 @@ const Setup = {
         const r = await api.post('/setup/scaffold', { template: form.value.template, force: false })
         output.value = r.ok ? t('scaffoldCompleteOutput') : '✗ '+r.error
         r.ok ? notify(t('scaffoldComplete')) : notify(r.error||t('failed'),'err')
-      } finally { scaffBusy.value = false }
+      } finally { scaffBusy.value = false; loadProjectContext() }
     }
     async function initProject() {
       if (!form.value.project_name.trim()) { notify(t('projectNameRequired'),'err'); return }
@@ -2176,7 +2183,7 @@ const Setup = {
         })
         if (r.ok) { output.value = t('projectInitializedOutput', { name: r.project_name }); notify(t('projectInitialized')) }
         else { output.value = '✗ '+r.error+(r.detail?'\n'+r.detail:''); notify(r.error||t('failed'),'err') }
-      } finally { busy.value = false }
+      } finally { busy.value = false; loadProjectContext() }
     }
     onActivated(loadKeys)
     return { sshKeys, busy, scaffBusy, output, form, portStatus, scaffold, initProject, checkPort, I }
@@ -2500,7 +2507,7 @@ const Pack = {
         const r = await api.post('/pack/unpack', body)
         output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
         r.ok ? notify(t('unpackCompleted')) : notify(r.stderr||t('unpackFailed'),'err')
-        if (r.ok) { showUnpackWizard.value = false; await load() }
+        if (r.ok) { showUnpackWizard.value = false; await load(); loadProjectContext() }
       } finally { unpackBusy.value = false }
     }
     onActivated(load)
@@ -2513,7 +2520,12 @@ const Pack = {
     <div class="page-header">
       <div><div class="page-title">{{ $t('packTitle') }}</div><div class="page-sub">{{ $t('packSubtitle') }}</div></div>
     </div>
-    <div style="display:grid;gap:20px;max-width:680px;">
+
+    <div v-if="busy" style="text-align:center;padding:80px 0;color:var(--mu);">
+      <span v-html="I.spin" class="spin" style="width:26px;height:26px;display:inline-block;"></span>
+    </div>
+
+    <div v-else style="display:grid;gap:20px;max-width:680px;">
       <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
         <div class="stat-card">
           <div class="stat-label">{{ $t('project') }}</div>
@@ -3072,17 +3084,25 @@ const Help = {
 const App = {
   components: { Projects, Dashboard, Containers, Modules, Instances, Services, Setup, Deploy, Pack, Help },
   setup() {
-    const nav = computed(() => [
-      { id:'projects',   label:t('navProjects'),   icon: I.compass    },
-      { id:'dashboard',  label:t('navDashboard'),  icon: I.dashboard  },
-      { id:'containers', label:t('navContainers'), icon: I.containers },
-      { id:'modules',    label:t('navModules'),    icon: I.modules    },
-      { id:'instances',  label:t('navInstances'),  icon: I.instances  },
-      { id:'services',   label:t('navServices'),   icon: I.services   },
-      { id:'deploy',     label:t('navDeploy'),     icon: I.deploy     },
-      { id:'setup',      label:t('navSetup'),      icon: I.setup      },
-      { id:'pack',       label:t('navPack'),       icon: I.pack       },
-      { id:'help',       label:t('navHelp'),       icon: I.help       },
+    // Grouped nav (RF11/T5): Project / Environment / Publish, with item counts where the count
+    // means something on its own (containers, modules, instances). Help stays outside every
+    // group, pinned below a separator.
+    const navGroups = computed(() => [
+      { label: t('navGroupProject'), items: [
+          { id:'projects',  label:t('navProjects'),  icon: I.compass   },
+          { id:'dashboard', label:t('navDashboard'), icon: I.dashboard },
+          { id:'setup',     label:t('navSetup'),     icon: I.setup     },
+      ]},
+      { label: t('navGroupEnvironment'), items: [
+          { id:'containers', label:t('navContainers'), icon: I.containers, count: ctrs.value.length },
+          { id:'modules',    label:t('navModules'),    icon: I.modules,    count: moduleCount.value  },
+          { id:'instances',  label:t('navInstances'),  icon: I.instances,  count: instanceCount.value },
+          { id:'services',   label:t('navServices'),   icon: I.services    },
+      ]},
+      { label: t('navGroupPublish'), items: [
+          { id:'deploy', label:t('navDeploy'), icon: I.deploy },
+          { id:'pack',   label:t('navPack'),   icon: I.pack   },
+      ]},
     ])
     const viewMap = {
       projects:'Projects', dashboard:'Dashboard', containers:'Containers',
@@ -3129,6 +3149,20 @@ const App = {
       } catch {}
     }
 
+    // B1: the top bar and the nav counters read module-level state that used to live inside
+    // whichever screen displayed it — a stale value was invisible because the owning screen
+    // refreshed it on every activation. Now that it is a permanent header, a project switch
+    // has to refresh it explicitly. `oldPath` is falsy only for the very first assignment
+    // (done by `init()` below), which `onMounted` already covers directly — this only reacts to
+    // a *second* value, i.e. an actual switch (Projects.navigate/createProject, or editing the
+    // path by hand), wherever it happens outside the Dashboard/Containers activation this relied
+    // on before.
+    watch(currentPath, (newPath, oldPath) => {
+      if (!oldPath) return
+      loadProjectContext()
+      loadNavCounts()
+    })
+
     onMounted(() => {
       applyTheme()
       if (systemDark) {
@@ -3136,9 +3170,15 @@ const App = {
         if (systemDark.addEventListener) systemDark.addEventListener('change', onSystemChange)
         else if (systemDark.addListener) systemDark.addListener(onSystemChange)
       }
+      if (authError.value) return
       init()
+      loadProjectContext()
+      loadNavCounts()
     })
-    return { view, nav, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion, authError, lang, toggleLang }
+    return {
+      view, navGroups, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion,
+      authError, lang, toggleLang, proj, ctrs, running, odooUp, openOdoo,
+    }
   },
   template: `
   <div v-if="authError" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
@@ -3169,34 +3209,27 @@ const App = {
       </button>
 
       <nav class="nav" :aria-label="$t('mainNavigation')">
-        <button type="button" v-for="n in nav" :key="n.id"
-             class="nav-item" :class="{ active: view===n.id }"
-             :aria-current="view===n.id ? 'page' : null"
-             @click="view=n.id">
-          <span v-html="n.icon"></span>
-          {{ n.label }}
+        <div v-for="g in navGroups" :key="g.label" role="group" :aria-label="g.label">
+          <div class="nav-group-label">{{ g.label }}</div>
+          <button type="button" v-for="n in g.items" :key="n.id"
+               class="nav-item" :class="{ active: view===n.id }"
+               :aria-current="view===n.id ? 'page' : null"
+               @click="view=n.id">
+            <span v-html="n.icon"></span>
+            <span style="flex:1;text-align:left;">{{ n.label }}</span>
+            <span v-if="n.count" class="nav-count">{{ n.count }}</span>
+          </button>
+        </div>
+        <div class="nav-sep"></div>
+        <button type="button" class="nav-item" :class="{ active: view==='help' }"
+             :aria-current="view==='help' ? 'page' : null" @click="view='help'">
+          <span v-html="I.help"></span>
+          <span style="flex:1;text-align:left;">{{ $t('navHelp') }}</span>
         </button>
       </nav>
 
       <div class="sidebar-footer">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <span style="color:var(--su);">Rocketdoo<span v-if="rkdVersion"> v{{ rkdVersion }}</span></span>
-          <div style="display:flex;gap:4px;">
-            <button @click="toggleLang" class="btn btn-ghost btn-sm"
-                    :title="$t('switchLanguage', {code: lang==='es' ? 'EN' : 'ES'})"
-                    :aria-label="$t('switchLanguage', {code: lang==='es' ? 'EN' : 'ES'})"
-                    style="padding:3px 8px;border-radius:6px;gap:4px;">
-              <span v-html="I.globe" style="width:13px;height:13px;display:block;"></span>
-              <span style="font-size:11px;font-weight:700;">{{ lang==='es' ? 'EN' : 'ES' }}</span>
-            </button>
-            <button @click="toggleTheme" class="btn btn-ghost btn-sm"
-                    :title="darkMode ? $t('switchToLightMode') : $t('switchToDarkMode')"
-                    :aria-label="darkMode ? $t('switchToLightMode') : $t('switchToDarkMode')"
-                    style="padding:3px 8px;border-radius:6px;">
-              <span v-html="darkMode ? I.sun : I.moon" style="width:14px;height:14px;display:block;"></span>
-            </button>
-          </div>
-        </div>
+        <div style="color:var(--su);margin-bottom:8px;">Rocketdoo<span v-if="rkdVersion"> v{{ rkdVersion }}</span></div>
         <a href="https://rkd-docs.readthedocs.io" target="_blank"
            style="color:var(--lk);text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:4px;">
           <span v-html="I.ext" style="width:10px;height:10px;"></span> {{ $t('documentation') }}
@@ -3206,6 +3239,36 @@ const App = {
 
     <!-- Main -->
     <main class="main">
+      <!-- Top bar (RF11): project context + running-containers pill on every screen, plus the
+           one action that matters everywhere (Open Odoo) and the language/theme toggles moved
+           here from the sidebar footer (T4 review M11). -->
+      <header class="topbar">
+        <div class="topbar-context">
+          <span v-html="I.folder" style="width:16px;height:16px;color:var(--lk);flex-shrink:0;"></span>
+          <div class="topbar-name" :title="currentPath" style="min-width:0;">{{ proj?.exists ? (proj.project_name || $t('unnamedProject')) : (currentPath ? currentPath.split('/').filter(Boolean).pop() : '…') }}</div>
+          <span v-if="proj?.exists" class="badge badge-gray" style="flex-shrink:0;">
+            {{ $t('activeContainersPill', {running: running, total: ctrs.length}) }}
+          </span>
+        </div>
+        <div class="topbar-actions">
+          <button type="button" v-if="proj?.exists && proj.odoo_port" @click="openOdoo"
+                  :class="odooUp ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'"
+                  :disabled="!odooUp" :title="odooUp ? null : $t('odooNotRunning')">
+            <span v-html="I.ext"></span> {{ $t('openOdoo') }}
+          </button>
+          <button type="button" @click="toggleLang" class="btn btn-ghost btn-sm"
+                  :title="$t('switchLanguage', {code: lang==='es' ? 'EN' : 'ES'})"
+                  :aria-label="$t('switchLanguage', {code: lang==='es' ? 'EN' : 'ES'})">
+            <span v-html="I.globe" style="width:13px;height:13px;display:block;"></span>
+            <span style="font-size:11px;font-weight:700;">{{ lang==='es' ? 'EN' : 'ES' }}</span>
+          </button>
+          <button type="button" @click="toggleTheme" class="btn btn-ghost btn-sm"
+                  :title="darkMode ? $t('switchToLightMode') : $t('switchToDarkMode')"
+                  :aria-label="darkMode ? $t('switchToLightMode') : $t('switchToDarkMode')">
+            <span v-html="darkMode ? I.sun : I.moon" style="width:14px;height:14px;display:block;"></span>
+          </button>
+        </div>
+      </header>
       <keep-alive>
         <component :is="viewMap[view]||'Projects'"></component>
       </keep-alive>
