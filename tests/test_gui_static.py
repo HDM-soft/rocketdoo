@@ -115,6 +115,116 @@ INLINE_STYLE_RE = re.compile(r'style="([^"]*)"')
 TAG_OPEN_RE = re.compile(r"<(\w+)\b((?:\"[^\"]*\"|'[^']*'|[^\">])*)>", re.S)
 NON_INTERACTIVE_CLICK_TAGS = {"div", "span", "a"}
 
+# i18n (T4). `L = { es: {...}, en: {...} }` is the whole dictionary — no vue-i18n, no build step,
+# per RNF2. `TRANSLATION_CALL_RE` matches both `$t('key'` (used inside `template:` strings) and the
+# bare `t('key'` used from plain JS (the nav array and `statusLabel()`, built outside the render
+# context where `$t` — a globalProperties method — is not in scope, but the module-level `t()`
+# function it wraps is).
+LANG_DICT_RE = re.compile(r"const L = \{\n  es: \{(.*?)\n  \},\n  en: \{(.*?)\n  \},\n\}", re.S)
+# Requires the backtick right after the colon, so a continuation line of a multi-line value
+# (e.g. one starting with "Nota:"/"Note:") can never be mistaken for a new key — that line has
+# no backtick of its own right after its colon (T4 review, M2).
+DICT_KEY_RE = re.compile(r"^\s*([a-zA-Z0-9_]+):\s*`", re.M)
+# Every `key: `value`` pair, key -> value, used to compare interpolation placeholders per key
+# (see test_i18n_interpolation_placeholders_match_call_sites). Non-greedy is safe here because,
+# same as DICT_KEY_RE, no dictionary value contains a literal backtick.
+DICT_ENTRY_RE = re.compile(r"([a-zA-Z0-9_]+):\s*`(.*?)`,", re.S)
+TRANSLATION_CALL_RE = re.compile(r"(?<!\w)\$?t\('([a-zA-Z0-9_]+)'")
+# A call site that also passes an interpolation object: `$t('key', {a: x, b: y})`.
+TRANSLATION_CALL_WITH_VARS_RE = re.compile(r"(?<!\w)\$?t\('([a-zA-Z0-9_]+)',\s*\{([^}]*)\}")
+INTERP_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z0-9_]+)\}")
+# `(?:\\.|[^`\\])*` instead of the naive `.*?`: a template that ever needs an escaped backtick
+# (`` \` ``) no longer truncates the capture there and silently stops auditing the rest of that
+# component (T4 review, M3). JS template literals can't contain an unescaped backtick anyway, so
+# this is exact, not just "less wrong".
+TEMPLATE_LITERAL_RE = re.compile(r"template:\s*`((?:\\.|[^`\\])*)`", re.S)
+INNER_TAG_RE = re.compile(r"<(?:\"[^\"]*\"|'[^']*'|[^>])*>", re.S)
+MUSTACHE_RE = re.compile(r"\{\{.*?\}\}", re.S)
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+HTML_ENTITY_RE = re.compile(r"&[a-zA-Z]+;")
+# `alt` added per T4 review M14 — no `<img>` uses it today, but the other three attributes were
+# the only ones audited, so a future `alt=` (or any other static-text attribute) would have
+# slipped through unnoticed.
+STATIC_TEXT_ATTR_RE = re.compile(r'(?<![:\w])(placeholder|title|aria-label|alt)="([^"]*)"')
+WORD_RE = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ]{2,}")
+# A handful of `placeholder="..."` values are example data, not interface text: a sample URL, a
+# domain, an email, or a bare version/port number. They don't need `$t(...)` because there's
+# nothing to translate — "github.com" isn't English or Spanish. Anything with a space, or that
+# doesn't fully match one of these shapes, still goes through the phrase-level check below.
+EXAMPLE_VALUE_RE = re.compile(r"^(https?://\S+|[\w.-]+@[\w.-]+\.\w+|[\w-]+(?:\.[\w-]+)+|\d+(?:\.\d+)?)$")
+
+# Every whole chunk of text that is allowed to survive outside `$t(...)`/mustache interpolation in
+# a template, because RF8 explicitly excludes it from translation: product/tool proper nouns, and
+# literal `rkd`/`docker`/`gitman` commands or filesystem paths shown as an example. This used to be
+# a set of individual words (`ALLOWED_LITERAL_WORDS`), which let any recombination of those words
+# survive as a sentence of its own (`rkd up to deploy web` passed, T4 review B2) — comparing the
+# *entire* stripped chunk against this list closes that. Derived by hand from every chunk that
+# actually survives stripping today (see the two tests below); a new literal chunk introduced in
+# either language will not equal any entry here and fails the test, forcing it through `$t(...)`.
+ALLOWED_LITERAL_PHRASES = {
+    "$ rkd init",
+    "$ rkd instance init",
+    "$ rkd scaffold",
+    "Community",
+    "Enterprise —",
+    "Gitman",
+    "Mailpit",
+    "Odoo",
+    "Odoo:",
+    "PG",
+    "RKD",
+    "Rocketdoo",
+    "SMTP",
+    "Traefik",
+    "cd /path/to/project",
+    "docker",
+    "external_addons/",
+    "gitman update",
+    "native",
+    "rkd build --rebuild",
+    "rkd deploy init",
+    "rkd deploy list-modules",
+    "rkd deploy run -t prod",
+    "rkd docker restart web",
+    "rkd down",
+    "rkd gui",
+    "rkd info",
+    "rkd init",
+    "rkd instance deploy --env stage",
+    "rkd instance init",
+    "rkd logs web -f",
+    "rkd mail on/off",
+    "rkd pack",
+    "rkd restart",
+    "rkd scaffold",
+    "rkd status",
+    "rkd traefik on/off",
+    "rkd unpack",
+    "rkd up -d",
+    "rkd-shared.json",
+    "token",
+}
+
+# Sinks where interface text is composed from plain JS, outside any `template:` string, and so
+# invisible to the two tests above by construction — the exact gap that let 48 `notify()` calls
+# (plus `confirm()`, `output.value`, and the two WebSocket components' own connection messages)
+# stay in English under a Spanish UI (T4 review B1/B2). `notify(`/`confirm(`/`alert(` are function
+# calls; `lines.value.push(` is the one non-object `.push()` call in the file — every other
+# `.push()` call site pushes a variable, a spread, or an object, never a literal (verified by hand;
+# see the review). `output.value =` is a plain assignment, not a call.
+SINK_CALL_RE = re.compile(r"\b(?:notify|confirm|alert)\(|lines\.value\.push\(")
+OUTPUT_VALUE_RE = re.compile(r"output\.value\s*=\s*([^;\n]*)")
+# A generic net for any other text-returning helper following the same shape as `updateReason()`
+# (three `return '...'` sentences that predate this sink list). Restricted to literals containing
+# a space so it never trips on the file's many single-token `return 'running'` / `return
+# 'badge-green'` style enum helpers (`cstatus`, `dotClass`, `statusBadgeClass`, `lineClass`...),
+# none of which are user-facing text — RF8 doesn't reach them and none of them contain a space.
+GENERIC_RETURN_LITERAL_RE = re.compile(r"return\s+('(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`(?:\\.|[^`\\])*`)")
+LITERAL_RE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`(?:\\.|[^`\\])*`", re.S)
+INTERPOLATION_SPAN_RE = re.compile(r"\$\{.*?\}", re.S)
+# The only literal words `notify()`'s own `type` parameter ever takes — enum values, not text.
+NOTIFY_TYPE_WORDS = {"ok", "err"}
+
 # Text/icons rendered directly on a surface: body/secondary/tertiary text over the page and
 # over cards, links over both, button text over the brand button, and the semantic/status
 # tokens over the card surface where they render as plain text (not badge text — see
@@ -412,3 +522,243 @@ def test_click_handlers_only_on_natively_interactive_tags():
         "elements wired to @click must be natively focusable (<button> or <a href>), "
         "otherwise :focus-visible never triggers and the keyboard can't reach them:\n" + "\n".join(violations)
     )
+
+
+def _lang_dicts(text):
+    match = LANG_DICT_RE.search(text)
+    assert match, "expected `const L = { es: {...}, en: {...} }` in index.html"
+    return {"es": match.group(1), "en": match.group(2)}
+
+
+def _dict_keys(block_text):
+    return set(DICT_KEY_RE.findall(block_text))
+
+
+def test_i18n_dictionaries_have_matching_keys():
+    dicts = _lang_dicts(_text())
+    es_keys, en_keys = _dict_keys(dicts["es"]), _dict_keys(dicts["en"])
+    assert es_keys, "L.es declared no keys"
+    assert es_keys == en_keys, (
+        f"L.es and L.en have different keys — only in es: {sorted(es_keys - en_keys)}, only in en: {sorted(en_keys - es_keys)}"
+    )
+
+
+def test_i18n_no_unused_or_undeclared_translation_keys():
+    text = _text()
+    script = _script_block(text).group(1)
+    declared = _dict_keys(_lang_dicts(text)["en"])
+    used = set(TRANSLATION_CALL_RE.findall(script))
+    assert not (used - declared), f"$t()/t() called with a key never declared in L: {sorted(used - declared)}"
+    assert not (declared - used), f"declared in L but never called with $t()/t(): {sorted(declared - used)}"
+
+
+def _templates(text):
+    script = _script_block(text).group(1)
+    templates = TEMPLATE_LITERAL_RE.findall(script)
+    assert len(templates) >= 10, "expected one `template: `...`` string per component"
+    return templates
+
+
+def test_i18n_no_static_text_attributes_outside_whitelist():
+    """`placeholder`/`title`/`aria-label`/`alt` bound as plain strings (not `:placeholder=...`)
+    have to be either `$t(...)` already, a literal example value (URL, port, domain, email) with
+    no translatable word in it, or an exact match in `ALLOWED_LITERAL_PHRASES` — never a
+    hardcoded instruction or label, and never salvaged by whitelisting one of its words on its
+    own (T4 review B2: a value is checked whole, not word by word)."""
+    violations = []
+    for tpl in _templates(_text()):
+        for match in STATIC_TEXT_ATTR_RE.finditer(tpl):
+            attr, value = match.group(1), match.group(2)
+            if EXAMPLE_VALUE_RE.match(value):
+                continue
+            if not WORD_RE.search(value):
+                continue
+            if value in ALLOWED_LITERAL_PHRASES:
+                continue
+            violations.append(f'{attr}="{value}" (not $t(...) and not in ALLOWED_LITERAL_PHRASES)')
+    assert not violations, "static text attribute(s) with untranslated content:\n" + "\n".join(violations)
+
+
+# Splits a template on every tag, `{{ }}` interpolation, HTML comment and entity, keeping the
+# text in between as a list of separate chunks (rather than collapsing them all to blank spaces
+# and re-tokenizing into a word soup, which is what let unrelated words from different chunks
+# recombine into a sentence that was never actually written anywhere, like "rkd up to deploy web"
+# — T4 review B2).
+TEMPLATE_CHUNK_SPLIT_RE = re.compile(
+    "(?:" + "|".join([HTML_COMMENT_RE.pattern, MUSTACHE_RE.pattern, INNER_TAG_RE.pattern, HTML_ENTITY_RE.pattern]) + ")",
+    re.S,
+)
+
+
+def test_i18n_no_untranslated_text_between_tags():
+    """Every chunk of text left after stripping tags/interpolation/comments/entities out of a
+    template has to be either empty, free of any translatable word (pure punctuation), or an
+    *exact* match in `ALLOWED_LITERAL_PHRASES` — compared as the whole chunk, not word by word.
+    Anything else is interface text that was never routed through `$t(...)` — the RF7 gap this
+    task exists to close.
+    """
+    violations = []
+    for tpl in _templates(_text()):
+        for chunk in TEMPLATE_CHUNK_SPLIT_RE.split(tpl):
+            collapsed = re.sub(r"\s+", " ", chunk).strip()
+            if not collapsed or not WORD_RE.search(collapsed):
+                continue
+            if collapsed in ALLOWED_LITERAL_PHRASES:
+                continue
+            violations.append(f"{collapsed!r} not in ALLOWED_LITERAL_PHRASES")
+    assert not violations, (
+        "untranslated text found between tags (add $t(...) for it, or extend "
+        "ALLOWED_LITERAL_PHRASES with a justification if RF8 exempts it):\n" + "\n".join(violations)
+    )
+
+
+def _balanced_call_args(code, open_paren_idx):
+    """The substring strictly between the `(` at `open_paren_idx` and its matching `)`, tracking
+    string/template-literal state so a `)` or nested `(` inside a literal (including `${...}`
+    inside a backtick) never miscounts as the call's own parens."""
+    depth = 0
+    i = open_paren_idx
+    in_str = None
+    template_expr_depth = 0
+    n = len(code)
+    while i < n:
+        c = code[i]
+        if in_str:
+            if c == "\\":
+                i += 2
+                continue
+            if in_str == "`" and c == "$" and i + 1 < n and code[i + 1] == "{":
+                template_expr_depth += 1
+                i += 2
+                continue
+            if in_str == "`" and template_expr_depth > 0:
+                if c == "{":
+                    template_expr_depth += 1
+                elif c == "}":
+                    template_expr_depth -= 1
+                i += 1
+                continue
+            if c == in_str:
+                in_str = None
+            i += 1
+            continue
+        if c in "'\"`":
+            in_str = c
+            i += 1
+            continue
+        if c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return code[open_paren_idx + 1 : i]
+        i += 1
+    raise ValueError("unbalanced parentheses")
+
+
+def _untranslated_words_in_literal(raw_literal, extra_allowed=frozenset()):
+    inner = INTERPOLATION_SPAN_RE.sub(" ", raw_literal[1:-1])
+    words = set(WORD_RE.findall(inner))
+    return words - ALLOWED_LITERAL_PHRASES_WORDS - extra_allowed
+
+
+# The phrase whitelist above is for whole template chunks; a literal passed to notify()/etc. is
+# free-form JS, not a stripped template chunk, so it's checked at the word level instead (a
+# `'Failed'` fallback is one word and still has to be caught). Built once from the same source of
+# truth so the two mechanisms cannot silently diverge.
+ALLOWED_LITERAL_PHRASES_WORDS = {word for phrase in ALLOWED_LITERAL_PHRASES for word in WORD_RE.findall(phrase)}
+
+
+def _script_without_templates_and_dict(text):
+    script = _script_block(text).group(1)
+    script = LANG_DICT_RE.sub(" ", script)
+    script = TEMPLATE_LITERAL_RE.sub(" ", script)
+    return script
+
+
+def test_i18n_no_untranslated_text_in_script_sinks():
+    """`notify()`/`confirm()`/`alert()`/`output.value = ...`/the log viewers' own connection
+    messages compose interface text from plain JS, outside any `template:` string — invisible to
+    the two tests above by construction. This is the scope gap that let 48 `notify()` calls, the
+    only destructive `confirm()` in the GUI, and 3 WebSocket status messages stay in English under
+    a Spanish UI (T4 review B1/B2). `r.error`/`r.stderr`/`e.message` are exempt by RF8 (they carry
+    real system/backend output) and are never literals, so they never reach this check.
+
+    A sink's arguments legitimately contain a *translation key* literal too — `notify(t('failed'))`
+    — which is not display text and must not be flagged; `declared_keys` is how those are told
+    apart from a stray hardcoded message.
+    """
+    text = _text()
+    declared_keys = _dict_keys(_lang_dicts(text)["en"])
+    script = _script_without_templates_and_dict(text)
+    violations = []
+
+    for match in SINK_CALL_RE.finditer(script):
+        open_idx = match.end() - 1
+        args = _balanced_call_args(script, open_idx)
+        for lit in LITERAL_RE.finditer(args):
+            raw = lit.group(0)
+            if raw[1:-1] in declared_keys:
+                continue
+            bad = _untranslated_words_in_literal(raw, NOTIFY_TYPE_WORDS)
+            if bad:
+                line = script[: match.start()].count("\n") + 1
+                violations.append(f"line {line}: {raw[:70]!r} (untranslated word(s): {sorted(bad)})")
+
+    for match in OUTPUT_VALUE_RE.finditer(script):
+        for lit in LITERAL_RE.finditer(match.group(1)):
+            raw = lit.group(0)
+            if raw[1:-1] in declared_keys:
+                continue
+            bad = _untranslated_words_in_literal(raw)
+            if bad:
+                line = script[: match.start()].count("\n") + 1
+                violations.append(f"line {line}: output.value = {raw[:70]!r} (untranslated word(s): {sorted(bad)})")
+
+    for match in GENERIC_RETURN_LITERAL_RE.finditer(script):
+        raw = match.group(1)
+        inner = INTERPOLATION_SPAN_RE.sub(" ", raw[1:-1])
+        if " " not in inner:
+            continue  # single-token enum return (`return 'running'`, `return 'badge-green'`...)
+        bad = _untranslated_words_in_literal(raw)
+        if bad:
+            line = script[: match.start()].count("\n") + 1
+            violations.append(f"line {line}: return {raw[:70]!r} (untranslated word(s): {sorted(bad)})")
+
+    assert not violations, "untranslated text found outside template strings (route it through t(...)):\n" + "\n".join(
+        violations
+    )
+
+
+def test_i18n_interpolation_placeholders_match_call_sites():
+    """For every key with a `{var}` placeholder: `es` and `en` must declare the exact same set of
+    placeholders, and every call site passing an interpolation object must pass exactly that set —
+    nothing more, nothing less. Nothing else catches a `{count}`/`{total}` mismatch between the two
+    languages, or a call site passing the wrong variable name: `t()` doesn't substitute a missing
+    placeholder, it just leaves the literal `{count}` on screen (T4 review I3)."""
+    text = _text()
+    script = _script_block(text).group(1)
+    dicts = _lang_dicts(text)
+    es_entries = dict(DICT_ENTRY_RE.findall(dicts["es"]))
+    en_entries = dict(DICT_ENTRY_RE.findall(dicts["en"]))
+
+    call_site_vars = {}
+    for match in TRANSLATION_CALL_WITH_VARS_RE.finditer(script):
+        key, vars_blob = match.group(1), match.group(2)
+        names = frozenset(re.findall(r"([a-zA-Z0-9_]+)\s*:", vars_blob))
+        call_site_vars.setdefault(key, []).append(names)
+
+    failures = []
+    for key in sorted(set(es_entries) | set(en_entries) | set(call_site_vars)):
+        es_placeholders = frozenset(INTERP_PLACEHOLDER_RE.findall(es_entries.get(key, "")))
+        en_placeholders = frozenset(INTERP_PLACEHOLDER_RE.findall(en_entries.get(key, "")))
+        if es_placeholders != en_placeholders:
+            failures.append(f"{key}: es placeholders {sorted(es_placeholders)} != en placeholders {sorted(en_placeholders)}")
+            continue
+        call_sites = call_site_vars.get(key, [])
+        if es_placeholders and not call_sites:
+            failures.append(f"{key}: declares placeholders {sorted(es_placeholders)} but no call site passes vars")
+        for names in call_sites:
+            if names != es_placeholders:
+                failures.append(f"{key}: call site passes {sorted(names)}, dict declares {sorted(es_placeholders)}")
+    assert not failures, "\n".join(failures)
