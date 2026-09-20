@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "3.5.0"
+   - "3.6.0"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -468,7 +468,7 @@ The GUI provides a complete visual interface for all Rocketdoo v3 features:
 | Section | What you can do |
 |---------|-----------------|
 | **Projects** | Discover all Rocketdoo projects on your host, switch between them, create new project directories |
-| **Dashboard** | Project overview, container status cards, quick start/stop/restart/build controls, inline log viewer |
+| **Dashboard** | Project overview as compact tags (Odoo version, edition, PostgreSQL, port), container table with per-service actions, one highlighted action that matches the environment's state |
 | **Containers** | Full container list with status, per-service start/stop/restart, real-time log streaming |
 | **Modules** | Scan and browse Odoo addons with version and dependency info; manage `gitman.yaml` external repos and trigger Docker rebuild |
 | **Instances** | View configured stage/prod environments, trigger deployments with dry-run support |
@@ -476,7 +476,9 @@ The GUI provides a complete visual interface for all Rocketdoo v3 features:
 | **Help** | Quick reference guide for all `rkd` commands |
 
 Additional interface features:
-- **Dark / Light mode toggle** — persisted per browser session
+- **Dark / Light mode toggle** — follows your system's preference until you pick one explicitly; that choice then persists in `localStorage`
+- **Spanish / English switch** — in the top bar, remembers your choice, defaults to your browser's language on first run
+- A persistent top bar shows the active project and how many containers are running, on every screen
 - Real-time log streaming via WebSocket
 - Runs entirely from the installed package — no Node.js or build step required
 
@@ -549,11 +551,12 @@ anyone onboarding onto an existing project.
 
 #### The GUI is readable in daylight
 
-The web GUI now defaults to a light theme and meets WCAG 2.1 AA: 4.5:1 for
-text and icons, and 3:1 for the borders that are the only thing identifying a
-control, such as inputs and ghost buttons. Badges and pills are checked
-against the translucent tint they actually sit on, not against the surface
-underneath it.
+The web GUI now follows your system's light/dark preference by default
+(falling back to light if the system has none) and meets WCAG 2.1 AA: 4.5:1
+for text and icons, and 3:1 for the borders that are the only thing
+identifying a control, such as inputs and ghost buttons. Badges and pills are
+checked against the translucent tint they actually sit on, not against the
+surface underneath it.
 
 Every colour is a CSS custom property declared in three theme blocks — the
 light default, `prefers-color-scheme: dark`, and the explicit dark toggle — so
@@ -574,6 +577,32 @@ nothing for them.
 Existing projects are fixed in place on the next `rkd up` — nothing to recreate.
 The merge only ever rewrites the `addons_path` line and preserves entries it
 does not manage, such as `enterprise` or Gitman's `external_addons`.
+
+---
+
+### New in Version 3.6: language switch and a clearer GUI hierarchy
+
+#### The GUI now speaks Spanish and English
+
+A button in the top bar switches the whole interface between Spanish and
+English without a reload. The choice is saved in `localStorage`; the very
+first time, it follows your browser's own language (Spanish if it starts with
+`es`, English otherwise). Only interface text is translated — Docker logs,
+addon names and versions, container and image names, and the raw status text
+Docker itself reports (`Up 3 hours`) stay exactly as the system produces them.
+
+#### One highlighted action, project context on every screen
+
+A persistent top bar now shows the active project and how many containers are
+running on every screen, not just the Dashboard. The four metric cards that
+used to sit at the top of the Dashboard (Odoo version, PostgreSQL version,
+port, container count) became compact tags next to the project name, and the
+container table moved into the space they freed up. On the Dashboard,
+exactly one button is ever shown filled with colour: "Open Odoo" (in the top
+bar) when the Odoo container itself is running, "Start All" when it isn't.
+The other nine screens still show their own primary actions — the top bar's
+"Open Odoo" is a global shortcut, not a claim that every screen has only one
+highlighted button.
 
 ---
 
