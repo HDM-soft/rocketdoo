@@ -26,7 +26,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from rocketdoo.core.odoo_db import databases_result, db_container
-from rocketdoo.project_info import get_project_info, project_exists, read_docker_compose
+from rocketdoo.core.project_info import get_project_info, project_exists, read_docker_compose
 
 console = Console()
 

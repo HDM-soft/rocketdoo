@@ -19,14 +19,14 @@ building blocks the refactor plan does not touch.
 import pytest
 
 from rocketdoo.core.gitman_config import generate_gitman_yaml
-from rocketdoo.core.ssh_manager import inject_ssh_into_dockerfile
-from rocketdoo.init_project import init_from_profile
-from rocketdoo.project_info import (
+from rocketdoo.core.project_info import (
     detect_enterprise_edition,
     detect_ssh_key_usage,
     get_project_info,
     project_exists,
 )
+from rocketdoo.core.ssh_manager import inject_ssh_into_dockerfile
+from rocketdoo.init_project import init_from_profile
 from rocketdoo.scaffold import scaffold_project
 
 EXPECTED_KEY_TYPES = {

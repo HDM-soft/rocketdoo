@@ -25,8 +25,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from rocketdoo.core.port_validation import find_available_port, is_port_in_use
+from rocketdoo.core.project_info import project_exists, read_docker_compose
 from rocketdoo.core.ssh_manager import copy_key_to_build_context, inject_ssh_into_dockerfile, list_private_keys
-from rocketdoo.project_info import project_exists, read_docker_compose
 
 console = Console()
 
@@ -203,7 +203,7 @@ def _is_container_running(container_name: str) -> bool:
 
 def _get_db_container_name(project_dir: Path) -> str | None:
     """Reads docker-compose and returns the database container name."""
-    compose_data = read_docker_compose()
+    compose_data = read_docker_compose(project_dir)
     if compose_data:
         try:
             return compose_data["services"]["db"]["container_name"]
@@ -214,7 +214,7 @@ def _get_db_container_name(project_dir: Path) -> str | None:
 
 def _get_odoo_container_name(project_dir: Path) -> str | None:
     """Reads docker-compose and returns the web container name."""
-    compose_data = read_docker_compose()
+    compose_data = read_docker_compose(project_dir)
     if compose_data:
         try:
             return compose_data["services"]["web"]["container_name"]

@@ -10,7 +10,7 @@ no longer read-only.
 
 import subprocess
 
-from rocketdoo.project_info import read_docker_compose
+from rocketdoo.core.project_info import read_docker_compose
 
 PSQL_USER = "root"  # POSTGRES_USER set by the docker-compose template
 

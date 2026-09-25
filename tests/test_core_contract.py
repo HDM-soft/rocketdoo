@@ -32,9 +32,12 @@ PURE_CORE = [
     "core/compose.py",
     "core/addons_path.py",
     "core/odoo_db.py",
+    "core/project_info.py",
 ]
 
-NO_CWD: list[str] = []
+NO_CWD: list[str] = [
+    "core/project_info.py",
+]
 
 _FORBIDDEN_IMPORTS = {"click", "questionary", "rich", "typer"}
 # exit()/quit() are builtins, so a body moved out of the CLI can keep aborting
