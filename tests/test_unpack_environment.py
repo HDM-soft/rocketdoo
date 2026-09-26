@@ -13,6 +13,7 @@ real round trip against Docker lives in tests/test_e2e_pack_unpack.py.
 """
 
 import json
+import subprocess
 
 import pytest
 
@@ -389,6 +390,46 @@ class TestCoreUnpackInspect:
         assert info["suggested_ports"] == {"odoo_port": 19070, "vsc_port": 8888}
 
 
+class TestRestoreStepsAreNotCapped:
+    """The machine receiving a shared environment is the one that has to pull
+    PostgreSQL and build the project image, and `subprocess.run(timeout=...)`
+    does not just report a timeout -- it kills the child. A cap on these two
+    turns a first unpack into a silent partial restore: no database, or no
+    filestore, under a panel that says the environment is ready.
+
+    The pre-#143 code ran both uncapped; the round trip cannot catch a
+    regression here because it runs with the images already cached.
+    """
+
+    def _record(self, monkeypatch):
+        seen = []
+
+        def _fake(*args, **kwargs):
+            seen.append({"args": args, "timeout": kwargs.get("timeout", "ABSENT")})
+            return {"ok": True, "stdout": "", "stderr": ""}
+
+        monkeypatch.setattr(core_unpack, "run_compose_result", _fake)
+        return seen
+
+    def test_launching_the_database_has_no_timeout(self, project_dir, monkeypatch):
+        seen = self._record(monkeypatch)
+
+        core_unpack._launch_db_only(project_dir, lambda *_a: None)
+
+        assert seen[0]["args"] == ("up", "-d", "db")
+        assert seen[0]["timeout"] is None
+
+    def test_initialising_the_odoo_volume_has_no_timeout(self, project_dir, monkeypatch):
+        seen = self._record(monkeypatch)
+        monkeypatch.setattr(core_unpack.time, "sleep", lambda *_a: None)
+        monkeypatch.setattr(core_unpack.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0))
+
+        core_unpack._init_odoo_volume(project_dir, "odoo-demo", lambda *_a: None)
+
+        assert seen[0]["args"] == ("up", "-d", "web")
+        assert seen[0]["timeout"] is None
+
+
 class TestCoreUnpackOrchestration:
     """Exercises unpack()'s own decisions -- which fields to trust, whether
     to call the restore chain at all -- with every low-level Docker step
@@ -589,3 +630,30 @@ class TestCoreUnpackOrchestration:
 
         assert report_silent == report_cb
         assert events, "the callback must have been invoked"
+
+
+class TestUnpackRefusesANonProjectBeforeAsking:
+    """`unpack()` refuses a directory that is not a Rocketdoo project, and the
+    CLI has to say so before it starts asking.
+
+    Walking the user through the metadata, the port review and the SSH key
+    selection only to refuse at the end is a worse way to deliver the same
+    answer -- and the pre-#143 command checked this first.
+    """
+
+    def test_it_refuses_without_prompting(self, project_dir, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo import unpack_environment
+        from rocketdoo.cli import main
+
+        def _must_not_ask(*_a, **_k):
+            raise AssertionError("nothing may be asked before the project is validated")
+
+        monkeypatch.setattr(unpack_environment.questionary, "confirm", _must_not_ask)
+        monkeypatch.setattr(unpack_environment.questionary, "select", _must_not_ask)
+
+        result = CliRunner().invoke(main, ["unpack"])
+
+        assert result.exit_code == 0, result.output
+        assert "No Rocketdoo project" in " ".join(result.output.split())

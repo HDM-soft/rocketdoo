@@ -32,6 +32,21 @@ from rocketdoo.core.pack import MissingDatabaseError, PackError, pack
 console = Console()
 
 
+def _confirm_without_backup() -> bool:
+    """Ask whether to go on without a database backup.
+
+    Answers "no" when there is nobody to ask: `questionary` raises EOFError
+    without a TTY, and `rkd pack` from a script or a CI job should not die
+    with a traceback over a question it cannot present. `--yes` is the way to
+    say yes in that setting.
+    """
+    try:
+        return bool(questionary.confirm("Continue anyway without DB backup?", default=False).ask())
+    except EOFError:
+        console.print("[dim]   No terminal to ask on; use [cyan]--yes[/cyan] to pack without the backup.[/dim]")
+        return False
+
+
 @click.command(name="pack")
 @click.option("--no-db", is_flag=True, default=False, help="Skip the database and filestore backup (environment files only).")
 @click.option(
@@ -100,7 +115,7 @@ def pack_environment(no_db, output, db_name, yes):
                 console.print(
                     "[dim]   Start the environment with [cyan]rkd up -d[/cyan] before running pack with backup.[/dim]"
                 )
-                if not questionary.confirm("Continue anyway without DB backup?", default=False).ask():
+                if not _confirm_without_backup():
                     console.print("[yellow]Operation cancelled.[/yellow]")
                     return
             report = _pack(True)

@@ -136,6 +136,7 @@ def _is_container_running(container_name: str | None) -> bool:
 
 def _wait_for_postgres(db_container: str, report: ProgressCallback, max_wait: int = 60) -> bool:
     """Polls pg_isready, reporting progress every 10s (RF9.3 keeps the cadence)."""
+    report(f"Waiting for PostgreSQL to be ready (max {max_wait}s)...")
     for i in range(max_wait):
         result = subprocess.run(["docker", "exec", db_container, "pg_isready", "-U", "root"], capture_output=True)
         if result.returncode == 0:
@@ -387,7 +388,10 @@ def _launch_environment(project_dir: Path, build: bool, report: ProgressCallback
 def _launch_db_only(project_dir: Path, report: ProgressCallback) -> bool:
     """Starts only the db service to allow database restoration."""
     report("Starting database service only...")
-    return run_compose_result("up", "-d", "db", cwd=project_dir)["ok"]
+    # No timeout: on the machine receiving a shared environment this is the
+    # call that pulls the PostgreSQL image, which the pre-#143 code also let
+    # run uncapped. A cap here kills the pull and the restore never happens.
+    return run_compose_result("up", "-d", "db", cwd=project_dir, timeout=None)["ok"]
 
 
 def _init_odoo_volume(project_dir: Path, web_container: str, report: ProgressCallback) -> bool:
@@ -396,7 +400,9 @@ def _init_odoo_volume(project_dir: Path, web_container: str, report: ProgressCal
     is being restored.
     """
     report("Starting web container to initialize volume...")
-    run_compose_result("up", "-d", "web", cwd=project_dir)
+    # Same reason as _launch_db_only, more so: on a first unpack this builds
+    # the project image (apt-get, pipx), which takes minutes.
+    run_compose_result("up", "-d", "web", cwd=project_dir, timeout=None)
     time.sleep(3)
     ready = False
     for _ in range(30):

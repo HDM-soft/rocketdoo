@@ -7,10 +7,10 @@ restoring the Dockerfile even when a later step fails - live here rather than
 in the CLI, because they are security guarantees, not presentation: a caller
 that skips the CLI (the GUI) still needs them.
 
-`pack_environment.py`'s Click command keeps its own interactive orchestration
-(the container/database detection its tests characterise call-by-call), but
-imports every function below instead of defining them, so `rkd pack` and
-`pack()` share one implementation of every step that touches disk or Docker.
+`pack_environment.py` is a Click wrapper over `pack()`: prompts and panels,
+no pipeline of its own. The CLI decides what needs a user (which database,
+whether to go on without a backup) and hands the answers over as arguments;
+everything past that point runs here, once, for the CLI and the GUI alike.
 """
 
 import json
@@ -209,14 +209,6 @@ def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str]) -> i
 # ─── read functions ──────────────────────────────────────────────────────────
 
 
-def list_databases(project_root: Path | str | None = None) -> tuple[list[str], str]:
-    """User databases in the project's PostgreSQL container, plus the reason
-    the list came back empty, if any. See `core.odoo_db.databases_result`.
-    """
-    root = Path(project_root) if project_root else Path.cwd()
-    return databases_result(read_docker_compose(root))
-
-
 # ─── action functions ────────────────────────────────────────────────────────
 
 
@@ -247,6 +239,7 @@ def pack(
     project_name = project_info.get("project_name") or root.name
     compose_data = read_docker_compose(root)
     report(f"Project detected: {project_name}")
+    report(f"Odoo: {project_info.get('odoo_version', 'unknown')} ({project_info.get('odoo_edition', 'Community')})")
 
     backup_dir = root / "rkd_backups"
     db_backup_path = None
@@ -319,6 +312,8 @@ def pack(
 
     dockerfile_path = root / "Dockerfile"
     original_dockerfile = None
+    if uses_ssh:
+        report(f"SSH keys detected (key in use: {ssh_key_name or 'detected in Dockerfile'}); they stay out of the ZIP.")
     if dockerfile_path.exists() and uses_ssh:
         original_dockerfile = _sanitize_dockerfile(dockerfile_path)
         report("SSH lines commented out in the Dockerfile for the ZIP.", "ok")

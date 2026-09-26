@@ -46,13 +46,18 @@ def run_compose(*args: str, cwd: Path | None = None, check: bool = False) -> int
     return result.returncode
 
 
-def run_compose_result(*args: str, cwd: Path | None = None, timeout: int = 60) -> dict:
+def run_compose_result(*args: str, cwd: Path | None = None, timeout: int | None = 60) -> dict:
     """Run `docker compose <args>` capturing output, for callers that need to
     report it back rather than let it reach the terminal (the GUI).
 
     Mirrors the historic `_run` helper duplicated across `docker_ops.py`: same
     three keys, same three failure branches. The JSON shape the SPA reads
     must not change.
+
+    `timeout=None` disables the cap, for callers whose command legitimately
+    takes minutes: `subprocess.run` does not just report a timeout, it kills
+    the child, so a default cap on a `compose up` that is pulling or building
+    an image would abort the build.
     """
     try:
         result = subprocess.run(

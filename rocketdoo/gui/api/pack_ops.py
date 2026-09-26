@@ -45,6 +45,16 @@ def unpack_info():
     }
 
 
+def _with_hint(exc) -> str:
+    """The message plus the half that says how to fix it.
+
+    ServiceError splits the two (RF1.4) so the caller can present both; this
+    endpoint reports through a single `stderr` string, so they travel joined
+    rather than the hint being dropped.
+    """
+    return f"{exc} {exc.hint}".strip() if exc.hint else str(exc)
+
+
 class PackRequest(BaseModel):
     include_db: bool = True
     output_path: Optional[str] = None
@@ -83,7 +93,7 @@ def pack(body: PackRequest):
             on_progress=_collect,
         )
     except core_pack.PackError as exc:
-        return {"ok": False, "stdout": "\n".join(messages), "stderr": str(exc)}
+        return {"ok": False, "stdout": "\n".join(messages), "stderr": _with_hint(exc)}
 
     return {"ok": True, "stdout": "\n".join(messages), "stderr": ""}
 
@@ -112,7 +122,7 @@ def unpack(body: UnpackRequest = UnpackRequest()):
             on_progress=_collect,
         )
     except core_unpack.UnpackError as exc:
-        return {"ok": False, "stdout": "\n".join(messages), "stderr": str(exc)}
+        return {"ok": False, "stdout": "\n".join(messages), "stderr": _with_hint(exc)}
 
     stderr = "" if report["started"] else "\n".join(report["logs_tail"])
     return {"ok": report["started"], "stdout": "\n".join(messages), "stderr": stderr}

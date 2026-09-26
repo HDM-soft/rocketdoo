@@ -95,11 +95,11 @@ def mailpit_double(monkeypatch):
         calls.append(("databases_result", ()))
         return (["dev"], "")
 
-    def fake_enable_mailpit_server(db):
+    def fake_enable_mailpit_server(db, compose_data=None):
         calls.append(("enable_mailpit_server", (db,)))
         return ""
 
-    def fake_disable_mailpit_server(db):
+    def fake_disable_mailpit_server(db, compose_data=None):
         calls.append(("disable_mailpit_server", (db,)))
         return (1, "")
 
@@ -279,7 +279,7 @@ class TestAmbiguousDatabase:
     def test_on_reports_the_error_without_claiming_ok(self, client, mailpit_project, mailpit_double, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: (["dev", "demo"], ""))
 
         response = client.post("/api/mail/on")
 
@@ -294,7 +294,7 @@ class TestAmbiguousDatabase:
         import rocketdoo.core.mailpit as mail_cli
 
         _enable_manually(mailpit_project)
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: (["dev", "demo"], ""))
 
         response = client.post("/api/mail/off")
 

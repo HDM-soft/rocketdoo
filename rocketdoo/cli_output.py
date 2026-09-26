@@ -7,6 +7,7 @@ what the terminal shows. Lives here, not in core/, because it imports rich.
 """
 
 from rich.console import Console
+from rich.markup import escape
 
 from rocketdoo.core.service import ProgressCallback
 
@@ -21,6 +22,12 @@ def console_progress(console: Console) -> ProgressCallback:
     """Build a ProgressCallback that prints each message through `console`."""
 
     def report(message: str, level: str = "info") -> None:
-        console.print(_STYLES.get(level, _STYLES["info"]).format(message=message))
+        # The message is plain text (RF2.3) and routinely carries the stderr of
+        # pg_restore or psql, which brackets its own tags: `pg_restore:
+        # [archiver (db)] ...`. Interpolated raw, rich eats the tag silently,
+        # and an unbalanced one raises MarkupError from inside the callback --
+        # which the services deliberately do not guard (spec, edge case 1), so
+        # it would abort a restore half way through.
+        console.print(_STYLES.get(level, _STYLES["info"]).format(message=escape(message)))
 
     return report

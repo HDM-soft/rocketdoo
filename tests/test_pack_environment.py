@@ -594,3 +594,34 @@ class TestCorePackProgressCallback:
         report_cb.pop("zip")
         assert report_silent == report_cb
         assert events, "the callback must have been invoked"
+
+
+class TestPackWithoutATerminal:
+    """`rkd pack` from a script or a CI job.
+
+    Before #143 the "container not detected" branch never prompted, so a
+    scripted pack produced its ZIP with a warning. RF8.3 unified it with the
+    "container down" branch, which does prompt -- and `questionary` raises
+    EOFError when there is no TTY, turning a working invocation into a
+    traceback.
+    """
+
+    def test_a_prompt_with_nobody_to_ask_aborts_cleanly(self, packable_project, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo import pack_environment
+        from rocketdoo.cli import main
+
+        class _NoTerminal:
+            def ask(self):
+                raise EOFError
+
+        monkeypatch.setattr(core_pack, "_is_container_running", lambda *a, **k: False)
+        monkeypatch.setattr(pack_environment.questionary, "confirm", lambda *a, **k: _NoTerminal())
+
+        result = CliRunner().invoke(main, ["pack", "-o", str(packable_project / "out.zip")])
+
+        assert result.exit_code == 0, result.output
+        assert result.exception is None
+        assert "--yes" in " ".join(result.output.split())
+        assert not (packable_project / "out.zip").exists()

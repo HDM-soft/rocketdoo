@@ -22,9 +22,9 @@ def _patch_externals(monkeypatch, db_names=("dev",)):
 
     monkeypatch.setattr(mailpit, "run_compose", lambda *a, **k: 0)
     monkeypatch.setattr(mailpit, "container_running", lambda *a, **k: False)
-    monkeypatch.setattr(mailpit, "databases_result", lambda: (list(db_names), ""))
-    monkeypatch.setattr(mailpit, "enable_mailpit_server", lambda db: "")
-    monkeypatch.setattr(mailpit, "disable_mailpit_server", lambda db: (1, ""))
+    monkeypatch.setattr(mailpit, "databases_result", lambda *a, **k: (list(db_names), ""))
+    monkeypatch.setattr(mailpit, "enable_mailpit_server", lambda *a, **k: "")
+    monkeypatch.setattr(mailpit, "disable_mailpit_server", lambda *a, **k: (1, ""))
 
 
 class TestMailpitErrorIsAServiceError:
@@ -80,3 +80,52 @@ class TestIsEnabledAndStatus:
         root = _scaffolded_project(tmp_path)
         enable(root)
         assert status(root) == {"enabled": True, "running": False}
+
+
+class TestTheDatabaseIsResolvedFromProjectRoot:
+    """RF1.1 all the way down to psql.
+
+    `enable(project_root=X)` toggles X's compose and runs compose with
+    `cwd=X`, but the ir.mail_server write goes through core/odoo_db, which
+    falls back to `Path.cwd()` when nobody hands it the project's compose
+    data. Left unthreaded, `rkd mail off` on one project archives the record
+    of whichever project the process happens to be standing in -- the exact
+    bug RF4.5 removed from `_get_db_container_name`.
+    """
+
+    def _two_projects(self, tmp_path, monkeypatch):
+        import rocketdoo.core.mailpit as mailpit
+
+        target = _scaffolded_project(tmp_path / "target")
+        (target / "docker-compose.yaml").write_text(
+            "services:\n  db:\n    container_name: db-target\n# rkd:mailpit\n  mailpit:\n    image: x\n# /rkd:mailpit\n"
+        )
+        elsewhere = _scaffolded_project(tmp_path / "elsewhere")
+        (elsewhere / "docker-compose.yaml").write_text("services:\n  db:\n    container_name: db-elsewhere\n")
+        monkeypatch.chdir(elsewhere)
+
+        seen = []
+        _patch_externals(monkeypatch)
+        monkeypatch.setattr(
+            mailpit, "databases_result", lambda compose_data=None, *a: (seen.append(compose_data), (["dev"], ""))[1]
+        )
+        return mailpit, target, seen
+
+    def _container_in(self, compose_data):
+        return (compose_data or {}).get("services", {}).get("db", {}).get("container_name")
+
+    def test_enable_reads_the_target_projects_compose(self, tmp_path, monkeypatch):
+        mailpit, target, seen = self._two_projects(tmp_path, monkeypatch)
+
+        mailpit.enable(target)
+
+        assert self._container_in(seen[0]) == "db-target"
+
+    def test_disable_reads_the_target_projects_compose(self, tmp_path, monkeypatch):
+        mailpit, target, seen = self._two_projects(tmp_path, monkeypatch)
+        mailpit.enable(target)
+        seen.clear()
+
+        mailpit.disable(target)
+
+        assert self._container_in(seen[0]) == "db-target"

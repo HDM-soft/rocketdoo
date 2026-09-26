@@ -21,6 +21,7 @@ from rocketdoo.core.odoo_db import (
 from rocketdoo.core.odoo_db import (
     MAILPIT_SMTP_PORT as _MAILPIT_SMTP_PORT,
 )
+from rocketdoo.core.project_info import read_docker_compose
 from rocketdoo.core.service import ProgressCallback, ServiceError
 
 _MARKER_START = "# rkd:mailpit"
@@ -189,14 +190,18 @@ def _toggle_smtp(content: str, enable: bool) -> str:
     return "".join(out)
 
 
-def _resolve_db(db: str | None) -> tuple[str | None, str]:
+def _resolve_db(db: str | None, compose_data: dict | None = None) -> tuple[str | None, str]:
     """Resolve which database to target for the ir.mail_server write. Never prompts.
 
     Returns (db, error): db is None when nothing can be safely targeted, and
     error explains why. Shared by `_apply_mail_server` (on/off) and `mail
     status`, so the 0/1/N/--db logic lives in exactly one place.
+
+    `compose_data` comes from the caller's project_root: without it the db
+    layer falls back to the process cwd, which is the exact bug RF4.5 removed
+    from _get_db_container_name -- taking a directory and reading another.
     """
-    databases, reason = databases_result()
+    databases, reason = databases_result(compose_data)
     if not databases:
         return None, reason or "no databases found"
 
@@ -222,20 +227,20 @@ def _connectivity_hint(error: str) -> str:
     return "Start the project with rkd up -d and re-run rkd mail on."
 
 
-def _apply_mail_server(enable: bool, db: str | None) -> dict:
+def _apply_mail_server(enable: bool, db: str | None, compose_data: dict | None = None) -> dict:
     """Resolve the target database and write the Mailpit ir.mail_server.
 
     Never raises and never prompts: the caller may be the GUI.
     Returns {"db": str | None, "db_error": str, "db_archived": int | None}.
     """
-    target, error = _resolve_db(db)
+    target, error = _resolve_db(db, compose_data)
     if not target:
         return {"db": None, "db_error": error, "db_archived": None}
 
     if enable:
-        return {"db": target, "db_error": enable_mailpit_server(target), "db_archived": None}
+        return {"db": target, "db_error": enable_mailpit_server(target, compose_data), "db_archived": None}
 
-    archived, error = disable_mailpit_server(target)
+    archived, error = disable_mailpit_server(target, compose_data)
     return {"db": target, "db_error": error, "db_archived": archived}
 
 
@@ -300,7 +305,7 @@ def enable(
             "conf_updated": False,
             "started": False,
             "restarted": False,
-            **_apply_mail_server(enable=True, db=db),
+            **_apply_mail_server(enable=True, db=db, compose_data=read_docker_compose(root)),
         }
 
     compose.write_text(_toggle_compose(content, enable=True))
@@ -319,7 +324,7 @@ def enable(
 
     started = run_compose("up", "-d", "mailpit", cwd=root) == 0
 
-    mail_server_report = _apply_mail_server(enable=True, db=db)
+    mail_server_report = _apply_mail_server(enable=True, db=db, compose_data=read_docker_compose(root))
 
     restarted = False
     if restart_web and container_running(_WEB_SERVICE, cwd=root):
@@ -363,7 +368,7 @@ def disable(
             "conf_found": True,
             "conf_updated": False,
             "restarted": False,
-            **_apply_mail_server(enable=False, db=db),
+            **_apply_mail_server(enable=False, db=db, compose_data=read_docker_compose(root)),
         }
 
     run_compose("stop", "mailpit", cwd=root)
@@ -380,7 +385,7 @@ def disable(
             conf.write_text(after)
             conf_updated = True
 
-    mail_server_report = _apply_mail_server(enable=False, db=db)
+    mail_server_report = _apply_mail_server(enable=False, db=db, compose_data=read_docker_compose(root))
 
     restarted = False
     if restart_web and container_running(_WEB_SERVICE, cwd=root):

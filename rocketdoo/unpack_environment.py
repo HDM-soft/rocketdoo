@@ -28,6 +28,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from rocketdoo.cli_output import console_progress
+from rocketdoo.core.project_info import project_exists
 from rocketdoo.core.unpack import UnpackError, inspect, unpack
 
 console = Console()
@@ -190,6 +191,16 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
     console.print()
 
     project_dir = Path.cwd()
+
+    # Checked before any prompt: unpack() refuses a directory that is not a
+    # project (UnpackError), and walking the user through the metadata, the
+    # port review and the SSH questions only to refuse at the end is a worse
+    # way to say the same thing.
+    if not project_exists(project_dir):
+        console.print("[red]✗[/red] No Rocketdoo project found in this directory.")
+        console.print("[dim]💡 Extract the shared ZIP first, then run [cyan]rkd unpack[/cyan] inside it.[/dim]")
+        return
+
     info = inspect(project_dir)
 
     # ── 1. Detect project and metadata ──

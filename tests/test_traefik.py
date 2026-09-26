@@ -429,6 +429,52 @@ def _relative_cwd(cwd, root: Path):
     return None if cwd is None else Path(cwd).resolve().relative_to(root.resolve())
 
 
+class TestGuiOnDoesNotClaimAProxyThatNeverStarted:
+    """RF6.5 routes "Docker is not running" through `traefik_started` /
+    `project_restarted` instead of an exception, precisely so the files still
+    get written. An endpoint that answers a flat `{"ok": true}` turns that
+    design into the lie RF5.b had to remove from the Mailpit endpoint: the
+    SPA shows Traefik enabled while the proxy is not up.
+    """
+
+    def _gui_on_with_a_failing_start(self, monkeypatch, recorded):
+        def fake_run(cmd, *args, **kwargs):
+            recorded.append((tuple(cmd), kwargs.get("cwd")))
+            if list(cmd[:3]) == ["docker", "network", "inspect"]:
+                return subprocess.CompletedProcess(cmd, 1)
+            if list(cmd[:3]) == ["docker", "compose", "up"]:
+                return subprocess.CompletedProcess(cmd, 1)
+            return subprocess.CompletedProcess(cmd, 0)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        return _gui_client().post("/api/traefik/on", json={"mode": "local", "domain": "demo.local"}).json()
+
+    def test_a_proxy_that_will_not_start_is_not_reported_as_ok(self, traefik_project, monkeypatch):
+        body = self._gui_on_with_a_failing_start(monkeypatch, [])
+
+        assert body["ok"] is False
+        assert body["traefik_started"] is False
+        assert "error" in body
+
+    def test_the_files_are_still_written(self, traefik_project, monkeypatch):
+        """The operation is partial, not failed: the config has to survive so
+        a re-run after starting Docker picks up where this left off.
+        """
+        self._gui_on_with_a_failing_start(monkeypatch, [])
+
+        assert (traefik_project / "docker-compose.override.yml").exists()
+        assert (traefik_project / ".rkd" / "traefik.yaml").exists()
+
+    def test_a_refusal_carries_its_hint(self, traefik_project, calls):
+        """RF1.4: the hint is the half that tells the user what to do."""
+        (traefik_project / "docker-compose.override.yml").write_text("services: {}\n")
+
+        body = _gui_client().post("/api/traefik/on", json={"mode": "local", "domain": "demo.local"}).json()
+
+        assert body["ok"] is False
+        assert "traefik off" in body["hint"]
+
+
 class TestArgvParityAcrossCliAndGui:
     """CA7, closed by #143 T9: run the same `on` request through the CLI and
     through the GUI, against two independent project directories, and compare

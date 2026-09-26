@@ -143,7 +143,7 @@ def mail_servers(db: str) -> tuple[list[dict], str]:
     return servers, ""
 
 
-def enable_mailpit_server(db: str) -> str:
+def enable_mailpit_server(db: str, compose_data: dict | None = None) -> str:
     """Create or reactivate the Rocketdoo mail server. Returns '' on success.
 
     Matched by name + smtp_host, not by id: there is no UNIQUE constraint on
@@ -163,11 +163,11 @@ def enable_mailpit_server(db: str) -> str:
         f"{MAILPIT_SEQUENCE}, true, now(), now() "
         "WHERE NOT EXISTS (SELECT 1 FROM updated);"
     )
-    _, error = _psql(db, sql)
+    _, error = _psql(db, sql, compose_data=compose_data)
     return error
 
 
-def disable_mailpit_server(db: str) -> tuple[int, str]:
+def disable_mailpit_server(db: str, compose_data: dict | None = None) -> tuple[int, str]:
     """Archive the Rocketdoo mail server. Returns (rows archived, error).
 
     Only rows matching both name and smtp_host are touched, and only
@@ -182,7 +182,7 @@ def disable_mailpit_server(db: str) -> tuple[int, str]:
     # -q suppresses psql's status line: without it, `RETURNING id` with zero
     # rows still prints "UPDATE 0", which counts as a row and makes the command
     # report an archive that never happened.
-    stdout, error = _psql(db, sql, "-q", "-t", "-A")
+    stdout, error = _psql(db, sql, "-q", "-t", "-A", compose_data=compose_data)
     if error:
         return 0, error
 

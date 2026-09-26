@@ -29,6 +29,7 @@ import pytest
 ROCKETDOO_ROOT = Path(__file__).resolve().parent.parent / "rocketdoo"
 
 PURE_CORE = [
+    "core/service.py",
     "core/compose.py",
     "core/addons_path.py",
     "core/odoo_db.py",
@@ -116,9 +117,9 @@ def _cwd_violations(tree: ast.Module) -> list[str]:
     return violations
 
 
-# The two helpers above are what the epic leans on from T3 onward, and NO_CWD is
-# still empty, so its test passes over an empty dict. These exercise them against
-# synthetic source instead of waiting to find out in T3 whether they work.
+# The two helpers above are what the epic leans on from T3 onward. These exercise
+# them against synthetic source, so a helper that silently stops detecting
+# anything fails here instead of turning every module list green by accident.
 
 
 @pytest.mark.parametrize(

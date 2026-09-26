@@ -176,7 +176,7 @@ class TestResolveDb:
     def test_no_databases_yields_the_reason(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: ([], "no database container configured"))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: ([], "no database container configured"))
         db, error = mail_cli._resolve_db(None)
         assert db is None
         assert error == "no database container configured"
@@ -184,7 +184,7 @@ class TestResolveDb:
     def test_no_databases_falls_back_to_a_generic_reason(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: ([], ""))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: ([], ""))
         db, error = mail_cli._resolve_db(None)
         assert db is None
         assert error == "no databases found"
@@ -192,7 +192,7 @@ class TestResolveDb:
     def test_a_single_database_is_auto_selected(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev"], ""))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: (["dev"], ""))
         db, error = mail_cli._resolve_db(None)
         assert db == "dev"
         assert error == ""
@@ -200,7 +200,7 @@ class TestResolveDb:
     def test_two_or_more_without_db_is_ambiguous(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: (["dev", "demo"], ""))
         db, error = mail_cli._resolve_db(None)
         assert db is None
         assert "--db" in error
@@ -209,7 +209,7 @@ class TestResolveDb:
     def test_a_valid_db_flag_is_used(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: (["dev", "demo"], ""))
         db, error = mail_cli._resolve_db("demo")
         assert db == "demo"
         assert error == ""
@@ -217,7 +217,7 @@ class TestResolveDb:
     def test_an_unknown_db_flag_is_rejected(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev"], ""))
+        monkeypatch.setattr(mail_cli, "databases_result", lambda *a, **k: (["dev"], ""))
         db, error = mail_cli._resolve_db("nope")
         assert db is None
         assert "nope" in error
@@ -242,8 +242,8 @@ class TestApplyMailServer:
     def test_enable_reports_the_resolved_database(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
-        monkeypatch.setattr(mail_cli, "enable_mailpit_server", lambda db: "")
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: ("dev", ""))
+        monkeypatch.setattr(mail_cli, "enable_mailpit_server", lambda *a, **k: "")
 
         report = mail_cli._apply_mail_server(enable=True, db=None)
         assert report == {"db": "dev", "db_error": "", "db_archived": None}
@@ -251,8 +251,8 @@ class TestApplyMailServer:
     def test_enable_propagates_the_write_error(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
-        monkeypatch.setattr(mail_cli, "enable_mailpit_server", lambda db: "permission denied")
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: ("dev", ""))
+        monkeypatch.setattr(mail_cli, "enable_mailpit_server", lambda *a, **k: "permission denied")
 
         report = mail_cli._apply_mail_server(enable=True, db=None)
         assert report["db_error"] == "permission denied"
@@ -260,8 +260,8 @@ class TestApplyMailServer:
     def test_disable_reports_the_archived_count(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
-        monkeypatch.setattr(mail_cli, "disable_mailpit_server", lambda db: (1, ""))
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: ("dev", ""))
+        monkeypatch.setattr(mail_cli, "disable_mailpit_server", lambda *a, **k: (1, ""))
 
         report = mail_cli._apply_mail_server(enable=False, db=None)
         assert report == {"db": "dev", "db_error": "", "db_archived": 1}
@@ -269,7 +269,7 @@ class TestApplyMailServer:
     def test_no_target_never_calls_enable_mailpit_server(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "2 databases found - re-run with --db NAME"))
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: (None, "2 databases found - re-run with --db NAME"))
 
         def _boom(db):
             raise AssertionError("must not query without a resolved database")
@@ -283,7 +283,7 @@ class TestApplyMailServer:
     def test_no_target_never_calls_disable_mailpit_server(self, monkeypatch):
         import rocketdoo.core.mailpit as mail_cli
 
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "database 'nope' not found"))
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: (None, "database 'nope' not found"))
 
         def _boom(db):
             raise AssertionError("must not query without a resolved database")
@@ -318,7 +318,9 @@ class TestEnableMailpitWritesTheMailServer:
         monkeypatch.setattr(
             mail_cli,
             "_apply_mail_server",
-            lambda enable, db: calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": None},
+            lambda enable, db, compose_data=None: (
+                calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": None}
+            ),
         )
 
         report = mail_cli._enable_mailpit()
@@ -334,7 +336,9 @@ class TestEnableMailpitWritesTheMailServer:
         monkeypatch.setattr(
             mail_cli,
             "_apply_mail_server",
-            lambda enable, db: calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": None},
+            lambda enable, db, compose_data=None: (
+                calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": None}
+            ),
         )
 
         report = mail_cli._enable_mailpit()
@@ -349,7 +353,9 @@ class TestEnableMailpitWritesTheMailServer:
         monkeypatch.setattr(
             mail_cli,
             "_apply_mail_server",
-            lambda enable, db: calls.append((enable, db)) or {"db": db, "db_error": "", "db_archived": None},
+            lambda enable, db, compose_data=None: (
+                calls.append((enable, db)) or {"db": db, "db_error": "", "db_archived": None}
+            ),
         )
 
         mail_cli._enable_mailpit(db="demo")
@@ -358,9 +364,7 @@ class TestEnableMailpitWritesTheMailServer:
 
     def test_two_runs_are_idempotent(self, tmp_path, monkeypatch):
         mail_cli = self._setup(tmp_path, monkeypatch, enabled=True)
-        monkeypatch.setattr(
-            mail_cli, "_apply_mail_server", lambda enable, db: {"db": "dev", "db_error": "", "db_archived": None}
-        )
+        monkeypatch.setattr(mail_cli, "_apply_mail_server", lambda *a, **k: {"db": "dev", "db_error": "", "db_archived": None})
 
         first = mail_cli._enable_mailpit()
         second = mail_cli._enable_mailpit()
@@ -392,7 +396,9 @@ class TestDisableMailpitWritesTheMailServer:
         monkeypatch.setattr(
             mail_cli,
             "_apply_mail_server",
-            lambda enable, db: calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": 1},
+            lambda enable, db, compose_data=None: (
+                calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": 1}
+            ),
         )
 
         report = mail_cli._disable_mailpit()
@@ -406,7 +412,9 @@ class TestDisableMailpitWritesTheMailServer:
         monkeypatch.setattr(
             mail_cli,
             "_apply_mail_server",
-            lambda enable, db: calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": 0},
+            lambda enable, db, compose_data=None: (
+                calls.append((enable, db)) or {"db": "dev", "db_error": "", "db_archived": 0}
+            ),
         )
 
         report = mail_cli._disable_mailpit()
@@ -543,7 +551,7 @@ class TestMailStatusCommand:
 
         monkeypatch.setattr(mail_cli, "console", Console(width=200))
         monkeypatch.setattr(mail_cli, "compose_path", lambda *a, **k: None)
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "no database container configured"))
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: (None, "no database container configured"))
 
         result = CliRunner().invoke(mail_cli.mail, ["status"])
         output = " ".join(result.output.split())
@@ -560,7 +568,7 @@ class TestMailStatusCommand:
 
         monkeypatch.setattr(mail_cli, "console", Console(width=200))
         monkeypatch.setattr(mail_cli, "compose_path", lambda *a, **k: None)
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: ("dev", ""))
         monkeypatch.setattr(
             mail_cli,
             "mail_servers",
@@ -587,7 +595,7 @@ class TestMailStatusCommand:
 
         monkeypatch.setattr(mail_cli, "console", Console(width=200))
         monkeypatch.setattr(mail_cli, "compose_path", lambda *a, **k: None)
-        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda *a, **k: ("dev", ""))
         monkeypatch.setattr(
             mail_cli,
             "mail_servers",
