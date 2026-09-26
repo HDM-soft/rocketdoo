@@ -12,9 +12,11 @@ to core/pack.py is #143.
 
 import json
 import zipfile
+from types import SimpleNamespace
 
 import pytest
 
+from rocketdoo import pack_environment
 from rocketdoo.core.gitignore_manager import SENSITIVE_ENTRIES
 from rocketdoo.init_project import init_from_profile
 from rocketdoo.scaffold import scaffold_project
@@ -187,3 +189,295 @@ class TestPackDatabaseListing:
         """Guards the T1 refactor: pack must keep using the shared helper."""
         _, calls = self._run_pack(monkeypatch, [])
         assert calls, "pack did not go through core.odoo_db.databases_result"
+
+
+def _fake_docker_run(calls, running_containers=None):
+    """A `subprocess.run` stand-in covering every docker call `pack` issues:
+    the `docker inspect` liveness check, the filestore `test -d` probe, and
+    the `pg_dump`/`tar` backups. Appends each argv, in the order pack issues
+    it, to `calls` — the list a test compares against the expected sequence.
+
+    `running_containers` overrides the liveness check per container name;
+    a container missing from the mapping reports as running, since most of
+    the paths under test need that to reach the code they exercise.
+    """
+    running_containers = running_containers or {}
+
+    def fake_run(cmd, **_kwargs):
+        cmd = list(cmd)
+        calls.append(cmd)
+        if cmd[:2] == ["docker", "inspect"]:
+            is_running = running_containers.get(cmd[-1], True)
+            return SimpleNamespace(returncode=0, stdout="true" if is_running else "false", stderr=b"")
+        return SimpleNamespace(returncode=0, stdout=b"", stderr=b"")
+
+    return fake_run
+
+
+class _FakeAsk:
+    """A `questionary.select`/`.confirm` stand-in: records the call and
+    answers with a fixed value from `.ask()`.
+
+    `questionary.select(...)` returns a prompt object; `.ask()` is a second,
+    separate call. Patching only the outer name with a bare `Mock` leaves
+    `.ask()` returning a `Mock`, which is truthy — a test built that way
+    "passes" without ever exercising the branch it claims to cover. This
+    fakes both calls explicitly and keeps every invocation for inspection.
+    """
+
+    def __init__(self, answer):
+        self.answer = answer
+        self.calls = []
+
+    def __call__(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return self
+
+    def ask(self):
+        return self.answer
+
+
+class TestSshSafetyNet:
+    """The last line of defence before a ZIP is shared: `pack` excludes the
+    SSH build context, and then re-reads the finished ZIP to warn if a key
+    slipped through anyway.
+
+    The existing tests prove the exclusion works, which is what makes this
+    scanner dead quiet in practice -- and therefore easy to neuter without
+    anyone noticing. RF8.5 moves it into the service in T11, so it needs a
+    test that fails when it stops finding what it is looking for.
+    """
+
+    def _zip_with(self, tmp_path, *names):
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            for name in names:
+                zf.writestr(name, "x")
+        return path
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "project/.ssh/id_rsa",
+            "project/id_ed25519",
+            "project/id_ecdsa",
+            "project/.ssh/deploy_key",
+        ],
+    )
+    def test_a_private_key_is_reported(self, tmp_path, name):
+        found = pack_environment._verify_no_ssh_in_zip(self._zip_with(tmp_path, name))
+        assert found == [name]
+
+    @pytest.mark.parametrize("name", ["project/.ssh/id_rsa.pub", "project/config/odoo.conf"])
+    def test_public_keys_and_ordinary_files_are_not_reported(self, tmp_path, name):
+        assert pack_environment._verify_no_ssh_in_zip(self._zip_with(tmp_path, name)) == []
+
+
+class TestPackWithDatabaseBackup:
+    """RF8.1/RF8.4: with exactly one database, pack backs it up without
+    prompting, running pg_dump and tar with a specific argv.
+
+    core/pack.py (T11) has to reproduce this exact command for both tools;
+    this is the regression net that catches a refactor that changes either
+    one, even if the ZIP it produces still "looks" fine.
+    """
+
+    def test_pg_dump_and_tar_run_with_the_expected_argv(self, packable_project, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        calls = []
+        import rocketdoo.pack_environment as pack_environment
+
+        monkeypatch.setattr(pack_environment.subprocess, "run", _fake_docker_run(calls))
+        monkeypatch.setattr(pack_environment, "databases_result", lambda *a, **k: (["packdemo"], ""))
+
+        result = CliRunner().invoke(main, ["pack"])
+        assert result.exit_code == 0, result.output
+
+        assert calls == [
+            ["docker", "inspect", "--format", "{{.State.Running}}", "db-packdemo"],
+            ["docker", "exec", "db-packdemo", "pg_dump", "-U", "root", "--format=custom", "packdemo"],
+            ["docker", "inspect", "--format", "{{.State.Running}}", "odoo-packdemo"],
+            [
+                "docker",
+                "exec",
+                "odoo-packdemo",
+                "test",
+                "-d",
+                "/var/lib/odoo/.local/share/Odoo/filestore/packdemo",
+            ],
+            [
+                "docker",
+                "exec",
+                "odoo-packdemo",
+                "tar",
+                "-czf",
+                "-",
+                "-C",
+                "/var/lib/odoo/.local/share/Odoo/filestore",
+                "packdemo",
+            ],
+        ]
+
+    def test_both_backup_files_land_inside_the_zip(self, packable_project, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        calls = []
+        import rocketdoo.pack_environment as pack_environment
+
+        monkeypatch.setattr(pack_environment.subprocess, "run", _fake_docker_run(calls))
+        monkeypatch.setattr(pack_environment, "databases_result", lambda *a, **k: (["packdemo"], ""))
+
+        result = CliRunner().invoke(main, ["pack"])
+        assert result.exit_code == 0, result.output
+
+        with zipfile.ZipFile(_zip_for(packable_project)) as zf:
+            names = zf.namelist()
+
+        assert any(n.startswith("rkd_backups/db_packdemo_") and n.endswith(".dump") for n in names)
+        assert any(n.startswith("rkd_backups/filestore_packdemo_") and n.endswith(".tar.gz") for n in names)
+
+
+class TestPackWithDbNameOption:
+    """RF8.2: `--db-name` picks the requested database without asking,
+    even with several available — that is the whole point of the option.
+    """
+
+    def test_db_name_selects_the_requested_database_without_prompting(self, packable_project, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        calls = []
+        import rocketdoo.pack_environment as pack_environment
+
+        monkeypatch.setattr(pack_environment.subprocess, "run", _fake_docker_run(calls))
+        monkeypatch.setattr(pack_environment, "databases_result", lambda *a, **k: (["alpha", "beta", "gamma"], ""))
+        select = _FakeAsk("alpha")  # the wrong answer: proves it was never asked
+        monkeypatch.setattr(pack_environment.questionary, "select", select)
+
+        result = CliRunner().invoke(main, ["pack", "--db-name", "beta"])
+        assert result.exit_code == 0, result.output
+
+        assert not select.calls, "must not prompt when --db-name is given"
+        pg_dump_calls = [c for c in calls if c[3:4] == ["pg_dump"]]
+        assert pg_dump_calls == [["docker", "exec", "db-packdemo", "pg_dump", "-U", "root", "--format=custom", "beta"]]
+
+
+class TestPackDatabaseSelectionPrompt:
+    """Fixes today's behaviour: with 2+ databases and no --db-name, pack
+    asks with `questionary.select`.
+
+    T11 replaces this with a `PackError` per RF8.2 (`pack()` never asks) —
+    this test's assertion of a prompt call is the one adjustment T11 is
+    allowed to make to an existing test, per the plan.
+    """
+
+    def test_prompts_with_the_available_databases_and_backs_up_the_choice(self, packable_project, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        calls = []
+        import rocketdoo.pack_environment as pack_environment
+
+        monkeypatch.setattr(pack_environment.subprocess, "run", _fake_docker_run(calls))
+        monkeypatch.setattr(pack_environment, "databases_result", lambda *a, **k: (["alpha", "beta"], ""))
+        select = _FakeAsk("beta")
+        monkeypatch.setattr(pack_environment.questionary, "select", select)
+
+        result = CliRunner().invoke(main, ["pack"])
+        assert result.exit_code == 0, result.output
+
+        assert select.calls == [(("Select the database to back up:",), {"choices": ["alpha", "beta"]})]
+        pg_dump_calls = [c for c in calls if c[3:4] == ["pg_dump"]]
+        assert pg_dump_calls == [["docker", "exec", "db-packdemo", "pg_dump", "-U", "root", "--format=custom", "beta"]]
+
+
+class TestPackWithDbContainerDown:
+    """RF8.3: with the database container not running, pack asks whether
+    to continue without a backup via `questionary.confirm` — never a
+    silent default in either direction.
+    """
+
+    def _run(self, packable_project, monkeypatch, *, answer):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        calls = []
+        import rocketdoo.pack_environment as pack_environment
+
+        monkeypatch.setattr(
+            pack_environment.subprocess,
+            "run",
+            _fake_docker_run(calls, running_containers={"db-packdemo": False}),
+        )
+        confirm = _FakeAsk(answer)
+        monkeypatch.setattr(pack_environment.questionary, "confirm", confirm)
+        select = _FakeAsk("should never be reached")
+        monkeypatch.setattr(pack_environment.questionary, "select", select)
+
+        # A fixed --output, instead of the default clock-based name beside
+        # the project: several tests share the same pytest tmp root as their
+        # ZIP's parent directory, and the default name only has second
+        # resolution, so two ZIPs written within the same second collide on
+        # the exact same path. Pinning --output here makes "was a ZIP
+        # written" a direct existence check instead of a directory glob.
+        output = packable_project / "pack-under-test.zip"
+        result = CliRunner().invoke(main, ["pack", "--output", str(output)])
+        return result, calls, confirm, select, output
+
+    def test_continuing_skips_the_backup_but_still_builds_the_zip(self, packable_project, monkeypatch):
+        result, calls, confirm, select, output = self._run(packable_project, monkeypatch, answer=True)
+        assert result.exit_code == 0, result.output
+
+        assert confirm.calls == [(("Continue anyway without DB backup?",), {"default": False})]
+        assert not select.calls, "no database is ever listed once the container is down"
+        assert not any(c[3:4] == ["pg_dump"] for c in calls)
+        assert output.exists()
+
+    def test_declining_aborts_without_writing_a_zip(self, packable_project, monkeypatch):
+        result, calls, confirm, select, output = self._run(packable_project, monkeypatch, answer=False)
+        assert result.exit_code == 0, result.output
+
+        assert confirm.calls
+        assert "Operation cancelled" in " ".join(result.output.split())
+        assert not any(c[3:4] == ["pg_dump"] for c in calls)
+        assert not output.exists(), "declining must not produce a ZIP"
+
+
+class TestPackRestoresTheDockerfileWhenZipFails:
+    """RF8.5's central guarantee: `_sanitize_dockerfile` comments out the SSH
+    lines before packing, and `_restore_dockerfile` must bring them back even
+    when `_create_zip` blows up in between — otherwise a failed `rkd pack`
+    leaves the user's project with a mutilated Dockerfile.
+    """
+
+    def test_dockerfile_is_restored_when_the_zip_step_raises(self, packable_project, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+        from rocketdoo.core.ssh_manager import inject_ssh_into_dockerfile
+
+        dockerfile_path = packable_project / "Dockerfile"
+        inject_ssh_into_dockerfile(dockerfile_path, "id_rsa_deploy")
+        original = dockerfile_path.read_text()
+
+        import rocketdoo.pack_environment as pack_environment
+
+        def _boom(*_args, **_kwargs):
+            raise RuntimeError("disk full")
+
+        monkeypatch.setattr(pack_environment, "_create_zip", _boom)
+
+        result = CliRunner().invoke(main, ["pack", "--no-db"])
+        assert result.exit_code == 0, result.output
+
+        restored = dockerfile_path.read_text()
+        assert restored == original
+        assert "[RKD-SANITIZED]" not in restored
