@@ -327,6 +327,7 @@ class TestUpSyncsAddonsPathFirst:
 
         def fake_run(cmd, *args, **kwargs):
             conf_seen_by_docker["addons_path"] = conf.read_text()
+            return subprocess.CompletedProcess(cmd, 0)
 
         monkeypatch.setattr(docker_cli.subprocess, "run", fake_run)
 
@@ -342,7 +343,7 @@ class TestUpSyncsAddonsPathFirst:
         monkeypatch.chdir(tmp_path)
         _write_conf(tmp_path)
         monkeypatch.setattr(docker_cli, "ensure_docker_installed", lambda: None)
-        monkeypatch.setattr(docker_cli.subprocess, "run", lambda *a, **k: None)
+        monkeypatch.setattr(docker_cli.subprocess, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 0))
 
         result = CliRunner().invoke(docker_cli.up, [])
 

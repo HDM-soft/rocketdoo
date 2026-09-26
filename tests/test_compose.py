@@ -154,6 +154,78 @@ class TestRunCompose:
         compose.run_compose("restart", "web")
         assert seen["cmd"] == ["docker", "compose", "restart", "web"]
 
+    def test_a_plain_call_returns_a_non_zero_exit_instead_of_raising(self, monkeypatch):
+        """The six commands that never opt into check must keep reporting a
+        failed compose run as an exit code, not as a traceback.
+        """
+        monkeypatch.setattr(compose.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 3))
+        assert compose.run_compose("down") == 3
+
+    def test_check_true_raises_on_a_non_zero_exit(self, monkeypatch):
+        def _run(cmd, **kw):
+            if kw.get("check"):
+                raise subprocess.CalledProcessError(1, cmd)
+            return subprocess.CompletedProcess(cmd, 1)
+
+        monkeypatch.setattr(compose.subprocess, "run", _run)
+        with pytest.raises(subprocess.CalledProcessError):
+            compose.run_compose("up", "-d", "--build", check=True)
+
+
+class TestRunComposeResult:
+    def _patch(self, monkeypatch, result):
+        def _run(*a, **kw):
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        monkeypatch.setattr(compose.subprocess, "run", _run)
+
+    def test_success_reports_ok_and_stripped_output(self, monkeypatch):
+        self._patch(monkeypatch, subprocess.CompletedProcess([], 0, " out \n", " err \n"))
+        assert compose.run_compose_result("up", "-d") == {"ok": True, "stdout": "out", "stderr": "err"}
+
+    def test_a_non_zero_exit_is_not_ok(self, monkeypatch):
+        self._patch(monkeypatch, subprocess.CompletedProcess([], 1, "", "boom"))
+        result = compose.run_compose_result("up", "-d")
+        assert result["ok"] is False
+        assert result["stderr"] == "boom"
+
+    def test_missing_docker_reports_the_known_message(self, monkeypatch):
+        self._patch(monkeypatch, FileNotFoundError("docker"))
+        assert compose.run_compose_result() == {"ok": False, "stdout": "", "stderr": "docker not found"}
+
+    def test_timeout_reports_the_known_message(self, monkeypatch):
+        self._patch(monkeypatch, subprocess.TimeoutExpired(cmd="docker", timeout=1))
+        assert compose.run_compose_result() == {"ok": False, "stdout": "", "stderr": "command timed out"}
+
+    def test_a_generic_failure_reports_its_message(self, monkeypatch):
+        self._patch(monkeypatch, RuntimeError("boom"))
+        assert compose.run_compose_result() == {"ok": False, "stdout": "", "stderr": "boom"}
+
+    def test_passes_the_arguments_and_timeout_through(self, monkeypatch):
+        seen = {}
+
+        def _run(cmd, **kw):
+            seen["cmd"] = cmd
+            seen["timeout"] = kw.get("timeout")
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        monkeypatch.setattr(compose.subprocess, "run", _run)
+        compose.run_compose_result("build", timeout=300)
+        assert seen["cmd"] == ["docker", "compose", "build"]
+        assert seen["timeout"] == 300
+
+
+class TestDockerAvailable:
+    def test_true_when_the_binary_is_on_path(self, monkeypatch):
+        monkeypatch.setattr(compose.shutil, "which", lambda name: "/usr/bin/docker")
+        assert compose.docker_available() is True
+
+    def test_false_when_it_is_not(self, monkeypatch):
+        monkeypatch.setattr(compose.shutil, "which", lambda name: None)
+        assert compose.docker_available() is False
+
 
 class TestContainerRunning:
     def test_true_when_the_service_is_up(self, monkeypatch):

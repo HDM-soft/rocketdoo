@@ -3,12 +3,10 @@ RocketDoo Traefik - Reverse proxy integration
 rkd traefik on/off/status/guide
 """
 
-import subprocess
 from pathlib import Path
 
 import click
 import questionary
-import yaml
 from questionary import Style
 from rich import box
 from rich.console import Console
@@ -16,9 +14,20 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from rocketdoo.core.compose import COMPOSE_NAMES, compose_path, run_compose
+from rocketdoo.cli_output import console_progress
+from rocketdoo.core import traefik as core_traefik
+from rocketdoo.core.compose import compose_path
 
 console = Console()
+
+
+def _is_wsl2() -> bool:
+    """Only `traefik guide` needs this: which hosts file the user must edit."""
+    try:
+        return "microsoft" in Path("/proc/version").read_text().lower()
+    except Exception:
+        return False
+
 
 _custom_style = Style(
     [
@@ -31,211 +40,10 @@ _custom_style = Style(
     ]
 )
 
-_NETWORK = "traefik-public"
-_OVERRIDE_FILE = "docker-compose.override.yml"
-_CONFIG_FILE = ".rkd/traefik.yaml"
 _DEFAULT_TRAEFIK_DIR = "./traefik"
 
 
-# ─── helpers ─────────────────────────────────────────────────────────────────
-
-
-def _is_wsl2() -> bool:
-    try:
-        return "microsoft" in Path("/proc/version").read_text().lower()
-    except Exception:
-        return False
-
-
-def _project_name() -> str:
-    for name in COMPOSE_NAMES:
-        p = Path.cwd() / name
-        if p.exists():
-            try:
-                data = yaml.safe_load(p.read_text())
-                if data and data.get("name"):
-                    return data["name"]
-            except Exception:
-                pass
-    return Path.cwd().name
-
-
-def _load_config() -> dict:
-    p = Path.cwd() / _CONFIG_FILE
-    if p.exists():
-        try:
-            return yaml.safe_load(p.read_text()) or {}
-        except Exception:
-            pass
-    return {}
-
-
-def _save_config(config: dict):
-    p = Path.cwd() / _CONFIG_FILE
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-
-
-def _network_exists() -> bool:
-    r = subprocess.run(["docker", "network", "inspect", _NETWORK], capture_output=True)
-    return r.returncode == 0
-
-
-def _create_network():
-    subprocess.run(["docker", "network", "create", _NETWORK], capture_output=True)
-
-
-def _override_exists() -> bool:
-    return (Path.cwd() / _OVERRIDE_FILE).exists()
-
-
-def _traefik_running() -> bool:
-    r = subprocess.run(["docker", "ps", "-q", "--filter", "name=traefik"], capture_output=True, text=True)
-    return bool(r.stdout.strip())
-
-
-# ─── content generators ───────────────────────────────────────────────────────
-
-
-def _gen_traefik_compose(mode: str) -> str:
-    https_port = '\n      - "443:443"' if mode == "production" else ""
-    acme_vol = "\n      - ./certs/acme.json:/certs/acme.json" if mode == "production" else ""
-    return f"""\
-name: traefik
-
-services:
-  traefik:
-    image: traefik:v2.11
-    container_name: traefik
-    restart: always
-    ports:
-      - "80:80"{https_port}
-    volumes:
-      - ./traefik.yml:/etc/traefik/traefik.yml
-      - /var/run/docker.sock:/var/run/docker.sock:ro{acme_vol}
-    networks:
-      - traefik-public
-
-networks:
-  traefik-public:
-    external: true
-"""
-
-
-def _gen_traefik_yml(mode: str, email: str = "") -> str:
-    if mode == "local":
-        return """\
-entryPoints:
-  web:
-    address: ":80"
-
-providers:
-  docker:
-    exposedByDefault: false
-    network: traefik-public
-
-api:
-  dashboard: false
-"""
-    return f"""\
-entryPoints:
-  web:
-    address: ":80"
-  websecure:
-    address: ":443"
-
-certificatesResolvers:
-  letsencrypt:
-    acme:
-      email: {email}
-      storage: /certs/acme.json
-      httpChallenge:
-        entryPoint: web
-
-providers:
-  docker:
-    exposedByDefault: false
-    network: traefik-public
-
-api:
-  dashboard: false
-"""
-
-
-def _gen_override(project: str, domain: str, mode: str) -> str:
-    slug = project.replace("-", "_").replace(" ", "_")
-
-    if mode == "local":
-        labels = (
-            f'      - "traefik.enable=true"\n'
-            f'      - "traefik.docker.network=traefik-public"\n'
-            f'      - "traefik.http.routers.{slug}.rule=Host(`{domain}`)"\n'
-            f'      - "traefik.http.routers.{slug}.entrypoints=web"\n'
-            f'      - "traefik.http.services.{slug}-svc.loadbalancer.server.port=8069"\n'
-            f'      - "traefik.http.routers.{slug}-lp.rule=Host(`{domain}`) && (PathPrefix(`/longpolling`) || PathPrefix(`/websocket`))"\n'
-            f'      - "traefik.http.routers.{slug}-lp.entrypoints=web"\n'
-            f'      - "traefik.http.services.{slug}-lp-svc.loadbalancer.server.port=8072"'
-        )
-    else:
-        labels = (
-            f'      - "traefik.enable=true"\n'
-            f'      - "traefik.docker.network=traefik-public"\n'
-            f'      - "traefik.http.routers.{slug}-http.rule=Host(`{domain}`)"\n'
-            f'      - "traefik.http.routers.{slug}-http.entrypoints=web"\n'
-            f'      - "traefik.http.routers.{slug}-http.middlewares=redirect-https"\n'
-            f'      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"\n'
-            f'      - "traefik.http.routers.{slug}.rule=Host(`{domain}`)"\n'
-            f'      - "traefik.http.routers.{slug}.entrypoints=websecure"\n'
-            f'      - "traefik.http.routers.{slug}.tls.certresolver=letsencrypt"\n'
-            f'      - "traefik.http.routers.{slug}.service={slug}-svc"\n'
-            f'      - "traefik.http.services.{slug}-svc.loadbalancer.server.port=8069"\n'
-            f'      - "traefik.http.routers.{slug}-lp.rule=Host(`{domain}`) && (PathPrefix(`/longpolling`) || PathPrefix(`/websocket`))"\n'
-            f'      - "traefik.http.routers.{slug}-lp.entrypoints=websecure"\n'
-            f'      - "traefik.http.routers.{slug}-lp.tls.certresolver=letsencrypt"\n'
-            f'      - "traefik.http.routers.{slug}-lp.service={slug}-lp-svc"\n'
-            f'      - "traefik.http.services.{slug}-lp-svc.loadbalancer.server.port=8072"'
-        )
-
-    return f"""\
-# Generated by rkd traefik on — disable with: rkd traefik off
-services:
-  web:
-    networks:
-      - traefik-public
-      - traefik-internal
-    labels:
-{labels}
-
-  db:
-    networks:
-      - traefik-internal
-
-networks:
-  traefik-public:
-    external: true
-  traefik-internal:
-    driver: bridge
-"""
-
-
 # ─── command group ────────────────────────────────────────────────────────────
-
-
-def _disable_traefik(restart: bool = True) -> bool:
-    """Remove the Traefik override and bring the project back on direct ports.
-
-    Shared by `rkd traefik off` and the GUI endpoint. Returns False when the
-    project was not connected to Traefik in the first place.
-    """
-    override = Path.cwd() / _OVERRIDE_FILE
-    if not override.exists():
-        return False
-
-    override.unlink()
-    if restart:
-        run_compose("up", "-d")
-    return True
 
 
 @click.group(name="traefik")
@@ -276,7 +84,8 @@ def traefik():
 @click.option(
     "--traefik-dir", default=_DEFAULT_TRAEFIK_DIR, show_default=True, help="Directory for the shared Traefik service"
 )
-def traefik_on(domain, mode, traefik_dir):
+@click.option("--email", default=None, help="Email for Let's Encrypt notifications (production mode)")
+def traefik_on(domain, mode, traefik_dir, email):
     """Enable Traefik reverse proxy for this Odoo project.
 
     \b
@@ -289,19 +98,21 @@ def traefik_on(domain, mode, traefik_dir):
     After enabling, add the domain to /etc/hosts:
       rkd traefik guide
     """
-    if not compose_path():
+    root = Path.cwd()
+
+    if not compose_path(root):
         console.print("\n[red]No docker-compose.yaml found. Run rkd init first.[/red]\n")
         return
 
-    if _override_exists():
+    if core_traefik.override_exists(root):
         console.print(
             "\n[yellow]Traefik is already enabled for this project.[/yellow]\n"
             "[dim]Run [cyan bold]rkd traefik off[/cyan bold] first to reconfigure.[/dim]\n"
         )
         return
 
-    project = _project_name()
-    existing = _load_config()
+    project = core_traefik.project_name(root)
+    existing = core_traefik.load_config(root)
 
     console.print()
     console.print(
@@ -335,80 +146,32 @@ def traefik_on(domain, mode, traefik_dir):
         domain = Prompt.ask("Domain", default=default_domain)
 
     # ── Email (prod only) ──
-    email = ""
-    if mode == "production":
+    if mode == "production" and not email:
         email = existing.get("email") or Prompt.ask("Email for Let's Encrypt notifications")
 
-    traefik_path = Path(traefik_dir).resolve()
     console.print()
 
-    # ── Generate Traefik service files ──
-    traefik_path.mkdir(parents=True, exist_ok=True)
-
-    compose_file = traefik_path / "docker-compose.yml"
-    if not compose_file.exists():
-        compose_file.write_text(_gen_traefik_compose(mode))
-        console.print(f"[green]✓[/green] {compose_file.relative_to(Path.cwd())} generated")
-    else:
-        console.print(f"[dim]  {compose_file.relative_to(Path.cwd())} already exists, skipping[/dim]")
-
-    traefik_yml = traefik_path / "traefik.yml"
-    if not traefik_yml.exists():
-        traefik_yml.write_text(_gen_traefik_yml(mode, email))
-        console.print(f"[green]✓[/green] {traefik_yml.relative_to(Path.cwd())} generated")
-    else:
-        console.print(f"[dim]  {traefik_yml.relative_to(Path.cwd())} already exists, skipping[/dim]")
-
-    if mode == "production":
-        certs_dir = traefik_path / "certs"
-        certs_dir.mkdir(exist_ok=True)
-        acme = certs_dir / "acme.json"
-        if not acme.exists():
-            acme.touch()
-            acme.chmod(0o600)
-            console.print(f"[green]✓[/green] {acme.relative_to(Path.cwd())} created (chmod 600)")
-
-    # ── Docker network ──
-    if not _network_exists():
-        console.print(f'[dim]Creating docker network "{_NETWORK}"...[/dim]')
-        _create_network()
-        console.print(f'[green]✓[/green] Network "{_NETWORK}" created')
-    else:
-        console.print(f'[dim]  Network "{_NETWORK}" already exists[/dim]')
-
-    # ── Project override ──
-    (Path.cwd() / _OVERRIDE_FILE).write_text(_gen_override(project, domain, mode))
-    console.print(f"[green]✓[/green] {_OVERRIDE_FILE} generated")
-
-    # ── Save config ──
-    _save_config(
-        {
-            "mode": mode,
-            "domain": domain,
-            "email": email,
-            "traefik_dir": str(traefik_path),
-        }
-    )
-    console.print(f"[green]✓[/green] Config saved to {_CONFIG_FILE}")
-
-    # ── Start Traefik ──
-    console.print("\n[dim]Starting Traefik...[/dim]")
-    rc = subprocess.run(["docker", "compose", "up", "-d"], cwd=traefik_path).returncode
-    if rc != 0:
-        console.print("[yellow]⚠ Could not start Traefik (is Docker running?)[/yellow]")
-    else:
-        console.print("[green]✓[/green] Traefik started")
-
-    # ── Restart Odoo with new override ──
-    console.print("[dim]Restarting Odoo with Traefik integration...[/dim]")
-    run_compose("up", "-d")
-    console.print("[green]✓[/green] Project restarted")
+    try:
+        report = core_traefik.enable(
+            root,
+            mode=mode,
+            domain=domain,
+            email=email or "",
+            traefik_dir=traefik_dir,
+            on_progress=console_progress(console),
+        )
+    except core_traefik.TraefikError as exc:
+        console.print(f"\n[red]{exc}[/red]")
+        if exc.hint:
+            console.print(f"[dim]{exc.hint}[/dim]")
+        console.print()
+        return
 
     # ── Summary ──
-    scheme = "https" if mode == "production" else "http"
-    if mode == "local":
+    scheme = "https" if report["mode"] == "production" else "http"
+    if report["mode"] == "local":
         hint = (
-            f"[dim]Add to /etc/hosts →[/dim] [cyan]127.0.0.1  {domain}[/cyan]\n"
+            f"[dim]Add to /etc/hosts →[/dim] [cyan]127.0.0.1  {report['domain']}[/cyan]\n"
             "[dim]Full guide:[/dim] [cyan bold]rkd traefik guide[/cyan bold]"
         )
     else:
@@ -418,9 +181,9 @@ def traefik_on(domain, mode, traefik_dir):
     console.print(
         Panel(
             f"[bold green]Traefik enabled[/bold green]\n\n"
-            f"[dim]Domain  :[/dim] [cyan underline]{scheme}://{domain}[/cyan underline]\n"
-            f"[dim]Mode    :[/dim] {mode}\n"
-            f"[dim]Project :[/dim] {project}\n\n"
+            f"[dim]Domain  :[/dim] [cyan underline]{scheme}://{report['domain']}[/cyan underline]\n"
+            f"[dim]Mode    :[/dim] {report['mode']}\n"
+            f"[dim]Project :[/dim] {report['project']}\n\n"
             f"{hint}",
             border_style="green",
             box=box.ROUNDED,
@@ -432,8 +195,9 @@ def traefik_on(domain, mode, traefik_dir):
 @traefik.command(name="off")
 def traefik_off():
     """Disconnect this project from Traefik (restores direct port access)."""
-    override = Path.cwd() / _OVERRIDE_FILE
-    if not override.exists():
+    root = Path.cwd()
+
+    if not core_traefik.override_exists(root):
         console.print("\n[dim]Traefik is not enabled for this project.[/dim]\n")
         return
 
@@ -441,10 +205,7 @@ def traefik_off():
     console.print(Panel("[bold cyan]Disabling Traefik[/bold cyan]", border_style="cyan", box=box.ROUNDED))
     console.print()
 
-    console.print("[dim]Restarting project without Traefik...[/dim]")
-    _disable_traefik()
-    console.print(f"[green]\u2713[/green] Removed {_OVERRIDE_FILE}")
-    console.print("[green]\u2713[/green] Project restarted")
+    core_traefik.disable(root, on_progress=console_progress(console))
 
     console.print("\n[dim]Traefik disabled. Project is accessible via direct ports again.[/dim]\n")
 
@@ -452,13 +213,10 @@ def traefik_off():
 @traefik.command(name="status")
 def traefik_status():
     """Show Traefik integration status for the current project."""
-    config = _load_config()
-    override = _override_exists()
-    running = _traefik_running()
-    network = _network_exists()
+    report = core_traefik.status(Path.cwd())
 
-    mode = config.get("mode", "—")
-    domain = config.get("domain", "—")
+    mode = report["mode"] or "—"
+    domain = report["domain"] or "—"
     scheme = "https" if mode == "production" else "http"
 
     table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
@@ -466,16 +224,19 @@ def traefik_status():
     table.add_column("Value")
 
     table.add_row(
-        "Project override", "[green]Active[/green]" if override else "[yellow]Not configured — run rkd traefik on[/yellow]"
+        "Project override",
+        "[green]Active[/green]" if report["override_exists"] else "[yellow]Not configured — run rkd traefik on[/yellow]",
     )
-    table.add_row(f'Network "{_NETWORK}"', "[green]Exists[/green]" if network else "[red]Missing[/red]")
-    table.add_row("Traefik container", "[green]Running[/green]" if running else "[dim]Stopped[/dim]")
+    table.add_row(
+        f'Network "{core_traefik.NETWORK}"', "[green]Exists[/green]" if report["network_exists"] else "[red]Missing[/red]"
+    )
+    table.add_row("Traefik container", "[green]Running[/green]" if report["traefik_running"] else "[dim]Stopped[/dim]")
 
-    if config:
+    if report["configured"]:
         table.add_row("Mode", mode)
         table.add_row("URL", f"[cyan underline]{scheme}://{domain}[/cyan underline]" if domain != "—" else "—")
-        if config.get("traefik_dir"):
-            table.add_row("Traefik dir", config["traefik_dir"])
+        if report["traefik_dir"]:
+            table.add_row("Traefik dir", report["traefik_dir"])
 
     console.print()
     console.print(
@@ -493,7 +254,7 @@ def traefik_guide():
       - Linux /etc/hosts
       - WSL2: both WSL2 and Windows hosts files
     """
-    config = _load_config()
+    config = core_traefik.load_config()
     domain = config.get("domain", "myproject.local")
     is_wsl = _is_wsl2()
 

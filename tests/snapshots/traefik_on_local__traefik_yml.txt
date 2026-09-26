@@ -1,0 +1,11 @@
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: traefik-public
+
+api:
+  dashboard: false

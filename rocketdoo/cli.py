@@ -23,8 +23,8 @@ from rocketdoo.pack_environment import pack_environment
 from rocketdoo.traefik_cli import traefik
 from rocketdoo.unpack_environment import unpack_environment
 
+from .core.project_info import get_project_info, project_exists
 from .init_project import init_project
-from .project_info import get_project_info, project_exists
 from .scaffold import scaffold_project
 
 # Detect the command name used to invoke the CLI

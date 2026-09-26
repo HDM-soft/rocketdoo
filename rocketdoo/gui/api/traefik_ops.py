@@ -1,34 +1,34 @@
 from pathlib import Path
 from typing import Optional
 
-import yaml
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from rocketdoo.core import traefik as core_traefik
+from rocketdoo.core.service import ServiceError
 
 router = APIRouter()
 
 
-def _load_traefik_config() -> dict:
-    cfg_path = Path(".rkd") / "traefik.yaml"
-    if cfg_path.exists():
-        try:
-            return yaml.safe_load(cfg_path.read_text()) or {}
-        except Exception:
-            pass
-    return {}
+def _failed(exc: ServiceError) -> dict:
+    """A refusal, with the half of it that says how to fix it.
+
+    RF1.4 splits an error into message and hint precisely so the caller can
+    show both; dropping the hint leaves the GUI user with "Traefik is already
+    enabled for this project." and no "Run rkd traefik off first."
+    """
+    return {"ok": False, "error": str(exc), "hint": exc.hint}
 
 
 @router.get("/status")
-async def traefik_status():
-    cfg = _load_traefik_config()
-    override = (Path.cwd() / "docker-compose.override.yml").exists()
-    traefik_compose = (Path.cwd() / "traefik" / "docker-compose.yml").exists()
+def traefik_status():
+    result = core_traefik.status(Path.cwd())
     return {
-        "enabled": cfg.get("enabled", False),
-        "mode": cfg.get("mode", None),
-        "domain": cfg.get("domain", None),
-        "override_exists": override,
-        "traefik_compose_exists": traefik_compose,
+        "enabled": result["enabled"],
+        "mode": result["mode"],
+        "domain": result["domain"],
+        "override_exists": result["override_exists"],
+        "traefik_compose_exists": (Path.cwd() / "traefik" / "docker-compose.yml").exists(),
     }
 
 
@@ -39,45 +39,40 @@ class TraefikOnRequest(BaseModel):
 
 
 @router.post("/on")
-async def traefik_on(body: TraefikOnRequest):
-    """Enable Traefik reverse proxy (equivalent to rkd traefik on)."""
+def traefik_on(body: TraefikOnRequest):
+    """Enable Traefik reverse proxy (equivalent to rkd traefik on).
+
+    A plain `def`, not `async`: enable() runs two `docker compose up -d`
+    synchronously, which on a cold machine pulls an image and rebuilds the
+    project. Inside a coroutine that would freeze the whole GUI, log
+    streaming included, for as long as it takes.
+    """
     try:
-        from rocketdoo.traefik_cli import (
-            _create_network,
-            _gen_override,
-            _gen_traefik_compose,
-            _gen_traefik_yml,
-            _network_exists,
-            _project_name,
-            _save_config,
+        report = core_traefik.enable(Path.cwd(), mode=body.mode, domain=body.domain, email=body.email or "")
+    except ServiceError as exc:
+        return _failed(exc)
+
+    # RF6.5 routes "Docker is not running" through these two fields rather
+    # than an exception, so answering a flat {"ok": true} here would report a
+    # proxy that never started as enabled -- the same lie RF5.b removed from
+    # the Mailpit endpoint.
+    started = report["traefik_started"] and report["project_restarted"]
+    result = {"ok": started, **report}
+    if not started:
+        result["error"] = (
+            "Traefik could not be started."
+            if not report["traefik_started"]
+            else "The project could not be restarted with the new override."
         )
-
-        cwd = Path.cwd()
-        traefik_dir = cwd / "traefik"
-        traefik_dir.mkdir(exist_ok=True)
-
-        (traefik_dir / "docker-compose.yml").write_text(_gen_traefik_compose(body.mode))
-        (traefik_dir / "traefik.yml").write_text(_gen_traefik_yml(body.mode, body.email or ""))
-
-        if not _network_exists():
-            _create_network()
-
-        project = _project_name()
-        (cwd / "docker-compose.override.yml").write_text(_gen_override(project, body.domain, body.mode))
-
-        _save_config({"enabled": True, "mode": body.mode, "domain": body.domain, "email": body.email or ""})
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        result["hint"] = "Check that Docker is running, then re-run rkd traefik on."
+    return result
 
 
 @router.post("/off")
-async def traefik_off():
+def traefik_off():
     """Disable Traefik (equivalent to rkd traefik off)."""
     try:
-        from rocketdoo.traefik_cli import _disable_traefik
-
-        _disable_traefik()
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+        removed = core_traefik.disable(Path.cwd())
+    except ServiceError as exc:
+        return _failed(exc)
+    return {"ok": True, "removed": removed}
