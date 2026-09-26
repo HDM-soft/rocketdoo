@@ -4,8 +4,11 @@ Before this file, `/api/mail/on` had no test at all and `/api/mail/off` was
 only exercised against an empty directory in `tests/test_gui_api.py`, where it
 returns early without touching any file. Neither endpoint's actual effect —
 the docker-compose.yaml toggle, the odoo.conf rewrite, or the sequence of
-docker/psql calls — was under test. This is the net T5 (`mail_cli` ->
-`core/mailpit.py`) has to pass through unmodified.
+docker/psql calls — was under test. This is what T5 (`mail_cli` ->
+`core/mailpit.py`) has to pass through unmodified, save for the response
+shape (RF5.b): the endpoints used to discard the report and always answer
+`{"ok": true}`, even when the ir.mail_server write failed. They now return
+the report in full and `ok` reflects whether the write actually succeeded.
 
 The project fixture comes from the real generator (`scaffold_project()` +
 `init_from_profile()`), same reasoning as `tests/test_project_info.py`: the
@@ -13,8 +16,8 @@ compose it produces carries the real `# rkd:mailpit` markers, so the test
 depends on the contract instead of a hand-written compose file that can drift
 out of sync with the template.
 
-Both endpoints call `mail_cli._enable_mailpit()`/`_disable_mailpit()` with no
-`db`, so the ir.mail_server write always goes through `_resolve_db(None)`.
+Both endpoints call `core.mailpit.enable()`/`disable()` with no `db`, so the
+ir.mail_server write always goes through `_resolve_db(None)`.
 `databases_result`/`enable_mailpit_server`/`disable_mailpit_server` are faked
 so the test never needs a live Postgres container, and `run_compose`/
 `container_running` are faked so it never needs a live Docker daemon either.
@@ -26,9 +29,9 @@ import pytest
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
+from rocketdoo.core.mailpit import _is_enabled, _toggle_compose, _toggle_smtp  # noqa: E402
 from rocketdoo.gui.server import create_app  # noqa: E402
 from rocketdoo.init_project import init_from_profile  # noqa: E402
-from rocketdoo.mail_cli import _is_enabled, _toggle_compose, _toggle_smtp  # noqa: E402
 from rocketdoo.scaffold import scaffold_project  # noqa: E402
 
 
@@ -76,7 +79,7 @@ def mailpit_double(monkeypatch):
     ordered list, so a test can assert the exact sequence the endpoint
     produces instead of one assertion per faked function.
     """
-    import rocketdoo.mail_cli as mail_cli
+    import rocketdoo.core.mailpit as mail_cli
 
     calls = []
 
@@ -114,7 +117,17 @@ class TestMailOnHappyPath:
         response = client.post("/api/mail/on")
 
         assert response.status_code == 200
-        assert response.json() == {"ok": True}
+        assert response.json() == {
+            "ok": True,
+            "changed": True,
+            "conf_found": True,
+            "conf_updated": True,
+            "started": True,
+            "restarted": False,
+            "db": "dev",
+            "db_error": "",
+            "db_archived": None,
+        }
 
     def test_the_compose_block_is_uncommented(self, client, mailpit_project, mailpit_double):
         client.post("/api/mail/on")
@@ -151,7 +164,17 @@ class TestMailOnIsIdempotent:
 
         response = client.post("/api/mail/on")
 
-        assert response.json() == {"ok": True}
+        assert response.json() == {
+            "ok": True,
+            "changed": False,
+            "conf_found": True,
+            "conf_updated": False,
+            "started": False,
+            "restarted": False,
+            "db": "dev",
+            "db_error": "",
+            "db_archived": None,
+        }
         assert (mailpit_project / "docker-compose.yaml").read_text() == first
 
     def test_a_second_call_still_writes_the_mail_server(self, client, mailpit_project, mailpit_double):
@@ -173,7 +196,16 @@ class TestMailOffHappyPath:
         response = client.post("/api/mail/off")
 
         assert response.status_code == 200
-        assert response.json() == {"ok": True}
+        assert response.json() == {
+            "ok": True,
+            "changed": True,
+            "conf_found": True,
+            "conf_updated": True,
+            "restarted": False,
+            "db": "dev",
+            "db_error": "",
+            "db_archived": 1,
+        }
 
     def test_the_compose_block_is_commented_back_out(self, client, mailpit_project, mailpit_double):
         _enable_manually(mailpit_project)
@@ -214,7 +246,16 @@ class TestMailOffOnAProjectThatNeverEnabledIt:
 
         response = client.post("/api/mail/off")
 
-        assert response.json() == {"ok": True}
+        assert response.json() == {
+            "ok": True,
+            "changed": False,
+            "conf_found": True,
+            "conf_updated": False,
+            "restarted": False,
+            "db": "dev",
+            "db_error": "",
+            "db_archived": 1,
+        }
         assert (mailpit_project / "docker-compose.yaml").read_text() == before
 
     def test_no_docker_command_runs(self, client, mailpit_project, mailpit_double):
@@ -224,6 +265,44 @@ class TestMailOffOnAProjectThatNeverEnabledIt:
             ("databases_result", ()),
             ("disable_mailpit_server", ("dev",)),
         ]
+
+
+class TestAmbiguousDatabase:
+    """RF5.b: the compose/conf toggle happening is not enough for `ok`.
+
+    With 2+ databases and no `db`, the ir.mail_server write never runs
+    (`_resolve_db` refuses to guess); the endpoint used to still answer
+    `{"ok": true}` and the SPA showed "Mailpit activated" with no signal
+    that email was not actually captured.
+    """
+
+    def test_on_reports_the_error_without_claiming_ok(self, client, mailpit_project, mailpit_double, monkeypatch):
+        import rocketdoo.core.mailpit as mail_cli
+
+        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
+
+        response = client.post("/api/mail/on")
+
+        body = response.json()
+        assert body["ok"] is False
+        assert body["changed"] is True
+        assert body["db"] is None
+        assert body["db_error"] == "2 databases found - re-run with --db NAME"
+        assert body["error"] == body["db_error"]
+
+    def test_off_reports_the_error_without_claiming_ok(self, client, mailpit_project, mailpit_double, monkeypatch):
+        import rocketdoo.core.mailpit as mail_cli
+
+        _enable_manually(mailpit_project)
+        monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
+
+        response = client.post("/api/mail/off")
+
+        body = response.json()
+        assert body["ok"] is False
+        assert body["db"] is None
+        assert body["db_error"] == "2 databases found - re-run with --db NAME"
+        assert body["error"] == body["db_error"]
 
 
 class TestNoComposeFile:

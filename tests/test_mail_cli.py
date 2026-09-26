@@ -12,7 +12,7 @@ ConnectionRefusedError (Odoo tried localhost:25) and Mailpit received nothing.
 
 import pytest
 
-from rocketdoo.mail_cli import _MAILPIT_SMTP_PORT, _toggle_smtp
+from rocketdoo.core.mailpit import _MAILPIT_SMTP_PORT, _toggle_smtp
 
 # What Odoo leaves behind after creating a database from the web UI: no
 # commented lines, admin_passwd hashed.
@@ -124,7 +124,7 @@ class TestReportHonesty:
     """The report drives what the user is told, so it must be measured."""
 
     def test_conf_updated_is_false_when_nothing_changes(self, tmp_path, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         conf = tmp_path / "odoo.conf"
         conf.write_text(_toggle_smtp(REWRITTEN_BY_ODOO, enable=True))
@@ -147,7 +147,7 @@ class TestReportHonesty:
         assert report["conf_updated"] is False, "nothing changed; must not claim it did"
 
     def test_conf_updated_is_true_when_the_keys_are_added(self, tmp_path, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         conf = tmp_path / "odoo.conf"
         conf.write_text(REWRITTEN_BY_ODOO)
@@ -174,7 +174,7 @@ class TestResolveDb:
     """Database selection: 0/1/N/--db, shared by _apply_mail_server (CA-18 to CA-22)."""
 
     def test_no_databases_yields_the_reason(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "databases_result", lambda: ([], "no database container configured"))
         db, error = mail_cli._resolve_db(None)
@@ -182,7 +182,7 @@ class TestResolveDb:
         assert error == "no database container configured"
 
     def test_no_databases_falls_back_to_a_generic_reason(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "databases_result", lambda: ([], ""))
         db, error = mail_cli._resolve_db(None)
@@ -190,7 +190,7 @@ class TestResolveDb:
         assert error == "no databases found"
 
     def test_a_single_database_is_auto_selected(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev"], ""))
         db, error = mail_cli._resolve_db(None)
@@ -198,7 +198,7 @@ class TestResolveDb:
         assert error == ""
 
     def test_two_or_more_without_db_is_ambiguous(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
         db, error = mail_cli._resolve_db(None)
@@ -207,7 +207,7 @@ class TestResolveDb:
         assert "2" in error
 
     def test_a_valid_db_flag_is_used(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev", "demo"], ""))
         db, error = mail_cli._resolve_db("demo")
@@ -215,7 +215,7 @@ class TestResolveDb:
         assert error == ""
 
     def test_an_unknown_db_flag_is_rejected(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "databases_result", lambda: (["dev"], ""))
         db, error = mail_cli._resolve_db("nope")
@@ -240,7 +240,7 @@ class TestApplyMailServer:
     """CA-1, CA-5, CA-18 to CA-22: resolve + write, no query without a target."""
 
     def test_enable_reports_the_resolved_database(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
         monkeypatch.setattr(mail_cli, "enable_mailpit_server", lambda db: "")
@@ -249,7 +249,7 @@ class TestApplyMailServer:
         assert report == {"db": "dev", "db_error": "", "db_archived": None}
 
     def test_enable_propagates_the_write_error(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
         monkeypatch.setattr(mail_cli, "enable_mailpit_server", lambda db: "permission denied")
@@ -258,7 +258,7 @@ class TestApplyMailServer:
         assert report["db_error"] == "permission denied"
 
     def test_disable_reports_the_archived_count(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: ("dev", ""))
         monkeypatch.setattr(mail_cli, "disable_mailpit_server", lambda db: (1, ""))
@@ -267,7 +267,7 @@ class TestApplyMailServer:
         assert report == {"db": "dev", "db_error": "", "db_archived": 1}
 
     def test_no_target_never_calls_enable_mailpit_server(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "2 databases found - re-run with --db NAME"))
 
@@ -281,7 +281,7 @@ class TestApplyMailServer:
         assert report == {"db": None, "db_error": "2 databases found - re-run with --db NAME", "db_archived": None}
 
     def test_no_target_never_calls_disable_mailpit_server(self, monkeypatch):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "database 'nope' not found"))
 
@@ -298,7 +298,7 @@ class TestEnableMailpitWritesTheMailServer:
     """RF-1.3 and CA-4: the write must run in both branches of _enable_mailpit."""
 
     def _setup(self, tmp_path, monkeypatch, enabled):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         compose = tmp_path / "docker-compose.yaml"
         compose.write_text("# rkd:mailpit\n# /rkd:mailpit\n")
@@ -372,7 +372,7 @@ class TestDisableMailpitWritesTheMailServer:
     """RF-2.5: mirrors the enable-side write-in-both-branches fix."""
 
     def _setup(self, tmp_path, monkeypatch, enabled):
-        import rocketdoo.mail_cli as mail_cli
+        import rocketdoo.core.mailpit as mail_cli
 
         compose = tmp_path / "docker-compose.yaml"
         compose.write_text("# rkd:mailpit\n# /rkd:mailpit\n")
