@@ -34,11 +34,13 @@ PURE_CORE = [
     "core/odoo_db.py",
     "core/project_info.py",
     "core/mailpit.py",
+    "core/traefik.py",
 ]
 
 NO_CWD: list[str] = [
     "core/project_info.py",
     "core/mailpit.py",
+    "core/traefik.py",
 ]
 
 _FORBIDDEN_IMPORTS = {"click", "questionary", "rich", "typer"}

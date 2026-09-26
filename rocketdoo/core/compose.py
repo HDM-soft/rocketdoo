@@ -36,8 +36,13 @@ def run_compose(*args: str, cwd: Path | None = None, check: bool = False) -> int
     `check=True` raises `CalledProcessError` on a non-zero exit instead of
     returning it, for callers (`build --rebuild`) that treat a failed build as
     a raised exception rather than a silent success.
+
+    `cwd` stays a `Path` in both branches (an explicit `cwd` used to be cast
+    to `str` here while the default fell through as a `Path`), so a caller
+    that always passes `cwd` explicitly (RF1.1) does not observe a type
+    change depending on whether the value happens to equal the process cwd.
     """
-    result = subprocess.run(["docker", "compose", *args], cwd=str(cwd) if cwd else Path.cwd(), check=check)
+    result = subprocess.run(["docker", "compose", *args], cwd=Path(cwd) if cwd else Path.cwd(), check=check)
     return result.returncode
 
 
