@@ -1,13 +1,17 @@
-"""Characterization tests for docker_cli.py (#143 / T6).
+"""Characterization tests for docker_cli.py (#143 / T6, updated by T7).
 
 Pins the exact argv each of the 8 commands hands to subprocess.run today,
 plus the three things a refactor can change without touching argv: the
 child's working directory, whether its output still reaches the terminal,
-and check=True. T7 moves six of them onto core/compose.py.
+and check=True. T7 routes the six `docker compose` commands (up, restart,
+down, status, stop, pause) plus `build --rebuild` through
+`core.compose.run_compose`, which still calls `subprocess.run` under the
+hood, so these asserts hold unchanged before and after.
 
 None of the 8 redirect output today, so all 8 inherit the parent's stdio
-identically; CA10 only requires that `up` without `-d` and `logs -f` keep
-doing so once the other six start capturing.
+identically, and that stays true after T7: `run_compose` always inherits
+stdio, so the whole CLI keeps behaving this way. `run_compose_result`, the
+capturing sibling, is only used by the GUI (RF5.1), never by `docker_cli.py`.
 """
 
 import subprocess
@@ -17,6 +21,7 @@ import pytest
 from click.testing import CliRunner
 
 from rocketdoo import docker_cli
+from rocketdoo.core import compose
 from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT
 
 
@@ -38,7 +43,9 @@ def calls(monkeypatch):
                 "redirected": bool(
                     kwargs.get("capture_output") or kwargs.get("stdout") is not None or kwargs.get("stderr") is not None
                 ),
-                "check": kwargs.get("check"),
+                # check=False and an absent check both mean "do not raise";
+                # only opting in is a change.
+                "check": bool(kwargs.get("check")),
             }
         )
         return subprocess.CompletedProcess(cmd, 0)
@@ -52,19 +59,19 @@ class TestUp:
     def test_plain(self, calls, project_dir):
         result = CliRunner().invoke(docker_cli.up, [])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "up"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "up"], "cwd": None, "redirected": False, "check": False}]
 
     def test_detached(self, calls, project_dir):
         result = CliRunner().invoke(docker_cli.up, ["-d"])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "up", "-d"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "up", "-d"], "cwd": None, "redirected": False, "check": False}]
 
 
 class TestRestart:
     def test_plain(self, calls, project_dir):
         result = CliRunner().invoke(docker_cli.restart, [])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "restart"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "restart"], "cwd": None, "redirected": False, "check": False}]
 
     def test_with_timeout(self, calls, project_dir):
         result = CliRunner().invoke(docker_cli.restart, ["-t", "30"])
@@ -74,7 +81,7 @@ class TestRestart:
                 "argv": ["docker", "compose", "restart", "-t", "30"],
                 "cwd": None,
                 "redirected": False,
-                "check": None,
+                "check": False,
             }
         ]
 
@@ -86,7 +93,7 @@ class TestRestart:
                 "argv": ["docker", "compose", "restart", "web"],
                 "cwd": None,
                 "redirected": False,
-                "check": None,
+                "check": False,
             }
         ]
 
@@ -95,33 +102,33 @@ class TestDown:
     def test_plain(self, calls):
         result = CliRunner().invoke(docker_cli.down, [])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "down"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "down"], "cwd": None, "redirected": False, "check": False}]
 
     def test_with_volumes(self, calls):
         result = CliRunner().invoke(docker_cli.down, ["-v"])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "down", "-v"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "down", "-v"], "cwd": None, "redirected": False, "check": False}]
 
 
 class TestStatus:
     def test_plain(self, calls):
         result = CliRunner().invoke(docker_cli.status, [])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "ps"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "ps"], "cwd": None, "redirected": False, "check": False}]
 
 
 class TestStop:
     def test_plain(self, calls):
         result = CliRunner().invoke(docker_cli.stop, [])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "stop"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "stop"], "cwd": None, "redirected": False, "check": False}]
 
 
 class TestPause:
     def test_plain(self, calls):
         result = CliRunner().invoke(docker_cli.pause, [])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "compose", "pause"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "compose", "pause"], "cwd": None, "redirected": False, "check": False}]
 
 
 class TestLogs:
@@ -145,12 +152,12 @@ class TestLogs:
     def test_with_container(self, calls):
         result = CliRunner().invoke(docker_cli.logs, ["web"])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "logs", "web"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "logs", "web"], "cwd": None, "redirected": False, "check": False}]
 
     def test_follow_with_container(self, calls):
         result = CliRunner().invoke(docker_cli.logs, ["-f", "web"])
         assert result.exit_code == 0
-        assert calls == [{"argv": ["docker", "logs", "-f", "web"], "cwd": None, "redirected": False, "check": None}]
+        assert calls == [{"argv": ["docker", "logs", "-f", "web"], "cwd": None, "redirected": False, "check": False}]
 
 
 class TestBuild:
@@ -185,11 +192,12 @@ class TestBuild:
 
 
 class TestStdioInheritance:
-    """CA10: `up` without `-d` and `logs -f` must keep inheriting stdio once
-    T7 moves the other six commands to a capturing helper. Today the fact
-    is broader than just these two -- none of the 8 redirect at all -- but
-    these are the two T7 is not allowed to touch: they are the commands the
-    user watches while they run.
+    """CA10: `up` without `-d` and `logs -f` must keep inheriting stdio.
+
+    The whole CLI does, before and after T7: `run_compose` never captures.
+    Only the GUI's `run_compose_result` does that (RF5.1), so these two in
+    particular -- the commands the user watches run live -- are the ones
+    that can never be pointed at it.
     """
 
     def test_up_without_detached_keeps_stdio(self, calls, project_dir):
@@ -205,7 +213,7 @@ class TestEnsureDockerInstalledMissing:
     """Shared by all 8 commands: verified once through `up`."""
 
     def test_exit_code_is_one(self, monkeypatch, project_dir):
-        monkeypatch.setattr(docker_cli.shutil, "which", lambda name: None)
+        monkeypatch.setattr(compose.shutil, "which", lambda name: None)
         monkeypatch.setattr(docker_cli.subprocess, "run", lambda *a, **k: pytest.fail("docker must not run"))
 
         result = CliRunner().invoke(docker_cli.up, [])

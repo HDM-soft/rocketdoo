@@ -7,6 +7,7 @@ with slightly different file-name lists and error handling. They live here so
 """
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -29,10 +30,49 @@ def compose_path(base: Path | None = None) -> Path | None:
     return None
 
 
-def run_compose(*args: str, cwd: Path | None = None) -> int:
-    """Run `docker compose <args>` and return its exit code."""
-    result = subprocess.run(["docker", "compose", *args], cwd=str(cwd) if cwd else Path.cwd())
+def run_compose(*args: str, cwd: Path | None = None, check: bool = False) -> int:
+    """Run `docker compose <args>`, inheriting stdio, and return its exit code.
+
+    `check=True` raises `CalledProcessError` on a non-zero exit instead of
+    returning it, for callers (`build --rebuild`) that treat a failed build as
+    a raised exception rather than a silent success.
+    """
+    result = subprocess.run(["docker", "compose", *args], cwd=str(cwd) if cwd else Path.cwd(), check=check)
     return result.returncode
+
+
+def run_compose_result(*args: str, cwd: Path | None = None, timeout: int = 60) -> dict:
+    """Run `docker compose <args>` capturing output, for callers that need to
+    report it back rather than let it reach the terminal (the GUI).
+
+    Mirrors the historic `_run` helper duplicated across `docker_ops.py`: same
+    three keys, same three failure branches. The JSON shape the SPA reads
+    must not change.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "compose", *args],
+            cwd=str(cwd) if cwd else Path.cwd(),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return {
+            "ok": result.returncode == 0,
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+        }
+    except FileNotFoundError:
+        return {"ok": False, "stdout": "", "stderr": "docker not found"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "stdout": "", "stderr": "command timed out"}
+    except Exception as exc:
+        return {"ok": False, "stdout": "", "stderr": str(exc)}
+
+
+def docker_available() -> bool:
+    """Whether the `docker` binary is on PATH, with no side effects."""
+    return shutil.which("docker") is not None
 
 
 def compose_ps(*args: str, cwd: Path | None = None, timeout: int = 15) -> list[dict]:

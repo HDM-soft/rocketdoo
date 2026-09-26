@@ -5,50 +5,35 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from rocketdoo.core.addons_path import ensure_addons_path
+from rocketdoo.core.compose import run_compose_result
 
 router = APIRouter()
-
-
-def _run(cmd: list[str], timeout: int = 60) -> dict:
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return {
-            "ok": r.returncode == 0,
-            "stdout": r.stdout.strip(),
-            "stderr": r.stderr.strip(),
-        }
-    except FileNotFoundError:
-        return {"ok": False, "stdout": "", "stderr": "docker not found"}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "stdout": "", "stderr": "command timed out"}
-    except Exception as e:
-        return {"ok": False, "stdout": "", "stderr": str(e)}
 
 
 @router.post("/up")
 async def docker_up():
     ensure_addons_path(Path.cwd())
-    return _run(["docker", "compose", "up", "-d"])
+    return run_compose_result("up", "-d")
 
 
 @router.post("/down")
 async def docker_down():
-    return _run(["docker", "compose", "down"])
+    return run_compose_result("down")
 
 
 @router.post("/restart")
 async def docker_restart():
-    return _run(["docker", "compose", "restart"])
+    return run_compose_result("restart")
 
 
 @router.post("/stop")
 async def docker_stop():
-    return _run(["docker", "compose", "stop"])
+    return run_compose_result("stop")
 
 
 @router.post("/build")
 async def docker_build():
-    return _run(["docker", "compose", "build"], timeout=300)
+    return run_compose_result("build", timeout=300)
 
 
 class ServiceAction(BaseModel):
@@ -57,17 +42,17 @@ class ServiceAction(BaseModel):
 
 @router.post("/service/start")
 async def service_start(body: ServiceAction):
-    return _run(["docker", "compose", "start", body.service])
+    return run_compose_result("start", body.service)
 
 
 @router.post("/service/stop")
 async def service_stop(body: ServiceAction):
-    return _run(["docker", "compose", "stop", body.service])
+    return run_compose_result("stop", body.service)
 
 
 @router.post("/service/restart")
 async def service_restart(body: ServiceAction):
-    return _run(["docker", "compose", "restart", body.service])
+    return run_compose_result("restart", body.service)
 
 
 @router.get("/logs/{container_name}")
