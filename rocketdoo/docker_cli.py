@@ -1,4 +1,3 @@
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -6,6 +5,7 @@ from pathlib import Path
 import click
 
 from rocketdoo.core.addons_path import ensure_addons_path
+from rocketdoo.core.compose import docker_available, run_compose
 
 
 def sync_addons_path():
@@ -23,7 +23,7 @@ def sync_addons_path():
 
 def ensure_docker_installed():
     """Verify that Docker is installed before running commands."""
-    if not shutil.which("docker"):
+    if not docker_available():
         click.echo("❌ Docker is not installed or not in the PATH.")
         sys.exit(1)
 
@@ -44,12 +44,12 @@ def up(detached, extra_args):
     """Equivalent to: docker compose up"""
     ensure_docker_installed()
     sync_addons_path()
-    cmd = ["docker", "compose", "up"]
+    args = ["up"]
     if detached:
-        cmd.append("-d")
+        args.append("-d")
     if extra_args:
-        cmd.extend(extra_args)
-    subprocess.run(cmd)
+        args.extend(extra_args)
+    run_compose(*args)
 
 
 # ==============================
@@ -62,12 +62,12 @@ def restart(timeout, services):
     """Equivalent to: docker compose restart"""
     ensure_docker_installed()
     sync_addons_path()
-    cmd = ["docker", "compose", "restart"]
+    args = ["restart"]
     if timeout:
-        cmd.extend(["-t", str(timeout)])
+        args.extend(["-t", str(timeout)])
     if services:
-        cmd.extend(services)
-    subprocess.run(cmd)
+        args.extend(services)
+    run_compose(*args)
 
 
 # ==============================
@@ -79,12 +79,12 @@ def restart(timeout, services):
 def down(volumes, extra_args):
     """Equivalent to: docker compose down"""
     ensure_docker_installed()
-    cmd = ["docker", "compose", "down"]
+    args = ["down"]
     if volumes:
-        cmd.append("-v")
+        args.append("-v")
     if extra_args:
-        cmd.extend(extra_args)
-    subprocess.run(cmd)
+        args.extend(extra_args)
+    run_compose(*args)
 
 
 # ==============================
@@ -94,7 +94,7 @@ def down(volumes, extra_args):
 def status():
     """Equivalent to: docker compose ps"""
     ensure_docker_installed()
-    subprocess.run(["docker", "compose", "ps"])
+    run_compose("ps")
 
 
 # ==============================
@@ -104,7 +104,7 @@ def status():
 def stop():
     """Equivalent to: docker compose stop"""
     ensure_docker_installed()
-    subprocess.run(["docker", "compose", "stop"])
+    run_compose("stop")
 
 
 # ==============================
@@ -114,7 +114,7 @@ def stop():
 def pause():
     """Equivalent to: docker compose pause"""
     ensure_docker_installed()
-    subprocess.run(["docker", "compose", "pause"])
+    run_compose("pause")
 
 
 # ==============================
@@ -165,11 +165,10 @@ def build(tag, rebuild):
 
     if rebuild:
         sync_addons_path()
-        # Execute docker compose up -d --build
-        command = ["docker", "compose", "up", "-d", "--build"]
+        args = ["up", "-d", "--build"]
         click.echo("🔄 Rebuilding and restarting containers...")
-        click.echo(f"🚀 Executing: {' '.join(command)}")
-        subprocess.run(command, check=True)
+        click.echo(f"🚀 Executing: docker compose {' '.join(args)}")
+        run_compose(*args, check=True)
     else:
         # Standard docker build
         command = ["docker", "build"]

@@ -12,6 +12,7 @@ missing helper is not.
 
 import ast
 import asyncio
+import subprocess
 import sys
 from pathlib import Path
 
@@ -285,6 +286,87 @@ class TestDockerUpEndpoint:
 
         assert response.status_code == 200
         assert f"{CONTAINER_ADDONS_ROOT}/oca" in conf_seen_by_docker["addons_path"]
+
+
+class TestDockerOpsEndpoints:
+    """T7 characterization: pins, for each of the 8 POST endpoints in
+    gui/api/docker_ops.py, the exact argv and timeout handed to
+    subprocess.run today, and the JSON shape returned on success and on each
+    of the three failure branches of `_run` (D5). Written and run green
+    against the pre-refactor code, so a regression in the move onto
+    core.compose.run_compose_result shows up here first.
+    """
+
+    ENDPOINTS = [
+        ("/api/docker/up", None, ["docker", "compose", "up", "-d"], 60),
+        ("/api/docker/down", None, ["docker", "compose", "down"], 60),
+        ("/api/docker/restart", None, ["docker", "compose", "restart"], 60),
+        ("/api/docker/stop", None, ["docker", "compose", "stop"], 60),
+        ("/api/docker/build", None, ["docker", "compose", "build"], 300),
+        (
+            "/api/docker/service/start",
+            {"service": "web"},
+            ["docker", "compose", "start", "web"],
+            60,
+        ),
+        (
+            "/api/docker/service/stop",
+            {"service": "web"},
+            ["docker", "compose", "stop", "web"],
+            60,
+        ),
+        (
+            "/api/docker/service/restart",
+            {"service": "web"},
+            ["docker", "compose", "restart", "web"],
+            60,
+        ),
+    ]
+
+    def _post(self, client, path, body):
+        return client.post(path, json=body) if body is not None else client.post(path)
+
+    @pytest.mark.parametrize("path, body, expected_argv, expected_timeout", ENDPOINTS)
+    def test_argv_timeout_and_success_shape(
+        self, client, project_dir, monkeypatch, path, body, expected_argv, expected_timeout
+    ):
+        seen = {}
+
+        def fake_run(cmd, *args, **kwargs):
+            seen["argv"] = list(cmd)
+            seen["timeout"] = kwargs.get("timeout")
+            return subprocess.CompletedProcess(cmd, 0, " out \n", " err \n")
+
+        monkeypatch.setattr("rocketdoo.gui.api.docker_ops.subprocess.run", fake_run)
+
+        response = self._post(client, path, body)
+
+        assert response.status_code == 200
+        assert seen["argv"] == expected_argv
+        assert seen["timeout"] == expected_timeout
+        assert response.json() == {"ok": True, "stdout": "out", "stderr": "err"}
+
+    @pytest.mark.parametrize("path, body, expected_argv, expected_timeout", ENDPOINTS)
+    @pytest.mark.parametrize(
+        "raised, expected_stderr",
+        [
+            (FileNotFoundError("docker"), "docker not found"),
+            (subprocess.TimeoutExpired(cmd="docker", timeout=1), "command timed out"),
+            (RuntimeError("boom"), "boom"),
+        ],
+    )
+    def test_error_branches_report_failure(
+        self, client, project_dir, monkeypatch, path, body, expected_argv, expected_timeout, raised, expected_stderr
+    ):
+        def fake_run(cmd, *args, **kwargs):
+            raise raised
+
+        monkeypatch.setattr("rocketdoo.gui.api.docker_ops.subprocess.run", fake_run)
+
+        response = self._post(client, path, body)
+
+        assert response.status_code == 200
+        assert response.json() == {"ok": False, "stdout": "", "stderr": expected_stderr}
 
 
 class TestDockerActionWebSocket:

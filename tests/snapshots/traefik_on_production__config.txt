@@ -1,0 +1,4 @@
+mode: production
+domain: prod.example.com
+email: ops@example.com
+traefik_dir: <PROJECT_ROOT>/traefik

@@ -1,0 +1,4 @@
+mode: local
+domain: demo.local
+email: ''
+traefik_dir: <PROJECT_ROOT>/traefik

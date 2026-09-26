@@ -9,12 +9,15 @@ Steps:
      configures the Dockerfile with the chosen one.
   4. Starts the environment with docker compose up -d.
   5. If a database backup is present, automatically restores the DB and filestore.
+
+The restore chain (steps 2-5) lives in `core/unpack.py` (#143 T13), shared
+with the GUI's unpack endpoint. This module keeps the wizard: `inspect()`
+tells it what to ask, the questions themselves (`questionary`) resolve every
+decision up front, and `unpack()` receives the result already decided -
+never a rich console, an interactive prompt, or a project it needs to ask
+about, per RF1.3.
 """
 
-import json
-import re
-import subprocess
-import time
 from pathlib import Path
 
 import click
@@ -24,496 +27,118 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from rocketdoo.core.port_validation import find_available_port, is_port_in_use
-from rocketdoo.core.ssh_manager import copy_key_to_build_context, inject_ssh_into_dockerfile, list_private_keys
-from rocketdoo.project_info import project_exists, read_docker_compose
+from rocketdoo.cli_output import console_progress
+from rocketdoo.core.project_info import project_exists
+from rocketdoo.core.unpack import UnpackError, inspect, unpack
 
 console = Console()
 
 
-# ─────────────────────────────────────────────────────────────
-# Internal helpers
-# ─────────────────────────────────────────────────────────────
+def _resolve_port(label: str, current_port: int, suggested_port: int, *, auto_accept: bool) -> int:
+    """Asks which port to use once `inspect()` already flagged a conflict."""
+    console.print(f"  [yellow]⚠[/yellow]  {label} port [cyan]{current_port}[/cyan] is already in use.")
+    if auto_accept:
+        console.print(f"  [dim]Auto-selecting port [green]{suggested_port}[/green][/dim]")
+        return suggested_port
+
+    console.print(f"  [dim]Suggested port: [green]{suggested_port}[/green][/dim]")
+    use_suggested = questionary.confirm(
+        f"Use port {suggested_port} for {label} instead of {current_port}?", default=True
+    ).ask()
+    return suggested_port if use_suggested else click.prompt(f"Enter {label} port to use", type=int, default=suggested_port)
 
 
-def _load_shared_meta(project_dir: Path) -> dict | None:
-    """Loads the rkd-shared.json file if it exists."""
-    meta_path = project_dir / "rkd-shared.json"
-    if meta_path.exists():
-        try:
-            return json.loads(meta_path.read_text())
-        except Exception:
-            return None
-    return None
-
-
-def _find_backup_files(project_dir: Path) -> tuple[Path | None, Path | None]:
+def _decide_ports(info: dict, *, auto_accept: bool) -> dict:
+    """Turns `inspect()`'s port_conflicts/suggested_ports into the final,
+    already-decided ports `unpack()` will apply.
     """
-    Searches for backup files inside the rkd_backups directory.
-    Returns (db_dump_path, filestore_tar_path) — None if not found.
-    """
-    backup_dir = project_dir / "rkd_backups"
-    if not backup_dir.exists():
-        return None, None
-
-    dumps = sorted(backup_dir.glob("db_*.dump"), reverse=True)
-    filestores = sorted(backup_dir.glob("filestore_*.tar.gz"), reverse=True)
-
-    return (dumps[0] if dumps else None), (filestores[0] if filestores else None)
-
-
-def _check_ports(meta: dict, auto_accept: bool = False) -> tuple[int, int, bool]:
-    """
-    Verifies whether the environment's ports are available.
-    Returns (final_odoo_port, final_vsc_port, had_changes).
-    When auto_accept=True, silently picks the suggested port without prompting.
-    """
-    odoo_port = int(meta.get("odoo_port") or 8069)
-    vsc_port = int(meta.get("vsc_port") or 8888)
-    changed = False
-
     console.print("[bold]🔍 Checking port availability...[/bold]")
 
-    if is_port_in_use(odoo_port):
-        suggested = find_available_port(odoo_port + 1)
-        console.print(f"  [yellow]⚠[/yellow]  Odoo port [cyan]{odoo_port}[/cyan] is already in use.")
-        if auto_accept:
-            console.print(f"  [dim]Auto-selecting port [green]{suggested}[/green][/dim]")
-            odoo_port = suggested
-        else:
-            console.print(f"  [dim]Suggested port: [green]{suggested}[/green][/dim]")
-            use_suggested = questionary.confirm(f"Use port {suggested} for Odoo instead of {odoo_port}?", default=True).ask()
-            odoo_port = suggested if use_suggested else click.prompt("Enter Odoo port to use", type=int, default=suggested)
-        changed = True
+    meta = info["meta"] if info["has_meta"] else {}
+    odoo_port = int(meta.get("odoo_port") or 8069)
+    vsc_port = int(meta.get("vsc_port") or 8888)
+
+    if info["port_conflicts"]["odoo_port"]:
+        odoo_port = _resolve_port("Odoo", odoo_port, info["suggested_ports"]["odoo_port"], auto_accept=auto_accept)
     else:
         console.print(f"  [green]✓[/green] Odoo port [cyan]{odoo_port}[/cyan] is available.")
 
-    if is_port_in_use(vsc_port):
-        suggested_vsc = find_available_port(vsc_port + 1)
-        console.print(f"  [yellow]⚠[/yellow]  VSCode port [cyan]{vsc_port}[/cyan] is already in use.")
-        if auto_accept:
-            console.print(f"  [dim]Auto-selecting port [green]{suggested_vsc}[/green][/dim]")
-            vsc_port = suggested_vsc
-        else:
-            console.print(f"  [dim]Suggested port: [green]{suggested_vsc}[/green][/dim]")
-            use_suggested_vsc = questionary.confirm(
-                f"Use port {suggested_vsc} for VSCode instead of {vsc_port}?", default=True
-            ).ask()
-            vsc_port = (
-                suggested_vsc
-                if use_suggested_vsc
-                else click.prompt("Enter VSCode port to use", type=int, default=suggested_vsc)
-            )
-        changed = True
+    if info["port_conflicts"]["vsc_port"]:
+        vsc_port = _resolve_port("VSCode", vsc_port, info["suggested_ports"]["vsc_port"], auto_accept=auto_accept)
     else:
         console.print(f"  [green]✓[/green] VSCode port [cyan]{vsc_port}[/cyan] is available.")
 
-    return odoo_port, vsc_port, changed
+    return {"odoo_port": odoo_port, "vsc_port": vsc_port}
 
 
-def _update_ports_in_compose(project_dir: Path, new_odoo_port: int, new_vsc_port: int):
-    """
-    Updates port mappings in docker-compose.yaml using plain text replacement
-    to preserve the original file format.
-    """
-    compose_path = project_dir / "docker-compose.yaml"
-    if not compose_path.exists():
-        compose_path = project_dir / "docker-compose.yml"
-    if not compose_path.exists():
-        return
+def _select_ssh_key(meta: dict, available_keys: list[str]) -> str | None:
+    """Interactive key picker for when the caller has no `--ssh-key` value.
 
-    content = compose_path.read_text()
-    content = re.sub(r'"\d+:8069"', f'"{new_odoo_port}:8069"', content)
-    content = re.sub(r'"\d+:8888"', f'"{new_vsc_port}:8888"', content)
-    compose_path.write_text(content)
-    console.print("  [green]✓[/green] docker-compose.yaml updated with new ports.")
-
-
-def _configure_ssh(project_dir: Path, meta: dict, key_name: str | None = None) -> bool:
-    """
-    Guides the recipient through configuring their own SSH key for the environment.
-    If key_name is provided, uses it directly without interactive prompts.
-    Returns True if configured successfully, False if skipped or failed.
+    `unpack()` may never do this itself (RF1.3): it only receives the name
+    this returns, or None to skip SSH entirely.
     """
     console.print()
     console.print("[bold]🔐 SSH configuration for private repositories:[/bold]")
-
-    if key_name:
-        console.print(f"  [dim]Using key: [cyan]{key_name}[/cyan][/dim]")
-        try:
-            dockerfile_path = project_dir / "Dockerfile"
-            copy_key_to_build_context(key_name, project_dir)
-            if dockerfile_path.exists():
-                inject_ssh_into_dockerfile(dockerfile_path, key_name)
-                console.print(f"  [green]✓[/green] Dockerfile configured with key [cyan]{key_name}[/cyan]")
-            return True
-        except Exception as e:
-            console.print(f"  [red]✗ Error configuring SSH:[/red] {e}")
-            return False
 
     original_key = meta.get("ssh_key_name")
     if original_key:
         console.print(f"  [dim]The original environment used key: [yellow]{original_key}[/yellow][/dim]")
 
     console.print()
-    available_keys = list_private_keys()
 
     if not available_keys:
         console.print("  [yellow]⚠[/yellow]  No SSH keys found in ~/.ssh/")
         console.print("  [dim]Generate one with: [cyan]ssh-keygen -t rsa -b 4096[/cyan][/dim]")
-        skip = questionary.confirm("Continue without SSH? (private repos will not work)", default=False).ask()
-        return not skip
+        questionary.confirm("Continue without SSH? (private repos will not work)", default=False).ask()
+        return None
 
     console.print(f"  [dim]Found {len(available_keys)} SSH key(s) available.[/dim]")
-
-    selected_key = questionary.select("Select your SSH key for private repositories:", choices=available_keys).ask()
-
-    if not selected_key:
-        return False
-
-    try:
-        dockerfile_path = project_dir / "Dockerfile"
-        console.print(f"  [dim]Copying key [cyan]{selected_key}[/cyan] to build context...[/dim]")
-        copy_key_to_build_context(selected_key, project_dir)
-
-        if dockerfile_path.exists():
-            inject_ssh_into_dockerfile(dockerfile_path, selected_key)
-            console.print(f"  [green]✓[/green] Dockerfile configured with key [cyan]{selected_key}[/cyan]")
-        else:
-            console.print("  [yellow]⚠[/yellow]  Dockerfile not found.")
-
-        return True
-    except Exception as e:
-        console.print(f"  [red]✗ Error configuring SSH:[/red] {e}")
-        return False
+    return questionary.select("Select your SSH key for private repositories:", choices=available_keys).ask()
 
 
-def _is_container_running(container_name: str) -> bool:
-    """Checks whether a Docker container is currently running."""
-    if not container_name:
-        return False
-    try:
-        result = subprocess.run(
-            ["docker", "inspect", "--format", "{{.State.Running}}", container_name], capture_output=True, text=True
-        )
-        return result.stdout.strip() == "true"
-    except Exception:
-        return False
-
-
-def _get_db_container_name(project_dir: Path) -> str | None:
-    """Reads docker-compose and returns the database container name."""
-    compose_data = read_docker_compose()
-    if compose_data:
-        try:
-            return compose_data["services"]["db"]["container_name"]
-        except (KeyError, TypeError):
-            pass
-    return None
-
-
-def _get_odoo_container_name(project_dir: Path) -> str | None:
-    """Reads docker-compose and returns the web container name."""
-    compose_data = read_docker_compose()
-    if compose_data:
-        try:
-            return compose_data["services"]["web"]["container_name"]
-        except (KeyError, TypeError):
-            pass
-    return None
-
-
-def _wait_for_postgres(db_container: str, max_wait: int = 60) -> bool:
-    """Waits until PostgreSQL is ready to accept connections."""
-    console.print(f"  [dim]Waiting for PostgreSQL to be ready (max {max_wait}s)...[/dim]")
-    for i in range(max_wait):
-        result = subprocess.run(["docker", "exec", db_container, "pg_isready", "-U", "root"], capture_output=True)
-        if result.returncode == 0:
-            console.print("  [green]✓[/green] PostgreSQL is ready.")
-            return True
-        time.sleep(1)
-        if i % 10 == 9:
-            console.print(f"  [dim]  ...{i + 1}s[/dim]")
-    return False
-
-
-def _wait_for_odoo_volume(odoo_container: str, max_wait: int = 90) -> bool:
+def _decide_ssh_key(info: dict, *, ssh_key_option: str | None, no_ssh: bool) -> str | None:
+    """Resolves every SSH question up front: the key to configure, or None
+    to skip SSH configuration entirely (RF3.1).
     """
-    Waits until /var/lib/odoo is mounted and accessible inside the Odoo container.
-
-    Replaces time.sleep(5): the Docker volume may take several seconds to become
-    available after the container starts, especially on first run. Without this
-    check the filestore restore would silently fail writing to a non-existent path.
-    """
-    console.print(f"  [dim]Waiting for Odoo volume to be ready (max {max_wait}s)...[/dim]")
-    for i in range(max_wait):
-        result = subprocess.run(["docker", "exec", odoo_container, "test", "-d", "/var/lib/odoo"], capture_output=True)
-        if result.returncode == 0:
-            console.print("  [green]✓[/green] Odoo volume is ready.")
-            return True
-        time.sleep(1)
-        if i % 15 == 14:
-            console.print(f"  [dim]  ...{i + 1}s[/dim]")
-    console.print(f"  [yellow]⚠[/yellow]  Odoo volume not ready after {max_wait}s.")
-    return False
-
-
-def _restore_database(db_container: str, dump_path: Path) -> str | None:
-    """
-    Restores the PostgreSQL dump into the container.
-    Returns the restored database name, or None if it failed.
-    """
-    stem = dump_path.stem
-    parts = stem.split("_")
-    db_name = "_".join(parts[1:-2]) if len(parts) >= 4 else (parts[1] if len(parts) > 1 else "odoo_restored")
-
-    console.print(f"  [dim]Restoring database [cyan]{db_name}[/cyan]...[/dim]")
-
-    try:
-        copy_result = subprocess.run(
-            ["docker", "cp", str(dump_path), f"{db_container}:/tmp/rkd_restore.dump"], capture_output=True, text=True
-        )
-        if copy_result.returncode != 0:
-            console.print(f"  [red]✗ Error copying dump:[/red] {copy_result.stderr}")
-            return None
-
-        subprocess.run(
-            [
-                "docker",
-                "exec",
-                db_container,
-                "psql",
-                "-U",
-                "root",
-                "-d",
-                "postgres",
-                "-c",
-                f'DROP DATABASE IF EXISTS "{db_name}";',
-            ],
-            capture_output=True,
-        )
-        create_result = subprocess.run(
-            [
-                "docker",
-                "exec",
-                db_container,
-                "psql",
-                "-U",
-                "root",
-                "-d",
-                "postgres",
-                "-c",
-                f'CREATE DATABASE "{db_name}" OWNER root;',
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if create_result.returncode != 0:
-            console.print(f"  [red]✗ Error creating database:[/red] {create_result.stderr}")
-            return None
-
-        restore_result = subprocess.run(
-            [
-                "docker",
-                "exec",
-                db_container,
-                "pg_restore",
-                "-U",
-                "root",
-                "-d",
-                db_name,
-                "--no-owner",
-                "--role=root",
-                "/tmp/rkd_restore.dump",
-            ],
-            capture_output=True,
-            text=True,
-        )
-
-        if restore_result.returncode == 0:
-            console.print(f"  [green]✓[/green] Database [cyan]{db_name}[/cyan] restored successfully.")
-            return db_name
-
-        # returncode 1 = restored, but pg_restore ignored some statements.
-        # These are often benign (missing roles/extensions), but can also hide
-        # real data loss — so we surface them instead of silently succeeding.
-        if restore_result.returncode == 1:
-            stderr = (restore_result.stderr or "").strip()
-            console.print(
-                f"  [yellow]⚠[/yellow]  Database [cyan]{db_name}[/cyan] restored "
-                f"[yellow]with warnings[/yellow] (pg_restore ignored some statements)."
-            )
-            if stderr:
-                console.print("  [dim]pg_restore reported:[/dim]")
-                for line in stderr.splitlines()[-15:]:
-                    console.print(f"    [dim]{line}[/dim]")
-                console.print(
-                    "  [dim]Review the messages above — if core tables (res_users, "
-                    "ir_model_data, …) failed, the restore is incomplete.[/dim]"
-                )
-            return db_name
-
-        # returncode > 1 = fatal failure
-        console.print(f"  [red]✗ Restore error:[/red] {restore_result.stderr[:500]}")
+    if no_ssh:
+        console.print("[dim]  SSH configuration skipped (--no-ssh).[/dim]")
         return None
 
-    except Exception as e:
-        console.print(f"  [red]✗ Exception during restore:[/red] {e}")
-        return None
+    if ssh_key_option:
+        console.print()
+        console.print(f"  [dim]Using key: [cyan]{ssh_key_option}[/cyan][/dim]")
+        return ssh_key_option
 
+    meta = info["meta"] if info["has_meta"] else {}
 
-def _restore_filestore(
-    odoo_container: str, filestore_tar: Path, db_name: str, filestore_base_from_meta: str | None = None
-) -> bool:
-    """
-    Restores the Odoo filestore into the web container (supports multiple layouts).
-    Uses filestore_base_from_meta if provided (from rkd-shared.json), otherwise detects it.
-    """
-    console.print(f"  [dim]Restoring filestore for [cyan]{db_name}[/cyan]...[/dim]")
-
-    POSSIBLE_BASES = [
-        "/var/lib/odoo/.local/share/Odoo/filestore",
-        "/var/lib/odoo/filestore",
-    ]
-
-    try:
-        # ── 1. Copy tar to container ──
-        copy_result = subprocess.run(
-            ["docker", "cp", str(filestore_tar), f"{odoo_container}:/tmp/rkd_filestore.tar.gz"], capture_output=True, text=True
-        )
-        if copy_result.returncode != 0:
-            console.print(f"  [yellow]⚠[/yellow]  Could not copy filestore: {copy_result.stderr}")
-            return False
-
-        # ── 2. Use filestore base from metadata or detect it ──
-        filestore_base = None
-
-        # Try metadata base first
-        if filestore_base_from_meta:
-            check = subprocess.run(
-                ["docker", "exec", odoo_container, "test", "-d", filestore_base_from_meta], capture_output=True
+    if info["uses_private_repos"]:
+        console.print()
+        console.print(
+            Panel(
+                "This environment was set up with [bold]private repositories[/bold].\n"
+                "You need to configure [bold]your own SSH key[/bold] for it to work correctly.",
+                border_style="yellow",
+                box=box.ROUNDED,
             )
-            if check.returncode == 0:
-                filestore_base = filestore_base_from_meta
-                console.print(f"  [dim]Using filestore base from metadata:[/dim] [cyan]{filestore_base}[/cyan]")
-
-        # If metadata base didn't work, try detecting
-        if not filestore_base:
-            for base in POSSIBLE_BASES:
-                check = subprocess.run(["docker", "exec", odoo_container, "test", "-d", base], capture_output=True)
-                if check.returncode == 0:
-                    filestore_base = base
-                    break
-
-        # fallback → usar layout simple
-        if not filestore_base:
-            filestore_base = "/var/lib/odoo/filestore"
-            console.print(f"  [yellow]⚠[/yellow]  Filestore base not found. Using fallback: [cyan]{filestore_base}[/cyan]")
-
-        console.print(f"  [dim]Using filestore base:[/dim] [cyan]{filestore_base}[/cyan]")
-
-        # ── 3. Ensure base exists ──
-        subprocess.run(["docker", "exec", odoo_container, "mkdir", "-p", filestore_base], capture_output=True)
-
-        # ── 4. Clean existing filestore (VERY IMPORTANT) ──
-        console.print(f"  [dim]Cleaning existing filestore for {db_name}...[/dim]")
-        subprocess.run(["docker", "exec", odoo_container, "rm", "-rf", f"{filestore_base}/{db_name}"], capture_output=True)
-
-        # ── 5. Extract tar ──
-        extract_result = subprocess.run(
-            ["docker", "exec", odoo_container, "tar", "-xzf", "/tmp/rkd_filestore.tar.gz", "-C", filestore_base],
-            capture_output=True,
-            text=True,
         )
+        wants_ssh = questionary.confirm(
+            "Do you use private repositories and want to configure your SSH key?", default=True
+        ).ask()
+        if not wants_ssh:
+            return None
+        selected_key = _select_ssh_key(meta, info["ssh_keys"])
+        if not selected_key:
+            console.print("[yellow]⚠[/yellow]  SSH not configured. Private repos may not work.")
+        return selected_key
 
-        # tar exits 1 on non-fatal warnings (extended headers, etc.) — treat as success
-        if extract_result.returncode > 1:
-            console.print(f"  [yellow]⚠[/yellow]  Error extracting filestore: {extract_result.stderr}")
-            return False
+    if not info["has_meta"]:
+        wants_ssh = questionary.confirm(
+            "Does this environment use private repositories? (requires SSH key)", default=False
+        ).ask()
+        if wants_ssh:
+            return _select_ssh_key(meta, info["ssh_keys"])
 
-        # ── 6. Fix permissions ──
-        subprocess.run(
-            ["docker", "exec", odoo_container, "chown", "-R", "odoo:odoo", f"{filestore_base}/{db_name}"], capture_output=True
-        )
-
-        console.print("  [green]✓[/green] Filestore restored successfully.")
-        return True
-
-    except Exception as e:
-        console.print(f"  [yellow]⚠[/yellow]  Exception while restoring filestore: {e}")
-        return False
-
-
-def _clear_generated_assets(db_container: str, db_name: str) -> None:
-    """
-    Removes generated web asset bundles (ir_attachment rows whose URL starts
-    with /web/assets/) from the restored database.
-
-    After a restore, the asset bundles registered in the database point to
-    filestore files that no longer match the recipient's code (different addons,
-    enterprise version, etc.) or were replaced by the filestore restore. Odoo
-    regenerates these bundles on demand, so deleting the stale records forces a
-    clean rebuild and prevents the 500 errors on /web/assets/... that render the
-    login page non-functional ("can't log in").
-    """
-    console.print("  [dim]Clearing stale web asset bundles...[/dim]")
-    result = subprocess.run(
-        [
-            "docker",
-            "exec",
-            db_container,
-            "psql",
-            "-U",
-            "root",
-            "-d",
-            db_name,
-            "-c",
-            "DELETE FROM ir_attachment WHERE url LIKE '/web/assets/%';",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        console.print("  [green]✓[/green] Stale asset bundles cleared (Odoo will regenerate them).")
-    else:
-        console.print(f"  [yellow]⚠[/yellow]  Could not clear asset bundles: {result.stderr.strip()[:200]}")
-
-
-def _launch_environment(build: bool = False):
-    """Runs docker compose up -d (with optional --build flag)."""
-    cmd = ["docker", "compose", "up", "-d"]
-    if build:
-        cmd.append("--build")
-    console.print()
-    console.print(f"[bold]🚀 Starting environment:[/bold] [dim]{' '.join(cmd)}[/dim]")
-    result = subprocess.run(cmd)
-    return result.returncode == 0
-
-
-def _launch_db_only():
-    """Starts only the db service to allow database restoration."""
-    console.print("[dim]  Starting database service only...[/dim]")
-    result = subprocess.run(["docker", "compose", "up", "-d", "db"], capture_output=True, text=True)
-    return result.returncode == 0
-
-
-def _init_odoo_volume(web_container: str) -> bool:
-    """
-    Starts the web container briefly so Docker creates the named volume,
-    then stops it immediately so Odoo never runs while we restore the filestore.
-    """
-    console.print("[dim]  Starting web container to initialize volume...[/dim]")
-    subprocess.run(["docker", "compose", "up", "-d", "web"], capture_output=True)
-    time.sleep(3)
-    ready = False
-    for _ in range(30):
-        result = subprocess.run(["docker", "exec", web_container, "test", "-d", "/var/lib/odoo"], capture_output=True)
-        if result.returncode == 0:
-            ready = True
-            break
-        time.sleep(1)
-    subprocess.run(["docker", "compose", "stop", "web"], capture_output=True)
-    return ready
+    return None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -567,15 +192,20 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
 
     project_dir = Path.cwd()
 
-    # ── 1. Detect project and metadata ──
-    if not project_exists():
+    # Checked before any prompt: unpack() refuses a directory that is not a
+    # project (UnpackError), and walking the user through the metadata, the
+    # port review and the SSH questions only to refuse at the end is a worse
+    # way to say the same thing.
+    if not project_exists(project_dir):
         console.print("[red]✗[/red] No Rocketdoo project found in this directory.")
-        console.print("[dim]Make sure you are inside the unzipped environment directory.[/dim]")
+        console.print("[dim]💡 Extract the shared ZIP first, then run [cyan]rkd unpack[/cyan] inside it.[/dim]")
         return
 
-    meta = _load_shared_meta(project_dir)
+    info = inspect(project_dir)
 
-    if meta and meta.get("rkd_shared"):
+    # ── 1. Detect project and metadata ──
+    if info["has_meta"]:
+        meta = info["meta"]
         console.print("[green]✓[/green] Shared environment detected ([dim]rkd-shared.json[/dim])")
         console.print()
 
@@ -594,126 +224,39 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
         console.print("[dim]This looks like a Rocketdoo project but was not packaged with [cyan]rkd pack[/cyan].[/dim]")
         if not questionary.confirm("Continue anyway?", default=False).ask():
             return
-        meta = {}
 
     # ── 2. Check and adjust ports ──
     console.print()
-    new_odoo_port, new_vsc_port, ports_changed = _check_ports(meta, auto_accept=yes)
-
-    if ports_changed:
-        console.print()
-        console.print("[dim]  Updating docker-compose.yaml with new ports...[/dim]")
-        _update_ports_in_compose(project_dir, new_odoo_port, new_vsc_port)
+    ports = _decide_ports(info, auto_accept=yes)
 
     # ── 3. Configure SSH if the environment used private repos ──
-    uses_private_repos = meta.get("uses_private_repos", False)
+    resolved_ssh_key = _decide_ssh_key(info, ssh_key_option=ssh_key, no_ssh=no_ssh)
 
-    if no_ssh:
-        console.print("[dim]  SSH configuration skipped (--no-ssh).[/dim]")
-    elif ssh_key:
-        console.print()
-        _configure_ssh(project_dir, meta, key_name=ssh_key)
-    elif uses_private_repos:
-        console.print()
-        console.print(
-            Panel(
-                "This environment was set up with [bold]private repositories[/bold].\n"
-                "You need to configure [bold]your own SSH key[/bold] for it to work correctly.",
-                border_style="yellow",
-                box=box.ROUNDED,
-            )
+    # ── 4-6. Start the environment, restore the database, verify it booted ──
+    console.print()
+    try:
+        report = unpack(
+            project_dir,
+            ports=ports,
+            ssh_key=resolved_ssh_key,
+            restore=not no_restore,
+            build=build,
+            on_progress=console_progress(console),
         )
-        wants_ssh = questionary.confirm(
-            "Do you use private repositories and want to configure your SSH key?", default=True
-        ).ask()
-        if wants_ssh:
-            ssh_ok = _configure_ssh(project_dir, meta)
-            if not ssh_ok:
-                console.print("[yellow]⚠[/yellow]  SSH not configured. Private repos may not work.")
-    elif not meta:
-        wants_ssh = questionary.confirm(
-            "Does this environment use private repositories? (requires SSH key)", default=False
-        ).ask()
-        if wants_ssh:
-            _configure_ssh(project_dir, {})
-
-    # ── 4. Locate backup files ──
-    db_dump, filestore_tar = _find_backup_files(project_dir)
-    has_backup = db_dump is not None
-
-    # ── 5. Start the environment ──
-    console.print()
-    if has_backup and not no_restore:
-        console.print("[bold]💾 Database backup found.[/bold]")
-        console.print("[dim]  Strategy: start DB → restore → start full environment[/dim]")
+    except UnpackError as exc:
+        console.print(f"\n[red]✗[/red] {exc}")
+        if exc.hint:
+            console.print(f"[dim]💡 {exc.hint}[/dim]")
         console.print()
-
-        db_up = _launch_db_only()
-        if not db_up:
-            console.print("[red]✗ Could not start the database service.[/red]")
-            return
-
-        db_container = _get_db_container_name(project_dir)
-        if db_container:
-            pg_ready = _wait_for_postgres(db_container)
-            if pg_ready:
-                console.print()
-                console.print("[bold]💾 Restoring database:[/bold]")
-                restored_db = _restore_database(db_container, db_dump)
-
-                if restored_db and filestore_tar:
-                    console.print()
-                    console.print("[bold]🗂️  Restoring filestore:[/bold]")
-
-                    odoo_container = _get_odoo_container_name(project_dir)
-                    if not odoo_container:
-                        console.print(
-                            "[yellow]⚠[/yellow]  Cannot determine Odoo container name "
-                            "— filestore restore skipped.\n"
-                            "[dim]  Check that docker-compose.yaml has container_name set on the web service.[/dim]"
-                        )
-                    else:
-                        volume_ready = _init_odoo_volume(odoo_container)
-                        if volume_ready:
-                            console.print("  [green]✓[/green] Volume ready. Restoring filestore (Odoo is stopped)...")
-                            filestore_base_from_meta = meta.get("filestore_base") if meta else None
-                            _restore_filestore(odoo_container, filestore_tar, restored_db, filestore_base_from_meta)
-                        else:
-                            console.print(
-                                "[yellow]⚠[/yellow]  Skipping filestore restore: "
-                                "Odoo volume was not ready in time.\n"
-                                "[dim]  Try running the restore manually after the environment is up.[/dim]"
-                            )
-
-                # Clear stale generated asset bundles so Odoo rebuilds them
-                # against the recipient's code + restored filestore. Without this,
-                # ir_attachment rows for /web/assets/... point to filestore files
-                # that don't exist here, returning 500 and breaking the login page.
-                if restored_db:
-                    console.print()
-                    console.print("[bold]🎨 Refreshing web assets:[/bold]")
-                    _clear_generated_assets(db_container, restored_db)
-
-        launched = _launch_environment(build=build)
-    else:
-        launched = _launch_environment(build=build)
-
-    # ── 6. Verify the environment actually started ──
-    # docker compose up -d returning 0 does not guarantee Odoo booted: the web
-    # container can crash right after start (missing addons, build issues, etc.).
-    # Give it a moment, then check the web container is really running before
-    # declaring success — otherwise show diagnostics instead of a false "ready".
-    time.sleep(3)
-    odoo_container = _get_odoo_container_name(project_dir)
-    web_running = _is_container_running(odoo_container)
+        return
 
     console.print()
-    if launched and web_running:
+    if report["started"]:
         console.print(
             Panel(
                 f"[bold green]✅ Environment is ready[/bold green]\n\n"
-                f"[bold]🌐 Odoo:[/bold] [cyan underline]http://localhost:{new_odoo_port}[/cyan underline]\n"
-                f"[bold]🐛 Debug:[/bold] port [cyan]{new_vsc_port}[/cyan]\n\n"
+                f"[bold]🌐 Odoo:[/bold] [cyan underline]http://localhost:{report['ports']['odoo_port']}[/cyan underline]\n"
+                f"[bold]🐛 Debug:[/bold] port [cyan]{report['ports']['vsc_port']}[/cyan]\n\n"
                 f"[dim]Useful commands:\n"
                 f"  [cyan]rkd status[/cyan]   → check container status\n"
                 f"  [cyan]rkd logs[/cyan]     → view logs\n"
@@ -723,8 +266,11 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
             )
         )
     else:
+        odoo_container = report["odoo_container"]
         reason = (
-            "docker compose up -d failed" if not launched else f"the web container ({odoo_container or 'web'}) is not running"
+            "docker compose up -d failed"
+            if not report["launched"]
+            else f"the web container ({odoo_container or 'web'}) is not running"
         )
         console.print(
             Panel(
@@ -738,12 +284,9 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
                 box=box.ROUNDED,
             )
         )
-        # Surface recent web container output to speed up debugging.
-        if odoo_container:
-            logs = subprocess.run(["docker", "logs", "--tail", "30", odoo_container], capture_output=True, text=True)
-            output = ((logs.stdout or "") + (logs.stderr or "")).strip()
-            if output:
-                console.print()
-                console.print("[dim]── Last lines of web container output ──[/dim]")
-                console.print(f"[dim]{output[-2000:]}[/dim]")
+        if report["logs_tail"]:
+            output = "\n".join(report["logs_tail"])
+            console.print()
+            console.print("[dim]── Last lines of web container output ──[/dim]")
+            console.print(f"[dim]{output[-2000:]}[/dim]")
     console.print()
