@@ -1,18 +1,23 @@
-"""Unit tests for unpack_environment.py -- the safety net before its
-extraction to core/unpack.py in #143 T13.
+"""Unit tests for core/unpack.py -- extracted from unpack_environment.py in
+#143 T13, mirroring core/pack.py's extraction in T11.
 
-rocketdoo/unpack_environment.py has 749 lines and, until now, zero tests.
-These pin down the five helpers `core/unpack.py` will inherit verbatim:
-_load_shared_meta, _find_backup_files, _check_ports (only its non-interactive
-path -- the interactive one exists precisely so a human is asked instead),
-_update_ports_in_compose, and _get_db_container_name. They run in
-milliseconds; the real round trip against Docker lives in
-tests/test_e2e_pack_unpack.py.
+The five helpers below (_load_shared_meta, _find_backup_files, _check_ports
+in its non-interactive shape, _update_ports_in_compose and
+_get_db_container_name) moved verbatim; only the monkeypatch target follows
+them to their new home, per the plan's instruction not to leave a second
+copy behind in unpack_environment.py just to keep these imports pointed at
+the old module. TestCoreUnpackInspect and TestCoreUnpackOrchestration below
+add the RF9.1 services (`inspect()`/`unpack()`) themselves, including the
+five mutations #143 T13 names explicitly. They all run in milliseconds; the
+real round trip against Docker lives in tests/test_e2e_pack_unpack.py.
 """
 
 import json
 
-from rocketdoo.unpack_environment import (
+import pytest
+
+import rocketdoo.core.unpack as core_unpack
+from rocketdoo.core.unpack import (
     _check_ports,
     _find_backup_files,
     _get_db_container_name,
@@ -115,24 +120,24 @@ class TestCheckPortsAutoAccept:
     """
 
     def test_both_ports_free_are_kept_unchanged(self, monkeypatch):
-        import rocketdoo.unpack_environment as unpack_environment
+        import rocketdoo.core.unpack as core_unpack
 
-        monkeypatch.setattr(unpack_environment, "is_port_in_use", lambda port: False)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
 
         def _must_not_run(*_a, **_k):
             raise AssertionError("find_available_port must not run when nothing is busy")
 
-        monkeypatch.setattr(unpack_environment, "find_available_port", _must_not_run)
+        monkeypatch.setattr(core_unpack, "find_available_port", _must_not_run)
 
         result = _check_ports({"odoo_port": 8069, "vsc_port": 8888}, auto_accept=True)
 
         assert result == (8069, 8888, False)
 
     def test_a_busy_odoo_port_is_replaced_by_the_suggestion(self, monkeypatch):
-        import rocketdoo.unpack_environment as unpack_environment
+        import rocketdoo.core.unpack as core_unpack
 
-        monkeypatch.setattr(unpack_environment, "is_port_in_use", lambda port: port == 8069)
-        monkeypatch.setattr(unpack_environment, "find_available_port", lambda start: 19070)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: port == 8069)
+        monkeypatch.setattr(core_unpack, "find_available_port", lambda start: 19070)
 
         result = _check_ports({"odoo_port": 8069, "vsc_port": 8888}, auto_accept=True)
 
@@ -142,10 +147,10 @@ class TestCheckPortsAutoAccept:
         """Mutation (d): auto_accept=True still returning the requested,
         occupied ports instead of the suggested free ones.
         """
-        import rocketdoo.unpack_environment as unpack_environment
+        import rocketdoo.core.unpack as core_unpack
 
-        monkeypatch.setattr(unpack_environment, "is_port_in_use", lambda port: True)
-        monkeypatch.setattr(unpack_environment, "find_available_port", lambda start: start + 1000)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: True)
+        monkeypatch.setattr(core_unpack, "find_available_port", lambda start: start + 1000)
 
         odoo_port, vsc_port, changed = _check_ports({"odoo_port": 8069, "vsc_port": 8888}, auto_accept=True)
 
@@ -156,10 +161,10 @@ class TestCheckPortsAutoAccept:
     def test_auto_accept_never_prompts(self, monkeypatch):
         import questionary
 
-        import rocketdoo.unpack_environment as unpack_environment
+        import rocketdoo.core.unpack as core_unpack
 
-        monkeypatch.setattr(unpack_environment, "is_port_in_use", lambda port: True)
-        monkeypatch.setattr(unpack_environment, "find_available_port", lambda start: start + 1)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: True)
+        monkeypatch.setattr(core_unpack, "find_available_port", lambda start: start + 1)
 
         def _must_not_prompt(*_a, **_k):
             raise AssertionError("auto_accept=True must never prompt")
@@ -169,9 +174,9 @@ class TestCheckPortsAutoAccept:
         _check_ports({"odoo_port": 8069, "vsc_port": 8888}, auto_accept=True)
 
     def test_missing_keys_fall_back_to_the_rocketdoo_defaults(self, monkeypatch):
-        import rocketdoo.unpack_environment as unpack_environment
+        import rocketdoo.core.unpack as core_unpack
 
-        monkeypatch.setattr(unpack_environment, "is_port_in_use", lambda port: False)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
 
         result = _check_ports({}, auto_accept=True)
 
@@ -309,3 +314,278 @@ class TestGetDbContainerName:
         (project_dir / "docker-compose.yaml").write_text("services:\n  web:\n    container_name: odoo-demo\n")
 
         assert _get_db_container_name(project_dir) is None
+
+
+def _write_project(project_dir):
+    """A minimal project inspect()/unpack() will recognise: project_exists()
+    only checks for a Dockerfile plus a compose file, not their contents.
+    """
+    (project_dir / "docker-compose.yaml").write_text(
+        "services:\n"
+        "  web:\n"
+        "    container_name: odoo-demo\n"
+        "    ports:\n"
+        '      - "8069:8069"\n'
+        '      - "8888:8888"\n'
+        "  db:\n"
+        "    container_name: db-demo\n"
+    )
+    (project_dir / "Dockerfile").write_text("FROM odoo:18.0\n")
+    return project_dir
+
+
+class TestCoreUnpackInspect:
+    """RF9.1/RF9.2: inspect() is read-only and never prompts -- it only
+    hands the CLI enough to build its own questions.
+    """
+
+    def test_inspect_never_writes_anything(self, project_dir):
+        """Mutation (c): inspect() must not touch the filesystem at all."""
+        _write_project(project_dir)
+        compose_before = (project_dir / "docker-compose.yaml").read_text()
+        entries_before = sorted(p.name for p in project_dir.iterdir())
+
+        core_unpack.inspect(project_dir)
+
+        assert sorted(p.name for p in project_dir.iterdir()) == entries_before
+        assert (project_dir / "docker-compose.yaml").read_text() == compose_before
+
+    def test_has_meta_is_false_without_rkd_shared_json(self, project_dir):
+        """Case 7 of spec.md: no manifest reads as has_meta: False, not as
+        an error and not as a silent default.
+        """
+        _write_project(project_dir)
+
+        info = core_unpack.inspect(project_dir)
+
+        assert info["has_meta"] is False
+
+    def test_has_meta_is_false_for_a_manifest_missing_the_rkd_shared_flag(self, project_dir):
+        _write_project(project_dir)
+        (project_dir / "rkd-shared.json").write_text(json.dumps({"odoo_port": 9999}))
+
+        info = core_unpack.inspect(project_dir)
+
+        assert info["has_meta"] is False
+        assert info["suggested_ports"]["odoo_port"] == 8069, "a manifest without rkd_shared must not leak its ports"
+
+    def test_has_meta_is_true_with_a_valid_manifest(self, project_dir):
+        _write_project(project_dir)
+        (project_dir / "rkd-shared.json").write_text(json.dumps({"rkd_shared": True, "odoo_port": 8069}))
+
+        info = core_unpack.inspect(project_dir)
+
+        assert info["has_meta"] is True
+        assert info["meta"]["odoo_port"] == 8069
+
+    def test_reports_port_conflicts_and_suggestions(self, project_dir, monkeypatch):
+        _write_project(project_dir)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: port == 8069)
+        monkeypatch.setattr(core_unpack, "find_available_port", lambda start: 19070)
+
+        info = core_unpack.inspect(project_dir)
+
+        assert info["port_conflicts"] == {"odoo_port": True, "vsc_port": False}
+        assert info["suggested_ports"] == {"odoo_port": 19070, "vsc_port": 8888}
+
+
+class TestCoreUnpackOrchestration:
+    """Exercises unpack()'s own decisions -- which fields to trust, whether
+    to call the restore chain at all -- with every low-level Docker step
+    replaced by a fake. The docker argv itself is already characterised by
+    the leaves above (TestUpdatePortsInCompose, TestGetDbContainerName) and
+    by the real round trip in tests/test_e2e_pack_unpack.py.
+
+    Covers the five mutations #143 T13 names for core/unpack.py:
+    (a) ports received vs. the meta's own ports, (b) a skipped or failed
+    restore still reported as done, (c) inspect() writing something (above),
+    (d) logs_tail empty regardless of outcome, (e) --no-restore ignored.
+    """
+
+    def _stub_clean_launch(self, monkeypatch, *, running=True, backups=(None, None)):
+        monkeypatch.setattr(core_unpack, "_find_backup_files", lambda root: backups)
+        monkeypatch.setattr(core_unpack, "_get_odoo_container_name", lambda root: "odoo-demo")
+        monkeypatch.setattr(core_unpack, "_launch_environment", lambda root, build, report: True)
+        monkeypatch.setattr(core_unpack, "_is_container_running", lambda name: running)
+        monkeypatch.setattr(core_unpack.time, "sleep", lambda *_a: None)
+
+    def test_unpack_uses_the_ports_it_receives_not_the_meta_ports(self, project_dir, monkeypatch):
+        """Mutation (a)."""
+        _write_project(project_dir)
+        (project_dir / "rkd-shared.json").write_text(json.dumps({"rkd_shared": True, "odoo_port": 8069, "vsc_port": 8888}))
+        self._stub_clean_launch(monkeypatch)
+
+        report = core_unpack.unpack(project_dir, ports={"odoo_port": 19070, "vsc_port": 19071}, restore=False)
+
+        assert report["ports"] == {"odoo_port": 19070, "vsc_port": 19071}
+        assert report["ports_changed"] is True
+        content = (project_dir / "docker-compose.yaml").read_text()
+        assert '"19070:8069"' in content
+        assert '"19071:8888"' in content
+
+    def test_ports_left_alone_when_no_conflict_is_reported(self, project_dir, monkeypatch):
+        _write_project(project_dir)
+        self._stub_clean_launch(monkeypatch)
+
+        report = core_unpack.unpack(project_dir, ports={"odoo_port": 8069, "vsc_port": 8888}, restore=False)
+
+        assert report["ports_changed"] is False
+        assert '"8069:8069"' in (project_dir / "docker-compose.yaml").read_text()
+
+    def test_no_restore_flag_skips_the_restore_even_with_a_backup_present(self, project_dir, monkeypatch):
+        """Mutation (e): --no-restore (restore=False) must not reach the
+        database at all, backup or no backup.
+        """
+        _write_project(project_dir)
+        dump_dir = project_dir / "rkd_backups"
+        dump_dir.mkdir()
+        dump_path = dump_dir / "db_demo_20240101_010101.dump"
+        dump_path.write_bytes(b"x")
+
+        def _must_not_run(*_a, **_k):
+            raise AssertionError("restore=False must never start the db-only step")
+
+        monkeypatch.setattr(core_unpack, "_launch_db_only", _must_not_run)
+        self._stub_clean_launch(monkeypatch, backups=(dump_path, None))
+
+        report = core_unpack.unpack(project_dir, restore=False)
+
+        assert report["db_restored"] is False
+
+    def test_a_failed_restore_is_reported_as_not_restored(self, project_dir, monkeypatch):
+        """Mutation (b): _restore_database returning None (pg_restore
+        failed outright) must not be read downstream as a success.
+        """
+        _write_project(project_dir)
+        dump_dir = project_dir / "rkd_backups"
+        dump_dir.mkdir()
+        dump_path = dump_dir / "db_demo_20240101_010101.dump"
+        dump_path.write_bytes(b"x")
+
+        monkeypatch.setattr(core_unpack, "_get_db_container_name", lambda root: "db-demo")
+        monkeypatch.setattr(core_unpack, "_launch_db_only", lambda root, report: True)
+        monkeypatch.setattr(core_unpack, "_wait_for_postgres", lambda container, report, max_wait=60: True)
+        monkeypatch.setattr(core_unpack, "_restore_database", lambda container, dump, report: None)
+        self._stub_clean_launch(monkeypatch, backups=(dump_path, None))
+
+        report = core_unpack.unpack(project_dir, restore=True)
+
+        assert report["db_restored"] is False
+
+    def test_a_successful_restore_is_reported_as_restored(self, project_dir, monkeypatch):
+        """The positive case for mutation (b): a real restored_db must still
+        be reflected as True, so a mutation that hardcodes False is caught too.
+        """
+        _write_project(project_dir)
+        dump_dir = project_dir / "rkd_backups"
+        dump_dir.mkdir()
+        dump_path = dump_dir / "db_demo_20240101_010101.dump"
+        dump_path.write_bytes(b"x")
+
+        monkeypatch.setattr(core_unpack, "_get_db_container_name", lambda root: "db-demo")
+        monkeypatch.setattr(core_unpack, "_launch_db_only", lambda root, report: True)
+        monkeypatch.setattr(core_unpack, "_wait_for_postgres", lambda container, report, max_wait=60: True)
+        monkeypatch.setattr(core_unpack, "_restore_database", lambda container, dump, report: "demo")
+        monkeypatch.setattr(core_unpack, "_clear_generated_assets", lambda *a, **k: None)
+        self._stub_clean_launch(monkeypatch, backups=(dump_path, None))
+
+        report = core_unpack.unpack(project_dir, restore=True)
+
+        assert report["db_restored"] is True
+
+    def test_a_database_that_will_not_start_warns_and_carries_on(self, project_dir, monkeypatch):
+        """T13 changed this on purpose and it had no test.
+
+        The command used to `return` here, aborting the whole unpack without
+        a word: no restore, no environment, no panel, exit 0. A service must
+        not abort in silence, so the failure now travels in `warnings` and
+        the environment still comes up for the user to fix by hand. The
+        restore must NOT be attempted against a database that never started.
+        """
+        _write_project(project_dir)
+        dump_dir = project_dir / "rkd_backups"
+        dump_dir.mkdir()
+        dump_path = dump_dir / "db_demo_20240101_010101.dump"
+        dump_path.write_bytes(b"x")
+
+        def _must_not_run(*_a, **_k):
+            raise AssertionError("no restore may be attempted when the database never started")
+
+        monkeypatch.setattr(core_unpack, "_get_db_container_name", lambda root: "db-demo")
+        monkeypatch.setattr(core_unpack, "_launch_db_only", lambda root, report: False)
+        monkeypatch.setattr(core_unpack, "_wait_for_postgres", _must_not_run)
+        monkeypatch.setattr(core_unpack, "_restore_database", _must_not_run)
+        self._stub_clean_launch(monkeypatch, backups=(dump_path, None))
+
+        report = core_unpack.unpack(project_dir, restore=True)
+
+        assert report["db_restored"] is False
+        assert any("database service" in w for w in report["warnings"])
+        assert report["started"] is True
+
+    def test_logs_tail_is_populated_when_the_environment_fails_to_start(self, project_dir, monkeypatch):
+        """Mutation (d), the failure side: a real failure must produce
+        real log lines, not an empty list.
+        """
+        _write_project(project_dir)
+        self._stub_clean_launch(monkeypatch, running=False)
+        monkeypatch.setattr(core_unpack, "_capture_logs_tail", lambda name, lines=30: ["boom: exit 1"])
+
+        report = core_unpack.unpack(project_dir, restore=False)
+
+        assert report["started"] is False
+        assert report["logs_tail"] == ["boom: exit 1"]
+
+    def test_logs_tail_stays_empty_on_a_clean_start(self, project_dir, monkeypatch):
+        """Mutation (d), the success side: logs must not be captured (and
+        therefore cannot be non-empty) when nothing failed.
+        """
+        _write_project(project_dir)
+        self._stub_clean_launch(monkeypatch, running=True)
+
+        def _must_not_run(*_a, **_k):
+            raise AssertionError("logs must not be captured on a clean start")
+
+        monkeypatch.setattr(core_unpack, "_capture_logs_tail", _must_not_run)
+
+        report = core_unpack.unpack(project_dir, restore=False)
+
+        assert report["started"] is True
+        assert report["logs_tail"] == []
+
+    def test_missing_project_raises_instead_of_silently_doing_nothing(self, project_dir):
+        with pytest.raises(core_unpack.UnpackError):
+            core_unpack.unpack(project_dir)
+
+    def test_ssh_key_none_never_touches_the_dockerfile(self, project_dir, monkeypatch):
+        _write_project(project_dir)
+        self._stub_clean_launch(monkeypatch)
+        original = (project_dir / "Dockerfile").read_text()
+
+        report = core_unpack.unpack(project_dir, restore=False, ssh_key=None)
+
+        assert report["ssh_configured"] is False
+        assert (project_dir / "Dockerfile").read_text() == original
+
+    def test_none_and_a_callback_produce_the_same_report(self, project_dir, monkeypatch):
+        """CA3-equivalent for unpack(): on_progress=None must not change
+        what gets decided, only whether anything is reported along the way.
+        A port change forces at least one report() call inside unpack()
+        itself, not just inside the stubbed-out leaves.
+        """
+        _write_project(project_dir)
+        self._stub_clean_launch(monkeypatch)
+        ports = {"odoo_port": 19070, "vsc_port": 19071}
+
+        report_silent = core_unpack.unpack(project_dir, ports=ports, restore=False, on_progress=None)
+
+        events = []
+        report_cb = core_unpack.unpack(
+            project_dir,
+            ports=ports,
+            restore=False,
+            on_progress=lambda message, level="info": events.append((message, level)),
+        )
+
+        assert report_silent == report_cb
+        assert events, "the callback must have been invoked"

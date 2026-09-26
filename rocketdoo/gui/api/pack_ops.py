@@ -2,9 +2,6 @@
 GUI API — Pack / Unpack environment.
 """
 
-import json
-import subprocess
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -12,25 +9,9 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from rocketdoo.core import pack as core_pack
-from rocketdoo.core.ssh_manager import list_private_keys
+from rocketdoo.core import unpack as core_unpack
 
 router = APIRouter()
-
-
-def _run_rkd(*args: str, timeout: int = 600) -> dict:
-    """Run an rkd CLI subcommand via subprocess and capture output."""
-    cmd = [sys.executable, "-m", "rocketdoo.cli"] + list(args)
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=str(Path.cwd()))
-        return {
-            "ok": r.returncode == 0,
-            "stdout": r.stdout.strip(),
-            "stderr": r.stderr.strip(),
-        }
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "stdout": "", "stderr": "Timed out after waiting too long."}
-    except Exception as e:
-        return {"ok": False, "stdout": "", "stderr": str(e)}
 
 
 @router.get("/status")
@@ -46,20 +27,21 @@ async def pack_status():
 
 
 @router.get("/unpack-info")
-async def unpack_info():
-    """Return metadata from rkd-shared.json and available SSH keys for the unpack wizard."""
+def unpack_info():
+    """Return metadata from rkd-shared.json and available SSH keys for the
+    unpack wizard, via core.unpack.inspect() (#143 T13) instead of reading
+    rkd-shared.json a second time with its own parsing.
+    """
     cwd = Path.cwd()
-    shared_json = cwd / "rkd-shared.json"
-    meta = {}
-    if shared_json.exists():
-        try:
-            meta = json.loads(shared_json.read_text())
-        except Exception:
-            pass
+    info = core_unpack.inspect(cwd)
     return {
-        "meta": meta,
-        "ssh_keys": list_private_keys(),
-        "shared_json_found": shared_json.exists(),
+        "meta": info["meta"],
+        "ssh_keys": info["ssh_keys"],
+        # Plain existence, like /status reports it: the SPA gates the unpack
+        # button on that endpoint's flag, and two answers to the same
+        # question under the same key is a trap. `meta` already comes back
+        # empty when the file is there but unusable.
+        "shared_json_found": (cwd / "rkd-shared.json").exists(),
     }
 
 
@@ -84,7 +66,7 @@ def pack(body: PackRequest):
     Calls core.pack.pack() directly instead of shelling out to `rkd pack`
     (#143 T11): a plain `def` here runs in FastAPI's threadpool, so a slow
     pg_dump no longer blocks the whole GUI event loop the way the previous
-    `async def` + subprocess.run did.
+    `async def` shelling out to a child process did.
     """
     messages: list[str] = []
 
@@ -107,11 +89,30 @@ def pack(body: PackRequest):
 
 
 @router.post("/unpack")
-async def unpack(body: UnpackRequest = UnpackRequest()):
-    """Unpack a previously packed environment in the current directory."""
-    args = ["unpack", "--yes"]
-    if body.ssh_key:
-        args += ["--ssh-key", body.ssh_key]
-    elif not body.use_ssh:
-        args.append("--no-ssh")
-    return _run_rkd(*args)
+def unpack(body: UnpackRequest = UnpackRequest()):
+    """Unpack a previously packed environment in the current directory.
+
+    Calls core.unpack.unpack() directly instead of shelling out to `rkd
+    unpack` (#143 T13), for the same reason `pack` above does: a `def` here
+    runs in FastAPI's threadpool, so a restore that takes minutes never
+    blocks the event loop. Port conflicts are auto-accepted -- the same
+    behaviour `--yes` gives the CLI -- since there is no terminal here to ask.
+    """
+    info = core_unpack.inspect(Path.cwd())
+    messages: list[str] = []
+
+    def _collect(message: str, level: str = "info") -> None:
+        messages.append(message)
+
+    try:
+        report = core_unpack.unpack(
+            Path.cwd(),
+            ports=info["suggested_ports"],
+            ssh_key=body.ssh_key if body.use_ssh else None,
+            on_progress=_collect,
+        )
+    except core_unpack.UnpackError as exc:
+        return {"ok": False, "stdout": "\n".join(messages), "stderr": str(exc)}
+
+    stderr = "" if report["started"] else "\n".join(report["logs_tail"])
+    return {"ok": report["started"], "stdout": "\n".join(messages), "stderr": stderr}
