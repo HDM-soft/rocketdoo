@@ -35,12 +35,14 @@ PURE_CORE = [
     "core/project_info.py",
     "core/mailpit.py",
     "core/traefik.py",
+    "core/pack.py",
 ]
 
 NO_CWD: list[str] = [
     "core/project_info.py",
     "core/mailpit.py",
     "core/traefik.py",
+    "core/pack.py",
 ]
 
 _FORBIDDEN_IMPORTS = {"click", "questionary", "rich", "typer"}

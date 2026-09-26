@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from rocketdoo.core import pack as core_pack
 from rocketdoo.core.ssh_manager import list_private_keys
 
 router = APIRouter()
@@ -66,6 +67,9 @@ class PackRequest(BaseModel):
     include_db: bool = True
     output_path: Optional[str] = None
     db_name: Optional[str] = None
+    # Same default as the CLI: a ZIP silently missing the backup the user
+    # asked for is worse than an error saying the container is down.
+    allow_missing_db: bool = False
 
 
 class UnpackRequest(BaseModel):
@@ -74,16 +78,32 @@ class UnpackRequest(BaseModel):
 
 
 @router.post("/pack")
-async def pack(body: PackRequest):
-    """Pack the current environment into a ZIP file."""
-    args = ["pack"]
-    if not body.include_db:
-        args.append("--no-db")
-    if body.output_path:
-        args += ["--output", body.output_path]
-    if body.db_name:
-        args += ["--db-name", body.db_name]
-    return _run_rkd(*args)
+def pack(body: PackRequest):
+    """Pack the current environment into a ZIP file.
+
+    Calls core.pack.pack() directly instead of shelling out to `rkd pack`
+    (#143 T11): a plain `def` here runs in FastAPI's threadpool, so a slow
+    pg_dump no longer blocks the whole GUI event loop the way the previous
+    `async def` + subprocess.run did.
+    """
+    messages: list[str] = []
+
+    def _collect(message: str, level: str = "info") -> None:
+        messages.append(message)
+
+    try:
+        core_pack.pack(
+            Path.cwd(),
+            include_db=body.include_db,
+            db_name=body.db_name,
+            output=body.output_path,
+            allow_missing_db=body.allow_missing_db,
+            on_progress=_collect,
+        )
+    except core_pack.PackError as exc:
+        return {"ok": False, "stdout": "\n".join(messages), "stderr": str(exc)}
+
+    return {"ok": True, "stdout": "\n".join(messages), "stderr": ""}
 
 
 @router.post("/unpack")
