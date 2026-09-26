@@ -9,11 +9,12 @@ from typing import Dict, Optional
 import yaml
 
 
-def read_docker_compose() -> Optional[Dict]:
+def read_docker_compose(project_root: Path | str | None = None) -> Optional[Dict]:
     """Lee el archivo docker-compose.yaml"""
-    compose_path = Path.cwd() / "docker-compose.yaml"
+    root = Path(project_root) if project_root else Path.cwd()
+    compose_path = root / "docker-compose.yaml"
     if not compose_path.exists():
-        compose_path = Path.cwd() / "docker-compose.yml"
+        compose_path = root / "docker-compose.yml"
 
     if compose_path.exists():
         try:
@@ -24,9 +25,10 @@ def read_docker_compose() -> Optional[Dict]:
     return None
 
 
-def read_gitman() -> Optional[Dict]:
+def read_gitman(project_root: Path | str | None = None) -> Optional[Dict]:
     """Lee el archivo gitman.yaml"""
-    gitman_path = Path.cwd() / "gitman.yaml"
+    root = Path(project_root) if project_root else Path.cwd()
+    gitman_path = root / "gitman.yaml"
     if gitman_path.exists():
         try:
             with open(gitman_path, "r") as f:
@@ -36,9 +38,10 @@ def read_gitman() -> Optional[Dict]:
     return None
 
 
-def read_odoo_conf() -> Optional[Dict]:
+def read_odoo_conf(project_root: Path | str | None = None) -> Optional[Dict]:
     """Lee el archivo config/odoo.conf"""
-    conf_path = Path.cwd() / "config" / "odoo.conf"
+    root = Path(project_root) if project_root else Path.cwd()
+    conf_path = root / "config" / "odoo.conf"
     if conf_path.exists():
         try:
             config = {}
@@ -54,9 +57,10 @@ def read_odoo_conf() -> Optional[Dict]:
     return None
 
 
-def read_dockerfile() -> Optional[str]:
+def read_dockerfile(project_root: Path | str | None = None) -> Optional[str]:
     """Reads the Dockerfile"""
-    dockerfile_path = Path.cwd() / "Dockerfile"
+    root = Path(project_root) if project_root else Path.cwd()
+    dockerfile_path = root / "Dockerfile"
     if dockerfile_path.exists():
         try:
             with open(dockerfile_path, "r") as f:
@@ -66,9 +70,9 @@ def read_dockerfile() -> Optional[str]:
     return None
 
 
-def extract_odoo_version_from_dockerfile() -> Optional[str]:
+def extract_odoo_version_from_dockerfile(project_root: Path | str | None = None) -> Optional[str]:
     """Extracts Odoo version from Dockerfile FROM instruction"""
-    dockerfile = read_dockerfile()
+    dockerfile = read_dockerfile(project_root)
     if dockerfile:
         for line in dockerfile.split("\n"):
             line = line.strip()
@@ -83,19 +87,19 @@ def extract_odoo_version_from_dockerfile() -> Optional[str]:
                         # Remove any non-version characters (like -alpine, -slim, etc)
                         version = version_part.split("-")[0].strip()
                         return version
-                except Exception as e:
-                    print(f"Debug: Error parsing Dockerfile line: {line}, error: {e}")
+                except Exception:
+                    pass
     return None
 
 
-def detect_ssh_key_usage() -> Optional[str]:
+def detect_ssh_key_usage(project_root: Path | str | None = None) -> Optional[str]:
     """Detects if an SSH key is being used in Dockerfile.
 
     Sólo cuentan las instrucciones activas: la plantilla deja el bloque SSH
     comentado, y un '#COPY ./.ssh/rsa /root/.ssh/id_rsa' se reportaba como clave
     en uso porque la comparación era por substring sobre la línea completa.
     """
-    dockerfile = read_dockerfile()
+    dockerfile = read_dockerfile(project_root)
     if not dockerfile:
         return None
 
@@ -116,9 +120,9 @@ def detect_ssh_key_usage() -> Optional[str]:
     return None
 
 
-def detect_enterprise_edition() -> bool:
+def detect_enterprise_edition(project_root: Path | str | None = None) -> bool:
     """Detects if Enterprise edition is enabled by checking docker-compose volumes"""
-    compose_data = read_docker_compose()
+    compose_data = read_docker_compose(project_root)
     if compose_data and "services" in compose_data:
         web_service = compose_data["services"].get("web")
         if web_service:
@@ -130,7 +134,7 @@ def detect_enterprise_edition() -> bool:
                     return True
 
     # Also check in Dockerfile for enterprise references
-    dockerfile = read_dockerfile()
+    dockerfile = read_dockerfile(project_root)
     if dockerfile:
         for line in dockerfile.split("\n"):
             line_stripped = line.strip()
@@ -143,7 +147,7 @@ def detect_enterprise_edition() -> bool:
     return False
 
 
-def get_project_info() -> Dict:
+def get_project_info(project_root: Path | str | None = None) -> Dict:
     """Collects all project information"""
     info = {
         "project_name": None,
@@ -164,16 +168,16 @@ def get_project_info() -> Dict:
     }
 
     # 1. READ ODOO VERSION FROM DOCKERFILE (priority)
-    dockerfile_version = extract_odoo_version_from_dockerfile()
+    dockerfile_version = extract_odoo_version_from_dockerfile(project_root)
     if dockerfile_version:
         info["odoo_version"] = dockerfile_version
 
     # 2. DETECT ENTERPRISE EDITION
-    if detect_enterprise_edition():
+    if detect_enterprise_edition(project_root):
         info["odoo_edition"] = "Enterprise"
 
     # 3. READ docker-compose.yaml
-    compose_data = read_docker_compose()
+    compose_data = read_docker_compose(project_root)
     if compose_data:
         # Project name - from "name" key in docker-compose
         if "name" in compose_data:
@@ -245,18 +249,18 @@ def get_project_info() -> Dict:
                             break
 
     # 4. READ odoo.conf to get admin_passwd
-    odoo_conf = read_odoo_conf()
+    odoo_conf = read_odoo_conf(project_root)
     if odoo_conf:
         info["admin_passwd"] = odoo_conf.get("admin_passwd", None)
 
     # 5. DETECT SSH USAGE
-    ssh_key = detect_ssh_key_usage()
+    ssh_key = detect_ssh_key_usage(project_root)
     if ssh_key:
         info["use_private_repos"] = True
         info["ssh_key"] = ssh_key
 
     # 6. READ gitman.yaml
-    gitman_data = read_gitman()
+    gitman_data = read_gitman(project_root)
     if gitman_data and "sources" in gitman_data:
         sources = gitman_data["sources"]
         if sources and len(sources) > 0:
@@ -268,12 +272,13 @@ def get_project_info() -> Dict:
     return info
 
 
-def project_exists() -> bool:
+def project_exists(project_root: Path | str | None = None) -> bool:
     """Checks if a Rocketdoo project exists in the current directory"""
+    root = Path(project_root) if project_root else Path.cwd()
     required_files = ["docker-compose.yaml", "Dockerfile"]
     for file in required_files:
-        if not (Path.cwd() / file).exists() and not (Path.cwd() / file.replace(".yaml", ".yml")).exists():
+        if not (root / file).exists() and not (root / file.replace(".yaml", ".yml")).exists():
             if file == "docker-compose.yaml":
                 continue
             return False
-    return (Path.cwd() / "docker-compose.yaml").exists() or (Path.cwd() / "docker-compose.yml").exists()
+    return (root / "docker-compose.yaml").exists() or (root / "docker-compose.yml").exists()

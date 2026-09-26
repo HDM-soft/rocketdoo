@@ -10,7 +10,7 @@ router = APIRouter()
 async def get_project():
     """Returns project info and running container statuses."""
     try:
-        from rocketdoo.project_info import get_project_info, project_exists
+        from rocketdoo.core.project_info import get_project_info, project_exists
 
         exists = project_exists()
         if not exists:

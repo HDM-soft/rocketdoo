@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "3.5.0"
+   - "3.6.0"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -410,7 +410,16 @@ rkd traefik status # Show current Traefik configuration
 rkd traefik guide  # Show /etc/hosts setup instructions for your OS
 ```
 
+Every answer the wizard asks for can be given up front, so the command runs unattended:
+
+```bash
+rkd traefik on --mode local --domain myodoo.local
+rkd traefik on --mode production --domain odoo.example.com --email ops@example.com
+```
+
 Traefik is configured via a generated `docker-compose.override.yml` (Docker Compose merges it automatically). Disabling Traefik simply deletes the override file — your original `docker-compose.yaml` is never modified.
+
+Enabling Traefik starts the proxy and restarts your project so the new override takes effect — from the CLI and, since 3.6.0, from the web GUI too. To reconfigure an already-enabled project, run `rkd traefik off` first.
 
 ---
 

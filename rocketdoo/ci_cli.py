@@ -19,8 +19,8 @@ from rocketdoo.core.edition_setup import add_enterprise_to_odoo_conf
 from rocketdoo.core.gitman_config import update_odoo_conf_with_gitman
 from rocketdoo.core.models.profiles import RELEASES
 from rocketdoo.core.module_scanner import ModuleScanner
+from rocketdoo.core.project_info import get_project_info, project_exists
 from rocketdoo.init_project import CONFIG_TEMPLATE_DIR, render_template
-from rocketdoo.project_info import get_project_info, project_exists
 
 console = Console()
 
