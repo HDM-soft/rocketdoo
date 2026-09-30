@@ -8,6 +8,9 @@ The per-image facts asserted here were read from the published `odoo:` images;
 the PostgreSQL minimums come from Odoo's installation documentation.
 """
 
+import re
+from pathlib import Path
+
 import pytest
 import yaml
 from pydantic import ValidationError
@@ -268,3 +271,33 @@ class TestProfilesArePackaged:
     def test_the_readme_documents_the_policy(self):
         readme = (PROFILE_DIR / "README.md").read_text()
         assert "golden" in readme and "best effort" in readme
+
+
+class TestTheCiMatrixMatchesTheCatalogue:
+    """`GOLDEN_COMBINATIONS` says which combinations CI builds; the workflow
+    carries its own list of the same thing.
+
+    Two sources of truth for one fact, and the drift is silent in the worst
+    direction: a profile marked `golden: true` that CI never builds still
+    passes every test and still tells the user it is covered. Adding Odoo 20
+    hit exactly that -- the model said golden, the workflow did not know.
+    """
+
+    WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
+
+    def _matrix_profiles(self) -> set[str]:
+        block = re.search(r"^\s*profile:\s*\[([^\]]+)\]", self.WORKFLOW.read_text(), re.M)
+        assert block, "the golden-paths job no longer declares a `profile:` matrix"
+        return {name.strip() for name in block.group(1).split(",")}
+
+    def _catalogue_profiles(self) -> set[str]:
+        return {
+            f"odoo{version.split('.')[0]}-{'ee' if edition == 'Enterprise' else 'ce'}"
+            for version, edition in GOLDEN_COMBINATIONS
+        }
+
+    def test_every_golden_combination_is_built_by_ci(self):
+        assert self._catalogue_profiles() - self._matrix_profiles() == set()
+
+    def test_ci_does_not_build_a_profile_the_catalogue_dropped(self):
+        assert self._matrix_profiles() - self._catalogue_profiles() == set()

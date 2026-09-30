@@ -111,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [odoo15-ce, odoo18-ce, odoo19-ee]
+        profile: [odoo15-ce, odoo18-ce, odoo19-ee, odoo20-ce]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
