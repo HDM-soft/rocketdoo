@@ -24,10 +24,18 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 Edition = Literal["Community", "Enterprise"]
 
 # PostgreSQL majors Rocketdoo will generate a compose file for.
-KNOWN_POSTGRES = ("12", "13", "14", "15", "16", "17")
+KNOWN_POSTGRES = ("12", "13", "14", "15", "16", "17", "18")
 
 # pgvector, which Odoo 19's AI features need, ships for PostgreSQL 15 and up.
 PGVECTOR_MINIMUM = 15
+
+# Odoo release that introduced the AI features backed by pgvector.
+PGVECTOR_FROM_ODOO = 19
+
+
+def _major(odoo_version: str) -> int:
+    """The major of an Odoo version string ("19.0" -> 19)."""
+    return int(str(odoo_version).split(".")[0])
 
 
 class OdooRelease(BaseModel):
@@ -68,8 +76,9 @@ class OdooRelease(BaseModel):
 
 
 # Base distro, Python and pip read from the published images.
-# PostgreSQL minimums from Odoo's install documentation: 15-18 require 12.0 or
-# above; 19 raised it to 13.0.
+# PostgreSQL minimums read from each image's own `odoo/release.py`
+# (MIN_PG_VERSION), not from the docs: 15-18 require 12, 19 raised it to 13,
+# and 20 jumped to 16 -- the largest step in the series.
 RELEASES: dict[str, OdooRelease] = {
     "15.0": OdooRelease(
         odoo_version="15.0",
@@ -111,6 +120,14 @@ RELEASES: dict[str, OdooRelease] = {
         postgres_minimum=13,
         postgres_recommended="16",
     ),
+    "20.0": OdooRelease(
+        odoo_version="20.0",
+        base_distro="ubuntu-noble",
+        python_version="3.12",
+        pip_version="24.0",
+        postgres_minimum=16,
+        postgres_recommended="17",
+    ),
 }
 
 SUPPORTED_ODOO_VERSIONS = tuple(RELEASES)
@@ -120,6 +137,7 @@ GOLDEN_COMBINATIONS = (
     ("15.0", "Community"),
     ("18.0", "Community"),
     ("19.0", "Enterprise"),
+    ("20.0", "Community"),
 )
 
 
@@ -170,9 +188,15 @@ class GoldenPath(BaseModel):
             messages.append(
                 "Enterprise requires an ./enterprise directory with the Odoo Enterprise addons (subscription required)."
             )
-        if self.odoo_version == "19.0" and int(self.db_version) < PGVECTOR_MINIMUM:
+        # A comparison, not an equality against "19.0": the AI features arrived
+        # in 19 and stay in every release after it, so pinning the check to one
+        # version number means it silently stops applying the moment a newer
+        # one joins the matrix. No test exercises it beyond 19 today, and
+        # cannot: Odoo 20 already requires PostgreSQL 16, above pgvector's 15,
+        # so the model refuses such a profile before notes() ever runs.
+        if _major(self.odoo_version) >= PGVECTOR_FROM_ODOO and int(self.db_version) < PGVECTOR_MINIMUM:
             messages.append(
-                f"Odoo 19's AI features need the pgvector extension, which ships for "
+                f"Odoo {_major(self.odoo_version)}'s AI features need the pgvector extension, which ships for "
                 f"PostgreSQL {PGVECTOR_MINIMUM} and above; this profile uses {self.db_version}."
             )
         if not self.is_golden:
