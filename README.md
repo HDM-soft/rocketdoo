@@ -271,7 +271,7 @@ The questions include:
 
 - Project name
 
-- Odoo version (a list from version 15 to 19 is available for selection)
+- Odoo version (a list from version 15 to 20 is available for selection)
 
 - Odoo edition (options include Community and Enterprise)
 
