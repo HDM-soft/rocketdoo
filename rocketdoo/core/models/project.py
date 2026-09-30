@@ -81,6 +81,14 @@ PROFILES: dict[str, Profile] = {
         supports_break_system_packages=True,
         has_pipx=True,
     ),
+    "20.0": Profile(
+        odoo_version="20.0",
+        base_distro="ubuntu-noble",
+        pip_version="24.0",
+        default_db_version="17",
+        supports_break_system_packages=True,
+        has_pipx=True,
+    ),
 }
 
 

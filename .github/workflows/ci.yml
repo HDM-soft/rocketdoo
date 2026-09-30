@@ -111,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [odoo15-ce, odoo18-ce, odoo19-ee]
+        profile: [odoo15-ce, odoo18-ce, odoo19-ee, odoo20-ce]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -161,7 +161,7 @@ jobs:
         # odoo:15/16 are Debian bullseye (pip 20), 17 is Ubuntu jammy (pip 22),
         # 18/19 are noble (pip 24). Issue #152 only broke on the older three,
         # which is exactly what a single-version build would have missed.
-        odoo-version: ["15.0", "16.0", "17.0", "18.0", "19.0"]
+        odoo-version: ["15.0", "16.0", "17.0", "18.0", "19.0", "20.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
