@@ -1,0 +1,29 @@
+# Golden path: Odoo 20 Enterprise on PostgreSQL 17
+#
+# Generated environments start from one of these. `rkd init --profile odoo20-ee`
+# creates it without prompting; the interactive wizard uses the same values as
+# defaults.
+#
+# Facts about the odoo:20.0 image itself -- base distro, Python, pip, the
+# PostgreSQL minimum -- are not repeated here: they live in
+# rocketdoo/core/models/profiles.py because they describe the published image,
+# not a choice this file gets to make.
+#
+# PostgreSQL 17, not 16: Odoo 20 raised its own minimum to 16 (MIN_PG_VERSION
+# in its release.py), so 16 would leave a new project sitting exactly on the
+# floor with no room to fall back.
+
+name: odoo20-ee
+description: Odoo 20 Enterprise on PostgreSQL 17
+
+odoo_version: "20.0"
+edition: Enterprise
+db_version: "17"
+
+odoo_port: 8069
+vsc_port: 8888
+restart: unless-stopped
+
+# golden: CI renders and builds this combination on every release PR.
+# Anything else is supported best effort.
+golden: false

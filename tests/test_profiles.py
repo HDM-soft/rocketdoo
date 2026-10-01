@@ -8,6 +8,9 @@ The per-image facts asserted here were read from the published `odoo:` images;
 the PostgreSQL minimums come from Odoo's installation documentation.
 """
 
+import re
+from pathlib import Path
+
 import pytest
 import yaml
 from pydantic import ValidationError
@@ -37,6 +40,7 @@ class TestReleaseFacts:
             ("17.0", "ubuntu-jammy", "3.10", "22.0.2"),
             ("18.0", "ubuntu-noble", "3.12", "24.0"),
             ("19.0", "ubuntu-noble", "3.12", "24.0"),
+            ("20.0", "ubuntu-noble", "3.12", "24.0"),
         ],
     )
     def test_image_facts(self, version, distro, python, pip):
@@ -75,6 +79,23 @@ class TestPostgresCompatibility:
     def test_odoo_19_requires_postgres_13(self):
         """Odoo 19 raised the minimum from 12 to 13."""
         assert get_release("19.0").postgres_minimum == 13
+
+    def test_odoo_20_requires_postgres_16(self):
+        """The biggest jump in the series: 12 through Odoo 18, 13 in 19, 16 in
+        20. Read from the image's own release.py (MIN_PG_VERSION), so a
+        project on 14 or 15 cannot be silently pointed at Odoo 20.
+        """
+        assert get_release("20.0").postgres_minimum == 16
+
+    @pytest.mark.parametrize("db", ["12", "13", "14", "15"])
+    def test_odoo_20_rejects_everything_below_16(self, db):
+        message = check_compatibility("20.0", db)
+        assert message is not None
+        assert "16 or above" in message
+
+    @pytest.mark.parametrize("db", ["16", "17", "18"])
+    def test_odoo_20_accepts_16_and_above(self, db):
+        assert check_compatibility("20.0", db) is None
 
     def test_the_old_hardcoded_pairing_is_now_rejected(self):
         """Odoo 19 + PostgreSQL 12 was reachable in the wizard before #139."""
@@ -172,6 +193,14 @@ class TestProfileNotes:
     def test_golden_does_not_say_best_effort(self):
         assert not any("best-effort" in n for n in get_golden_path("odoo18-ce").notes())
 
+    def test_odoo_20_below_its_minimum_is_refused_outright(self):
+        """Not a note: a refusal. Odoo 20 needs PostgreSQL 16, which is above
+        the 15 that pgvector needs, so for this version the warning path is
+        unreachable -- the profile never gets built in the first place.
+        """
+        with pytest.raises(ValidationError):
+            GoldenPath(name="x", description="x", odoo_version="20.0", db_version="14")
+
     def test_odoo_19_on_old_postgres_warns_about_pgvector(self):
         """Odoo 19's AI features need pgvector, which ships for PostgreSQL 15+."""
         profile = GoldenPath(name="x", description="x", odoo_version="19.0", db_version="13")
@@ -230,9 +259,45 @@ class TestProfilesArePackaged:
         assert str(PROFILE_DIR).startswith(package_root)
         assert module.PROFILE_DIR.is_dir()
 
-    def test_ten_profiles_are_shipped(self):
-        assert len(list(PROFILE_DIR.glob("*.yaml"))) == 10
+    def test_every_supported_version_ships_both_editions(self):
+        """The count used to be hardcoded, so adding an Odoo version failed
+        here with a number instead of a reason. Two files per version -- CE
+        and EE -- is the rule the catalogue actually follows.
+        """
+        shipped = {p.stem for p in PROFILE_DIR.glob("*.yaml")}
+        expected = {f"odoo{v.split('.')[0]}-{e}" for v in SUPPORTED_ODOO_VERSIONS for e in ("ce", "ee")}
+        assert shipped == expected
 
     def test_the_readme_documents_the_policy(self):
         readme = (PROFILE_DIR / "README.md").read_text()
         assert "golden" in readme and "best effort" in readme
+
+
+class TestTheCiMatrixMatchesTheCatalogue:
+    """`GOLDEN_COMBINATIONS` says which combinations CI builds; the workflow
+    carries its own list of the same thing.
+
+    Two sources of truth for one fact, and the drift is silent in the worst
+    direction: a profile marked `golden: true` that CI never builds still
+    passes every test and still tells the user it is covered. Adding Odoo 20
+    hit exactly that -- the model said golden, the workflow did not know.
+    """
+
+    WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "ci.yml"
+
+    def _matrix_profiles(self) -> set[str]:
+        block = re.search(r"^\s*profile:\s*\[([^\]]+)\]", self.WORKFLOW.read_text(), re.M)
+        assert block, "the golden-paths job no longer declares a `profile:` matrix"
+        return {name.strip() for name in block.group(1).split(",")}
+
+    def _catalogue_profiles(self) -> set[str]:
+        return {
+            f"odoo{version.split('.')[0]}-{'ee' if edition == 'Enterprise' else 'ce'}"
+            for version, edition in GOLDEN_COMBINATIONS
+        }
+
+    def test_every_golden_combination_is_built_by_ci(self):
+        assert self._catalogue_profiles() - self._matrix_profiles() == set()
+
+    def test_ci_does_not_build_a_profile_the_catalogue_dropped(self):
+        assert self._matrix_profiles() - self._catalogue_profiles() == set()
