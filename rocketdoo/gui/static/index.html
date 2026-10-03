@@ -198,8 +198,53 @@ const { createApp, ref, computed, onMounted, onActivated, onUnmounted, watch, ne
 /* ── Session token ───────────────────────────────────────────────────────── */
 // `rkd gui` prints the URL with `?token=...`; kept in the URL (not stripped
 // after reading it) so a page refresh or a duplicated tab keeps working.
-const TOKEN = new URLSearchParams(location.search).get('token') || ''
+//
+// Mirrored into sessionStorage because the URL is not the only way in: the
+// VSCode port notification and its Ports panel both open the bare
+// `http://localhost:8070/`, with no query at all. Remembering the last good
+// token lets that arrival recover by itself instead of dead-ending. Per tab
+// and cleared when the tab closes, which matches how long a token is good
+// for -- every `rkd gui` restart invalidates the previous one.
+const TOKEN_KEY = 'rkd_token'
+
+function rememberedToken() {
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || ''
+  } catch (e) {
+    return ''
+  }
+}
+
+function rememberToken(value) {
+  try {
+    sessionStorage.setItem(TOKEN_KEY, value)
+  } catch (e) {
+    // Private windows and blocked site data throw here. The token still works
+    // for this page load; only the remembering is lost.
+  }
+}
+
+let TOKEN = new URLSearchParams(location.search).get('token') || ''
+if (TOKEN) {
+  rememberToken(TOKEN)
+} else {
+  TOKEN = rememberedToken()
+}
 const authError = ref(!TOKEN)
+const tokenEntry = ref('')
+
+// Sets the pasted token and re-runs the load that failed. No round trip to
+// validate it first: every call already reports a 401 by flipping authError,
+// so a wrong paste lands back on this same screen.
+function useTypedToken(reload) {
+  const value = tokenEntry.value.trim()
+  if (!value) return
+  TOKEN = value
+  rememberToken(TOKEN)
+  tokenEntry.value = ''
+  authError.value = false
+  reload()
+}
 
 function wsUrl(path) {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -483,6 +528,9 @@ const L = {
     service: `Servicio`,
     servicesSubtitle: `Servicios opcionales para desarrollo local`,
     servicesTitle: `Servicios`,
+    pasteTokenHint: `Es la parte que sigue a <code>?token=</code> en esa URL.`,
+    pasteTokenLabel: `Token de sesión`,
+    pasteTokenPlaceholder: `Pegá el token acá`,
     sessionTokenRequired: `Se requiere un token de sesión`,
     sessionTokenRequiredDesc: `Esta página no tiene un token de sesión válido. Abre la URL que imprime <code>rkd gui</code> en la terminal donde se está ejecutando — termina con <code>?token=...</code>.`,
     setupSubtitle: `Ejecuta Scaffold e inicializa un nuevo proyecto Rocketdoo en el directorio activo`,
@@ -527,6 +575,7 @@ const L = {
     unpackEnvironmentDesc: `Restaura un entorno empaquetado previamente en el directorio actual. Requiere que exista <code style="background:var(--s);padding:1px 5px;border-radius:4px;color:var(--lk);font-size:11px;">rkd-shared.json</code>.`,
     unpackingEllipsis: `Desempaquetando…`,
     update: `Actualizar`,
+    useToken: `Usar token`,
     userLabel: `Usuario`,
     userPlaceholder: `ubuntu — usuario SSH en el VPS`,
     usesPrivateRepositories: `Usa repositorios privados (requiere clave SSH)`,
@@ -856,6 +905,9 @@ const L = {
     service: `Service`,
     servicesSubtitle: `Optional services for local development`,
     servicesTitle: `Services`,
+    pasteTokenHint: `It is the part after <code>?token=</code> in that URL.`,
+    pasteTokenLabel: `Session token`,
+    pasteTokenPlaceholder: `Paste the token here`,
     sessionTokenRequired: `Session token required`,
     sessionTokenRequiredDesc: `This page has no valid session token. Open the URL printed by <code>rkd gui</code> in the terminal it is running from — it ends with <code>?token=...</code>.`,
     setupSubtitle: `Scaffold and initialize a new Rocketdoo project in the active directory`,
@@ -900,6 +952,7 @@ const L = {
     unpackEnvironmentDesc: `Restore a previously packed environment in the current directory. Requires <code style="background:var(--s);padding:1px 5px;border-radius:4px;color:var(--lk);font-size:11px;">rkd-shared.json</code> to be present.`,
     unpackingEllipsis: `Unpacking…`,
     update: `Update`,
+    useToken: `Use token`,
     userLabel: `User`,
     userPlaceholder: `ubuntu — SSH user on the VPS`,
     usesPrivateRepositories: `Uses private repositories (SSH key required)`,
@@ -3175,9 +3228,19 @@ const App = {
       loadProjectContext()
       loadNavCounts()
     })
+    // Same three calls onMounted makes, which it skipped while authError was
+    // set: a pasted token has to reach the same starting state as a tokenised
+    // URL, not a half-loaded one.
+    const retryWithToken = () => useTypedToken(() => {
+      init()
+      loadProjectContext()
+      loadNavCounts()
+    })
+
     return {
       view, navGroups, notifs, I, viewMap, currentPath, darkMode, toggleTheme, rkdVersion,
       authError, lang, toggleLang, proj, ctrs, running, odooUp, openOdoo,
+      tokenEntry, retryWithToken,
     }
   },
   template: `
@@ -3187,6 +3250,14 @@ const App = {
       <h2 style="font-size:16px;margin-bottom:8px;">{{ $t('sessionTokenRequired') }}</h2>
       <p style="color:var(--mu);font-size:13px;line-height:1.6;" v-html="$t('sessionTokenRequiredDesc')">
       </p>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <input v-model="tokenEntry" class="input" style="flex:1;" :placeholder="$t('pasteTokenPlaceholder')"
+               :aria-label="$t('pasteTokenLabel')" @keyup.enter="retryWithToken" />
+        <button @click="retryWithToken" class="btn btn-primary" :disabled="!tokenEntry.trim()">
+          {{ $t('useToken') }}
+        </button>
+      </div>
+      <p style="color:var(--su);font-size:12px;margin-top:10px;">{{ $t('pasteTokenHint') }}</p>
     </div>
   </div>
   <div v-else class="layout">
