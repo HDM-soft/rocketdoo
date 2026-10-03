@@ -625,3 +625,88 @@ class TestPackWithoutATerminal:
         assert result.exception is None
         assert "--yes" in " ".join(result.output.split())
         assert not (packable_project / "out.zip").exists()
+
+
+class TestOutputInsideTheProject:
+    """`rkd pack -o <path inside the project>` (#223).
+
+    The walk that builds the archive reaches the archive being written, and
+    zipfile reads a source file until EOF -- but the end of this one recedes
+    as it is read, because every chunk read back is a chunk just appended.
+    With compressible text the deflate ratio wins the race and the ZIP merely
+    carries a corrupt copy of itself; with data that does not compress,
+    nothing ends the loop. Observed on a real project: 392 GB written in 153
+    minutes before the process was killed.
+
+    Three of these tests pin the hole from a different direction (absolute
+    path, path relative to the cwd, a second name for the same file); the
+    last two are the opposite guard -- what must *stay* in the ZIP, so that a
+    wider exclusion (every `.zip`, or anything matching the output's
+    basename) cannot pass as a fix. Those two stay green when the fix is
+    removed, by design.
+    """
+
+    def test_the_archive_does_not_contain_itself(self, packable_project):
+        output = packable_project / "entorno.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert "entorno.zip" not in names
+        assert report["file_count"] == len(names)
+
+    def test_an_output_relative_to_the_cwd_does_not_contain_itself(self, packable_project):
+        """`rkd pack -o entorno.zip` from inside the project: the way the
+        command is actually typed, and the spelling that never matches the
+        absolute paths the walk produces.
+        """
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        result = CliRunner().invoke(main, ["pack", "--no-db", "-o", "entorno.zip"])
+
+        assert result.exit_code == 0, result.output
+        with zipfile.ZipFile(packable_project / "entorno.zip") as zf:
+            assert "entorno.zip" not in zf.namelist()
+
+    def test_a_second_name_for_the_archive_does_not_contain_it_either(self, packable_project):
+        """A symlink is another name for the same growing file, so comparing
+        path text leaves the hole open where comparing identity closes it.
+        A hard link and a case-insensitive filesystem are the same mistake.
+        """
+        output = packable_project / "entorno.zip"
+        (packable_project / "alias.zip").symlink_to(output)
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert "entorno.zip" not in names
+        assert "alias.zip" not in names
+
+    def test_another_zip_in_the_project_is_still_included(self, packable_project):
+        """Only the archive being written is skipped, not every ZIP: one the
+        user keeps in the project is project content like any other file.
+        """
+        (packable_project / "adjunto.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+
+        core_pack.pack(packable_project, include_db=False, output=packable_project / "entorno.zip")
+
+        with zipfile.ZipFile(packable_project / "entorno.zip") as zf:
+            assert "adjunto.zip" in zf.namelist()
+
+    def test_a_namesake_deeper_in_the_tree_is_still_included(self, packable_project):
+        """`addons/entorno.zip` is not the output, it only shares its name.
+        Excluding it would drop an addon's attachment from the shared
+        environment with nothing in the report to say so.
+        """
+        (packable_project / "addons" / "entorno.zip").write_bytes(b"PK\x05\x06" + b"\x00" * 18)
+
+        report = core_pack.pack(packable_project, include_db=False, output=packable_project / "entorno.zip")
+
+        with zipfile.ZipFile(packable_project / "entorno.zip") as zf:
+            names = zf.namelist()
+        assert "addons/entorno.zip" in names
+        assert report["file_count"] == len(names)
