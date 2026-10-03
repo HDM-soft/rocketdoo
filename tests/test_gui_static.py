@@ -893,3 +893,48 @@ def test_table_colspan_matches_its_own_header_count():
             if int(cs.group(1)) != th_count:
                 violations.append(f"colspan={cs.group(1)} but <thead> has {th_count} <th>")
     assert not violations, "\n".join(violations)
+
+
+def test_the_no_token_screen_offers_a_way_back_in():
+    """#217: arriving without a token used to be a dead end.
+
+    `rkd gui` prints a tokenised URL, but it is not the only way the GUI gets
+    opened: the VSCode port notification and its Ports panel both open the
+    bare `http://localhost:8070/`, with no query at all. The card that appears
+    then explained where the real URL was and stopped there, which leaves the
+    user hunting for the right terminal with no way to act from the page.
+    """
+    html = INDEX_HTML.read_text()
+    card = html[html.index('v-if="authError"') :]
+    card = card[: card.index("<div v-else")]
+
+    assert 'v-model="tokenEntry"' in card, "the card has no field to paste a token into"
+    assert "retryWithToken" in card, "nothing on the card acts on what was pasted"
+
+
+def test_the_token_is_remembered_for_a_bare_url_arrival():
+    """The same bare-URL arrival, in a tab that already had a good token.
+
+    sessionStorage and not the URL: stripping the token from the address bar
+    would cost the ability to copy that URL onward, which today works. This
+    only adds a fallback for when the URL carries nothing.
+    """
+    html = INDEX_HTML.read_text()
+
+    # The whole resolution block, not the two calls spotted separately: both
+    # names appear elsewhere (the helpers themselves, and the paste path), so
+    # an assertion per call passes while this block does neither.
+    resolution = """let TOKEN = new URLSearchParams(location.search).get('token') || ''
+if (TOKEN) {
+  rememberToken(TOKEN)
+} else {
+  TOKEN = rememberedToken()
+}"""
+    assert resolution in html, "the URL is no longer the first source and sessionStorage the fallback"
+
+    # Both accessors guarded: a private window or blocked site data throws on
+    # access, and a GUI that cannot remember a token must still serve one that
+    # came in through the URL.
+    assert "sessionStorage.getItem(TOKEN_KEY)" in html
+    assert "sessionStorage.setItem(TOKEN_KEY" in html
+    assert html.count("catch (e)") >= 2
