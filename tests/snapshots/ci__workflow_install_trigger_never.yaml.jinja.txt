@@ -38,3 +38,9 @@ jobs:
 
       - name: Validate module manifests
         run: rkd deploy validate -p addons
+
+
+  # The install job was turned off on purpose (`rkd ci init --install-trigger never`).
+  # Without this note there is no way to tell that apart from Rocketdoo deciding
+  # the project cannot support it, which does leave its reasons above.
+  # Re-enable it with `rkd ci init --install-trigger pull_request --force`.
