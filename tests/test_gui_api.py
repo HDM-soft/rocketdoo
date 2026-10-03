@@ -12,11 +12,13 @@ missing helper is not.
 
 import ast
 import asyncio
+import socket
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
@@ -849,3 +851,64 @@ class TestNoTracebackOverHTTP:
                     offenders.append(f"{path.relative_to(ROCKETDOO_ROOT.parent)}:{node.lineno}")
 
         assert not offenders, "traceback.format_exc() under gui/:\n" + "\n".join(offenders)
+
+
+class TestGuiRefusesABusyPort:
+    """#209: `rkd gui` used to announce success before it knew it could serve.
+
+    Every run mints a fresh token, and the panel hands it over as the way in.
+    But uvicorn only binds at the very end, so a second session on a busy port
+    printed a full success panel with a brand new token and buried the bind
+    error underneath it. The user copies the newest URL -- the obvious move --
+    reaches the server that is actually listening, and gets a 401 for a token
+    that server never issued. It reads as "the token is not recognised", which
+    is exactly how it was reported.
+    """
+
+    def _busy_port(self):
+        holder = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        return holder, holder.getsockname()[1]
+
+    def test_it_exits_non_zero_instead_of_serving(self, project_dir):
+        from rocketdoo.cli import main
+
+        holder, port = self._busy_port()
+        try:
+            result = CliRunner().invoke(main, ["gui", "--port", str(port)])
+        finally:
+            holder.close()
+
+        assert result.exit_code == 1, result.output
+        assert "already in use" in " ".join(result.output.split())
+
+    def test_no_token_is_handed_out_for_a_server_that_will_not_come_up(self, project_dir):
+        """The heart of #209: a token on screen is a promise the command cannot
+        keep here, and the user has no way to tell it apart from a good one.
+        """
+        from rocketdoo.cli import main
+
+        holder, port = self._busy_port()
+        try:
+            result = CliRunner().invoke(main, ["gui", "--port", str(port)])
+        finally:
+            holder.close()
+
+        assert "token=" not in result.output
+
+    def test_it_says_which_url_actually_works(self, project_dir):
+        """Pointing at the other session's URL is the fix for the common case:
+        two `rkd gui` on one port, not a port owned by something else.
+        """
+        from rocketdoo.cli import main
+
+        holder, port = self._busy_port()
+        try:
+            result = CliRunner().invoke(main, ["gui", "--port", str(port)])
+        finally:
+            holder.close()
+
+        flat = " ".join(result.output.split())
+        assert "rkd gui" in flat
+        assert "--port" in flat
