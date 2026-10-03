@@ -193,13 +193,36 @@ def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str]) -> i
     """
     excluded = _ALWAYS_EXCLUDE | set(exclude_dirs)
 
+    def is_the_archive(item: Path) -> bool:
+        """Whether this entry is the archive being written, under any name.
+
+        An output path inside the project is reached by the walk below, and
+        writing the archive into itself makes zipfile read a source whose
+        EOF recedes as fast as it is read: every chunk read back is a chunk
+        just appended. On compressible content the deflate ratio outruns the
+        read and the ZIP merely carries a corrupt copy of itself; on content
+        that does not compress - the dump and the filestore under
+        rkd_backups/ - nothing ends the loop and the file grows until the
+        disk is full.
+
+        Identity rather than path text, because the same growing file is
+        reachable under more than one name: a symlink or a hard link to it,
+        or the same directory entry spelled with different case on a
+        case-insensitive filesystem (WSL over /mnt/c, where this is normally
+        run). All three reopen the same hole.
+        """
+        try:
+            return item.samefile(zip_path)
+        except OSError:
+            return False
+
     file_count = 0
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         for item in project_dir.rglob("*"):
             rel = item.relative_to(project_dir)
             if set(rel.parts) & excluded:
                 continue
-            if item.is_file():
+            if item.is_file() and not is_the_archive(item):
                 zf.write(item, rel)
                 file_count += 1
 

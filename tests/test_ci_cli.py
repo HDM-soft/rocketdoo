@@ -678,3 +678,139 @@ class TestEveryStartCommandSyncsTheAddonsPath:
         CliRunner().invoke(getattr(docker_cli, command_name), args)
 
         assert f"{CONTAINER_ADDONS_ROOT}/oca" in seen["conf"]
+
+
+class TestPrepareRefusesAConfigThatIsNotADirectory:
+    """#196.1: `config` existing as a regular file.
+
+    render_template() reaches os.makedirs() and raises a bare
+    NotADirectoryError naming a path the user never typed, which reads like a
+    bug in rkd rather than something in their own directory.
+    """
+
+    def test_it_says_what_is_wrong_and_exits(self, project_dir):
+        _minimal_project(project_dir)
+        (project_dir / "config").write_text("not a directory\n")
+
+        result = CliRunner().invoke(ci_cli.prepare, [])
+
+        assert result.exit_code == 1
+        flat = " ".join(result.output.split())
+        assert "not a directory" in flat
+        assert "config" in flat
+
+
+class TestInitExplainsItselfOnEveryOutcome:
+    """#196.2: the reasons used to print only after writing.
+
+    Re-running `rkd ci init` on a project that already has its workflow is the
+    common case, and it returned before reaching any of the advisories -- so
+    the user most likely to be wondering why their project has no install job
+    was exactly the one who never saw the reason.
+    """
+
+    def _enterprise_project(self, root):
+        _minimal_project(root, edition="Enterprise")
+
+    def test_the_reasons_show_up_when_nothing_changed(self, project_dir):
+        self._enterprise_project(project_dir)
+        first = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        assert first.exit_code == 0, first.output
+        assert "install job was not generated" in " ".join(first.output.split())
+
+        again = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+
+        assert "already up to date" in " ".join(again.output.split())
+        assert "install job was not generated" in " ".join(again.output.split())
+
+    def test_the_reasons_show_up_when_the_file_differs(self, project_dir):
+        self._enterprise_project(project_dir)
+        CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        _workflow_path(project_dir).write_text("name: edited by hand\n")
+
+        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+
+        flat = " ".join(result.output.split())
+        assert "Not overwriting" in flat
+        assert "install job was not generated" in flat
+
+
+class TestNeverLeavesATrace:
+    """#196.3: `--install-trigger never` emitted nothing at all.
+
+    A project Rocketdoo cannot support leaves its reasons as comments. A
+    project whose owner turned the job off left the same silence, so months
+    later the two are indistinguishable from the file alone.
+    """
+
+    def test_the_generated_file_says_it_was_turned_off(self, project_dir):
+        _minimal_project(project_dir)
+
+        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "never"])
+
+        assert result.exit_code == 0, result.output
+        workflow = _workflow_path(project_dir).read_text()
+        assert "turned off on purpose" in workflow
+        assert "install-trigger never" in workflow
+
+    def test_it_is_not_confused_with_an_unsupported_project(self, project_dir):
+        _minimal_project(project_dir)
+
+        CliRunner().invoke(ci_cli.init, ["--install-trigger", "never"])
+
+        workflow = _workflow_path(project_dir).read_text()
+        assert "is not generated for this project" not in workflow
+
+
+class TestLineEndingsAreNotContent:
+    """#196.4 and #196.5: byte equality called an identical file modified.
+
+    A workflow that picked up CRLF from a Windows editor, or from git's own
+    core.autocrlf, was reported as changed and asked for --force to rewrite
+    something it already said. YAML does not read line endings, and the user
+    did not choose them.
+    """
+
+    def test_crlf_is_still_up_to_date(self, project_dir):
+        _minimal_project(project_dir)
+        CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        path = _workflow_path(project_dir)
+        path.write_bytes(path.read_text().replace("\n", "\r\n").encode())
+
+        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+
+        assert "already up to date" in " ".join(result.output.split())
+
+    def test_the_users_crlf_is_left_alone(self, project_dir):
+        """Reporting it unchanged and then rewriting it would be the same
+        unrequested edit, one step further along.
+        """
+        _minimal_project(project_dir)
+        CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        path = _workflow_path(project_dir)
+        path.write_bytes(path.read_text().replace("\n", "\r\n").encode())
+
+        CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+
+        assert b"\r\n" in path.read_bytes()
+
+    def test_a_trailing_newline_is_not_a_change(self, project_dir):
+        _minimal_project(project_dir)
+        CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        path = _workflow_path(project_dir)
+        path.write_text(path.read_text() + "\n")
+
+        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+
+        assert "already up to date" in " ".join(result.output.split())
+
+    def test_a_real_edit_is_still_caught(self, project_dir):
+        """The normalisation must not swallow a change that is one."""
+        _minimal_project(project_dir)
+        CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+        path = _workflow_path(project_dir)
+        path.write_text(path.read_text().replace("runs-on: ubuntu-latest", "runs-on: self-hosted", 1))
+
+        result = CliRunner().invoke(ci_cli.init, ["--install-trigger", "pull_request"])
+
+        assert "Not overwriting" in " ".join(result.output.split())
