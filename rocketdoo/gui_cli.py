@@ -1,3 +1,6 @@
+import socket
+import sys
+
 import click
 from rich import box
 from rich.console import Console
@@ -6,6 +9,20 @@ from rich.panel import Panel
 from rocketdoo import __version__
 
 console = Console()
+
+
+def _port_unavailable(host: str, port: int) -> bool:
+    """Whether binding (host, port) would fail, asked the way uvicorn asks it.
+
+    No SO_REUSEADDR: the probe has to fail where the real bind would fail, and
+    setting it would let the probe succeed on a port a listener still holds.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind((host, port))
+        except OSError:
+            return True
+    return False
 
 
 @click.command("gui")
@@ -35,7 +52,28 @@ def gui_command(port, host, auto_open, cwd):
 
     from rocketdoo.gui.server import create_app
 
-    # Built first so the panel below can show the real, tokenized URL.
+    # Checked before anything is printed. Every run mints a fresh token and
+    # the panel below hands it to the user as the way in -- but uvicorn only
+    # tries to bind at the very end, so a busy port used to produce a full
+    # success panel, a brand new token, and then an error buried underneath.
+    # The user copies the newest URL, reaches the server that is actually
+    # listening, and gets a 401 for a token it never issued.
+    #
+    # A bind probe rather than core.port_validation.is_port_in_use(): that one
+    # answers "is something reachable on localhost:port", which is a near
+    # neighbour of the question but not it. This tries exactly what uvicorn is
+    # about to try, on exactly the address it will use.
+    if _port_unavailable(host, port):
+        console.print()
+        console.print(f"[red]✗[/red] Port [bold]{port}[/bold] on {host} is already in use.")
+        console.print("[dim]  If another [cyan]rkd gui[/cyan] is running, open the URL that one printed:[/dim]")
+        console.print("[dim]  its token is the only one the listening server accepts.[/dim]")
+        console.print(f"[dim]  Otherwise pick a free port: [cyan]rkd gui --port {port + 1}[/cyan][/dim]")
+        console.print()
+        sys.exit(1)
+
+    # Built after the check so the panel never shows a token for a server
+    # that will not come up.
     app = create_app(host=host, port=port)
     url = f"http://{host}:{port}/?token={app.state.rkd_token}"
     browser_note = "opening automatically" if auto_open else "not opened (--open to launch one here)"

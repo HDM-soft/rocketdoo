@@ -60,6 +60,13 @@ def prepare(admin_passwd):
         pg_pass.write_text(PG_PASS_TEMPLATE.read_text())
         created.append("odoo_pg_pass")
 
+    config_dir = project_root / "config"
+    if config_dir.exists() and not config_dir.is_dir():
+        # render_template() would reach os.makedirs() and raise a bare
+        # NotADirectoryError naming a path the user never typed.
+        console.print(f"[red]{config_dir} exists but is not a directory, so config/odoo.conf cannot be written.[/red]")
+        sys.exit(1)
+
     odoo_conf = project_root / "config" / "odoo.conf"
     if odoo_conf.exists():
         kept.append("config/odoo.conf")
@@ -217,6 +224,41 @@ def _ci_context(project_root, install_trigger):
     }
 
 
+def _same_workflow(existing: str, generated: str) -> bool:
+    """Whether the file on disk says the same thing as what would be generated.
+
+    Byte equality reported `modified` for a workflow that had only picked up
+    CRLF endings -- from a Windows editor, or from git's own core.autocrlf --
+    and asked for --force to rewrite an identical file. Neither line endings
+    nor a trailing newline are content here: YAML does not read them, and the
+    user did not choose them.
+    """
+    return existing.replace("\r\n", "\n").rstrip("\n") == generated.replace("\r\n", "\n").rstrip("\n")
+
+
+def _print_advisories(context, project_root):
+    """Why this project's workflow looks the way it does.
+
+    Printed on every outcome, not just after writing. Re-running `rkd ci init`
+    on an already configured project is the common case, and it used to return
+    before reaching any of this -- so the one user most likely to be wondering
+    why their project has no install job was the one who never saw the reason.
+    """
+    if context["unsupported_reasons"]:
+        console.print("[yellow]The install job was not generated:[/yellow]")
+        for reason in context["unsupported_reasons"]:
+            console.print(f"  - {reason}")
+    elif context["install_trigger"] == "never":
+        console.print("[dim]The install job is turned off (--install-trigger never).[/dim]")
+    private_sources = _private_gitman_sources(project_root)
+    if private_sources:
+        console.print("[yellow]gitman.yaml clones over SSH; the runner has no key for:[/yellow]")
+        for repo in private_sources:
+            console.print(f"  [yellow]- {repo}[/yellow]")
+        console.print("[yellow]The install job will fail there unless you supply a deploy key.[/yellow]")
+    console.print("[dim]The lint job runs ruff with its default rules over addons/.[/dim]")
+
+
 def _render_workflow(context):
     env = Environment(loader=FileSystemLoader(WORKFLOW_TEMPLATE_DIR))
     return env.get_template("workflow.yaml.jinja").render(**context)
@@ -258,8 +300,9 @@ def init(install_trigger, force, yes):
     output_path = project_root / WORKFLOW_RELATIVE_PATH
 
     if output_path.exists():
-        if output_path.read_text() == content:
+        if _same_workflow(output_path.read_text(), content):
             console.print(f"[dim]{WORKFLOW_RELATIVE_PATH} is already up to date.[/dim]")
+            _print_advisories(context, project_root)
             return
         if not force:
             console.print(
@@ -268,6 +311,7 @@ def init(install_trigger, force, yes):
                 "Rocketdoo version changed since it was generated). Not overwriting it; run "
                 "`rkd ci init --force` to regenerate it.[/yellow]"
             )
+            _print_advisories(context, project_root)
             return
         output_path.write_text(content)
         console.print(f"[green]Overwritten:[/green] {WORKFLOW_RELATIVE_PATH}")
@@ -276,14 +320,4 @@ def init(install_trigger, force, yes):
         output_path.write_text(content)
         console.print(f"[green]Created:[/green] {WORKFLOW_RELATIVE_PATH}")
 
-    if context["unsupported_reasons"]:
-        console.print("[yellow]The install job was not generated:[/yellow]")
-        for reason in context["unsupported_reasons"]:
-            console.print(f"  - {reason}")
-    private_sources = _private_gitman_sources(project_root)
-    if private_sources:
-        console.print("[yellow]gitman.yaml clones over SSH; the runner has no key for:[/yellow]")
-        for repo in private_sources:
-            console.print(f"  [yellow]- {repo}[/yellow]")
-        console.print("[yellow]The install job will fail there unless you supply a deploy key.[/yellow]")
-    console.print("[dim]The lint job runs ruff with its default rules over addons/.[/dim]")
+    _print_advisories(context, project_root)
