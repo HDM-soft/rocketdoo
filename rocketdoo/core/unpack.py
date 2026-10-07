@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 from rocketdoo.core.compose import run_compose, run_compose_result
+from rocketdoo.core.pack import BACKUP_FILENAME
 from rocketdoo.core.port_validation import find_available_port, is_port_in_use
 from rocketdoo.core.project_info import project_exists, read_docker_compose
 from rocketdoo.core.service import ProgressCallback, ServiceError, reporter
@@ -53,8 +54,13 @@ def _find_backup_files(project_dir: Path) -> tuple[Path | None, Path | None]:
     if not backup_dir.exists():
         return None, None
 
-    dumps = sorted(backup_dir.glob("db_*.dump"), reverse=True)
-    filestores = sorted(backup_dir.glob("filestore_*.tar.gz"), reverse=True)
+    # Filtered by the same pattern pack writes, not by a looser glob: a file
+    # the user happens to keep here ("db_notes.dump") sorts by name like any
+    # other and could win the "newest" slot, sending pg_restore after a
+    # database that does not exist -- which also skips the filestore, since
+    # that step is nested under a successful restore.
+    dumps = sorted((p for p in backup_dir.glob("db_*.dump") if BACKUP_FILENAME.match(p.name)), reverse=True)
+    filestores = sorted((p for p in backup_dir.glob("filestore_*.tar.gz") if BACKUP_FILENAME.match(p.name)), reverse=True)
     return (dumps[0] if dumps else None), (filestores[0] if filestores else None)
 
 
@@ -535,6 +541,23 @@ def unpack(
             warnings.append(message)
 
     db_dump, filestore_tar = _find_backup_files(root)
+    if db_dump is not None and meta.get("has_db_backup") is False:
+        # The manifest states this environment was packed without a database,
+        # so the dump under rkd_backups/ is left over from an earlier pack of
+        # the same project and restoring it would hand the recipient data the
+        # sender never meant to send (#225). Packs from 3.8.1 on no longer
+        # ship it; this covers the ZIPs already in circulation.
+        #
+        # Only an explicit False counts. A manifest without the key is older
+        # or hand-made and has no opinion, and there the dump is trusted.
+        message = (
+            f"The manifest says this environment was packed without a database, so {db_dump.name} "
+            "is left over from an earlier pack and is not restored. Restore it by hand if you meant to receive it."
+        )
+        report(message, "warn")
+        warnings.append(message)
+        db_dump = None
+
     db_restored = False
     filestore_restored = False
 
