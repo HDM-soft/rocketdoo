@@ -17,6 +17,7 @@ import json
 import re
 import subprocess
 import zipfile
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -32,6 +33,11 @@ _SSH_DOCKERFILE_PATTERNS = [
 ]
 
 _ALWAYS_EXCLUDE = {".ssh", "__pycache__", "node_modules", ".mypy_cache"}
+
+# The names pack writes under rkd_backups/. Public because core/unpack.py
+# reads back what this module writes, and the two drifting apart is its own
+# class of bug: the writer owns the format.
+BACKUP_FILENAME = re.compile(r"^(db|filestore)_.+_\d{8}_\d{6}\.(dump|tar\.gz)$")
 
 _FILESTORE_PATH_TEMPLATES = [
     "/var/lib/odoo/.local/share/Odoo/filestore/{db}",
@@ -183,15 +189,21 @@ def _verify_no_ssh_in_zip(zip_path: Path) -> list[str]:
     return suspicious
 
 
-def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str]) -> int:
+def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str], exclude_files: Iterable[Path] = ()) -> int:
     """Creates the ZIP archive of the full environment.
 
-    Excludes: .ssh/, __pycache__, node_modules, and any extra dirs provided.
-    `rkd_backups/`, like every other project subdirectory, is picked up by the
-    `rglob` walk below - it never needed a dedicated branch. Returns the
-    number of files included.
+    Excludes: .ssh/, __pycache__, node_modules, any extra dirs provided, and
+    the individual files in `exclude_files`. `rkd_backups/`, like every other
+    project subdirectory, is picked up by the `rglob` walk below - it never
+    needed a dedicated branch. Returns the number of files included.
+
+    `exclude_files` is matched on the path relative to the project, not on
+    file identity the way the output archive is: these paths are enumerated
+    from this same tree, under this same spelling, rather than typed by a
+    caller who could name the file some other way.
     """
     excluded = _ALWAYS_EXCLUDE | set(exclude_dirs)
+    excluded_rel = {Path(item).relative_to(project_dir) for item in exclude_files}
 
     def is_the_archive(item: Path) -> bool:
         """Whether this entry is the archive being written, under any name.
@@ -220,13 +232,36 @@ def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str]) -> i
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         for item in project_dir.rglob("*"):
             rel = item.relative_to(project_dir)
-            if set(rel.parts) & excluded:
+            if rel in excluded_rel or set(rel.parts) & excluded:
                 continue
             if item.is_file() and not is_the_archive(item):
                 zf.write(item, rel)
                 file_count += 1
 
     return file_count
+
+
+def _stale_backups(backup_dir: Path, keep: set[Path | None]) -> list[Path]:
+    """Backups left behind by earlier packs, which must not travel.
+
+    `rkd_backups/` grows by one (dump, filestore) pair per pack and nothing
+    removes them. `core/unpack.py` restores the newest pair and ignores the
+    rest, so every older pair is weight the recipient downloads and never
+    reads - gigabytes of it on a real database.
+
+    With `include_db=False` it is not only weight: `unpack()` decides whether
+    to restore from the dump existing, not from the manifest, so a pack that
+    carried no database on purpose arrived with an older one.
+
+    Only the names this module writes are recognised. The directory is rkd's;
+    the files in it are not necessarily, and dropping one the user put there
+    would be silent data loss in the shared copy.
+    """
+    if not backup_dir.is_dir():
+        return []
+    return sorted(
+        item for item in backup_dir.iterdir() if item.is_file() and item not in keep and BACKUP_FILENAME.match(item.name)
+    )
 
 
 # ─── read functions ──────────────────────────────────────────────────────────
@@ -363,8 +398,17 @@ def pack(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     zip_path = Path(output) if output else root.parent / f"{project_name}_rkd_shared_{timestamp}.zip"
 
+    # A filestore with no dump beside it is dead weight: unpack() nests the
+    # whole restore, filestore included, under the dump existing. That is the
+    # shape left behind when pg_dump fails mid-pack, so this run's own
+    # filestore is only kept when its dump survived.
+    shipped = {db_backup_path, fs_backup_path} if db_backup_path else set()
+    stale = _stale_backups(backup_dir, shipped)
+    if stale:
+        report(f"{len(stale)} backup file(s) left out of the ZIP; unpack only restores the newest pair.")
+
     try:
-        file_count = _create_zip(project_dir=root, zip_path=zip_path, exclude_dirs=[".ssh"])
+        file_count = _create_zip(project_dir=root, zip_path=zip_path, exclude_dirs=[".ssh"], exclude_files=stale)
     except Exception as exc:
         if original_dockerfile is not None:
             _restore_dockerfile(dockerfile_path, original_dockerfile)
@@ -393,5 +437,6 @@ def pack(
         "ssh_found_in_zip": bool(ssh_found_in_zip),
         "ssh_suspicious": list(ssh_found_in_zip),
         "file_count": file_count,
+        "stale_backups_skipped": len(stale),
         "warnings": warnings,
     }

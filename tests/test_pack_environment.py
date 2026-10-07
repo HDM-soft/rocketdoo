@@ -710,3 +710,164 @@ class TestOutputInsideTheProject:
             names = zf.namelist()
         assert "addons/entorno.zip" in names
         assert report["file_count"] == len(names)
+
+
+def _stale_pair(project_dir, db="vieja", stamp="20260101_120000"):
+    """A (dump, filestore) pair left by an earlier `rkd pack`, written with
+    the exact names pack produces so the real code has to recognise them.
+    """
+    backup_dir = project_dir / "rkd_backups"
+    backup_dir.mkdir(exist_ok=True)
+    dump = backup_dir / f"db_{db}_{stamp}.dump"
+    tar = backup_dir / f"filestore_{db}_{stamp}.tar.gz"
+    dump.write_bytes(b"PGDMP-vieja")
+    tar.write_bytes(b"\x1f\x8b-vieja")
+    return dump, tar
+
+
+class TestStaleBackupsDoNotTravel:
+    """`rkd_backups/` accumulates a (dump, filestore) pair per pack and
+    nothing ever removes them (#225). `core/unpack.py::_find_backup_files`
+    restores the newest pair and ignores the rest, so every older pair is
+    weight the recipient downloads and never reads -- gigabytes of it on a
+    real database.
+
+    The `--no-db` case is worse than weight. `unpack()` branches on
+    `db_dump is not None`, never on the manifest, so a pack that carried no
+    database on purpose still shipped the previous pack's dump and the
+    recipient restored it: stale data the sender never meant to send.
+    """
+
+    def test_a_pack_without_a_database_does_not_ship_an_older_dump(self, packable_project):
+        dump, tar = _stale_pair(packable_project)
+        output = packable_project / "sin-base.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert f"rkd_backups/{dump.name}" not in names
+        assert f"rkd_backups/{tar.name}" not in names
+
+    def test_only_this_packs_own_backups_travel(self, packable_project, monkeypatch):
+        calls = []
+        monkeypatch.setattr(core_pack.subprocess, "run", _fake_docker_run(calls))
+        monkeypatch.setattr(core_pack, "databases_result", lambda *a, **k: (["qa"], ""))
+        stale_dump, stale_tar = _stale_pair(packable_project)
+        output = packable_project / "con-base.zip"
+
+        report = core_pack.pack(packable_project, db_name="qa", output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            shipped = [n for n in zf.namelist() if n.startswith("rkd_backups/")]
+        assert f"rkd_backups/{stale_dump.name}" not in shipped
+        assert f"rkd_backups/{stale_tar.name}" not in shipped
+        assert [n for n in shipped if n.startswith("rkd_backups/db_qa_")], shipped
+        assert report["stale_backups_skipped"] == 2
+
+    def test_the_stale_backups_stay_on_the_senders_disk(self, packable_project):
+        """Left out of the ZIP, not deleted: they are the sender's own
+        backups of their own project.
+        """
+        dump, tar = _stale_pair(packable_project)
+
+        core_pack.pack(packable_project, include_db=False, output=packable_project / "sin-base.zip")
+
+        assert dump.exists()
+        assert tar.exists()
+
+    def test_anything_else_under_rkd_backups_still_travels(self, packable_project):
+        """Only the files pack itself writes are recognised as stale. A
+        directory rkd created is not a directory rkd owns: dropping a file
+        the user put there would be silent data loss in the shared copy.
+        """
+        _stale_pair(packable_project)
+        (packable_project / "rkd_backups" / "notas.txt").write_text("por que guarde esto\n")
+        (packable_project / "rkd_backups" / "db_a_mano.dump").write_bytes(b"PGDMP-mano")
+        output = packable_project / "sin-base.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert "rkd_backups/notas.txt" in names
+        assert "rkd_backups/db_a_mano.dump" in names
+
+
+class TestWhatCountsAsOneOfPacksOwnBackups:
+    """The pattern that decides whether a file under `rkd_backups/` is rkd's
+    to leave behind or the user's to ship. Both halves matter: miss one of
+    pack's own names and the ZIP keeps growing; match one of the user's and
+    their file silently vanishes from the shared copy.
+
+    `core/unpack.py` reads back the same pattern, so a name pack writes and
+    unpack does not recognise would be restored as nothing at all.
+    """
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "db_qa_20261006_120000.dump",
+            "db_my_db_2_20261006_120000.dump",
+            "db_v16.0_20261006_120000.dump",
+            "db_20260101_20261006_120000.dump",
+            "filestore_qa_20261006_120000.tar.gz",
+            "filestore_my_db_2_20261006_120000.tar.gz",
+        ],
+    )
+    def test_names_pack_writes_are_recognised(self, name):
+        assert core_pack.BACKUP_FILENAME.match(name), name
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "notas.txt",
+            "db_a_mano.dump",
+            "db_qa.dump",
+            "filestore_qa.tar.gz",
+            "db_qa_20261006.dump",
+            "db_qa_20261006_120000.sql",
+            "_20261006_120000.dump",
+        ],
+    )
+    def test_anything_else_is_the_users(self, name):
+        assert not core_pack.BACKUP_FILENAME.match(name), name
+
+    def test_a_backup_in_a_subdirectory_is_the_users_too(self, packable_project):
+        """pack writes flat into `rkd_backups/`. A subdirectory is someone's
+        own filing, so it travels whatever the files inside are called.
+        """
+        archive = packable_project / "rkd_backups" / "2025" / "db_vieja_20250101_120000.dump"
+        archive.parent.mkdir(parents=True)
+        archive.write_bytes(b"PGDMP-2025")
+        output = packable_project / "sin-base.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "rkd_backups/2025/db_vieja_20250101_120000.dump" in zf.namelist()
+
+
+class TestAFilestoreWithNoDumpBesideIt:
+    """`unpack()` nests the whole restore -- filestore included -- under the
+    dump existing, so a filestore that arrives alone can never be read.
+
+    That is exactly the shape a failed `pg_dump` leaves behind: `pack()` sets
+    `db_backup_path = None` and carries on to back the filestore up anyway.
+    Shipping it is guaranteed dead weight, and on a real project it is the
+    larger of the two files.
+    """
+
+    def test_a_failed_dump_does_not_ship_this_runs_filestore(self, packable_project, monkeypatch):
+        calls = []
+        monkeypatch.setattr(core_pack.subprocess, "run", _fake_docker_run(calls))
+        monkeypatch.setattr(core_pack, "databases_result", lambda *a, **k: (["qa"], ""))
+        monkeypatch.setattr(core_pack, "_backup_database", lambda *a, **k: False)
+        output = packable_project / "sin-dump.zip"
+
+        report = core_pack.pack(packable_project, db_name="qa", output=output)
+
+        assert report["db_backup"] is False
+        with zipfile.ZipFile(output) as zf:
+            shipped = [n for n in zf.namelist() if n.startswith("rkd_backups/")]
+        assert shipped == [], shipped
