@@ -193,23 +193,6 @@ class ModulePackager:
 
         return output_path
 
-    def extract_archive(self, archive_path: Path, target_dir: Path):
-        """
-        Extracts a module archive
-
-        Args:
-            archive_path: Path to archive file
-            target_dir: Directory where to extract
-        """
-        console.print(f"📦 Extracting archive to: {target_dir}")
-
-        target_dir.mkdir(parents=True, exist_ok=True)
-
-        with tarfile.open(archive_path, "r:gz") as tar:
-            tar.extractall(target_dir)
-
-        console.print("✅ Archive extracted successfully", style="green")
-
     def get_module_size(self, module: Dict) -> int:
         """
         Calculates total size of a module in bytes
