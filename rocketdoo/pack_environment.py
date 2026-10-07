@@ -143,12 +143,17 @@ def pack_environment(no_db, output, db_name, yes):
     else:
         db_line = "not available"
 
+    # Named rather than silently dropped: the ZIP is smaller than the project
+    # on disk, and the one number that explains why belongs next to the count.
+    stale_skipped = report.get("stale_backups_skipped") or 0
+    stale_line = f" [dim](+{stale_skipped} older backup file(s) left out)[/dim]" if stale_skipped else ""
+
     console.print()
     console.print(
         Panel(
             f"[bold green]✅ Environment packaged successfully[/bold green]\n\n"
             f"[bold]📁 File:[/bold] [cyan]{zip_path}[/cyan]\n"
-            f"[bold]📦 Files included:[/bold] {report['file_count']}\n"
+            f"[bold]📦 Files included:[/bold] {report['file_count']}{stale_line}\n"
             f"[bold]💾 Size:[/bold] {zip_size_mb:.1f} MB\n"
             f"[bold]🔐 SSH Keys:[/bold] {'excluded ✓' if report['ssh_sanitized'] else 'not applicable'}\n"
             f"[bold]💿 DB Backup:[/bold] {db_line}\n\n"

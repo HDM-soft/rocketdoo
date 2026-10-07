@@ -86,6 +86,27 @@ class TestFindBackupFiles:
         assert found_dump is None
         assert found_fs == fs
 
+    def test_a_file_the_user_keeps_here_never_wins_the_newest_slot(self, project_dir):
+        """The newest is decided by sorting filenames, so a file that is not a
+        backup at all can sort above the real one. `pg_restore` would then be
+        sent after a database named from its filename, fail, and take the
+        filestore with it -- that step is nested under a successful restore.
+
+        pack leaves the user's files under rkd_backups/ alone (#225), which
+        makes it this function's job to recognise what pack itself wrote.
+        """
+        backups = project_dir / "rkd_backups"
+        backups.mkdir()
+        real = backups / "db_aaa_20260106_120000.dump"
+        real.write_bytes(b"x")
+        (backups / "db_zzz_notes.dump").write_bytes(b"x")
+        (backups / "filestore_zzz_notes.tar.gz").write_bytes(b"x")
+
+        found_dump, found_fs = _find_backup_files(project_dir)
+
+        assert found_dump == real
+        assert found_fs is None
+
     def test_the_most_recent_of_several_dumps_is_picked(self, project_dir):
         """Mutation (a): always returning (None, None) still passes any
         assertion that only checks the "no backups" case -- this one
@@ -657,3 +678,79 @@ class TestUnpackRefusesANonProjectBeforeAsking:
 
         assert result.exit_code == 0, result.output
         assert "No Rocketdoo project" in " ".join(result.output.split())
+
+
+class TestAManifestThatSaysThereIsNoDatabase:
+    """The other half of #225, for ZIPs already in circulation.
+
+    `unpack()` decides whether to restore from `db_dump is not None` alone,
+    never from the manifest. A ZIP built before the pack-side fix carries
+    the dumps of every earlier pack, so one packed with `--no-db` arrives
+    with a database anyway -- an older one, from whenever that project was
+    last packed with a backup. The recipient gets data the sender never
+    meant to send.
+
+    `has_db_backup` is only honoured when the manifest states it. A missing
+    key means an older or hand-made manifest that cannot answer the
+    question, and there the previous behaviour stands.
+    """
+
+    def _project_with_a_stale_pair(self, project_dir, monkeypatch, meta):
+        """A (dump, filestore) pair, which is the shape pack always leaves:
+        a lone dump would let a guard that only fires without a filestore
+        pass while being off in every real ZIP.
+        """
+        _write_project(project_dir)
+        (project_dir / "rkd-shared.json").write_text(json.dumps(meta))
+        backups = project_dir / "rkd_backups"
+        backups.mkdir(exist_ok=True)
+        dump = backups / "db_vieja_20260101_120000.dump"
+        tar = backups / "filestore_vieja_20260101_120000.tar.gz"
+        dump.write_bytes(b"PGDMP-vieja")
+        tar.write_bytes(b"\x1f\x8b-vieja")
+        monkeypatch.setattr(core_unpack, "_find_backup_files", lambda root: (dump, tar))
+        monkeypatch.setattr(core_unpack, "_get_odoo_container_name", lambda root: "odoo-demo")
+        monkeypatch.setattr(core_unpack, "_launch_environment", lambda root, build, report: True)
+        monkeypatch.setattr(core_unpack, "_is_container_running", lambda name: True)
+        monkeypatch.setattr(core_unpack.time, "sleep", lambda *_a: None)
+        started = []
+        monkeypatch.setattr(core_unpack, "_launch_db_only", lambda root, report: started.append("db") or True)
+        monkeypatch.setattr(core_unpack, "_init_odoo_volume", lambda root, container, report: started.append("volume") or True)
+        return started
+
+    def test_an_explicit_false_keeps_the_stale_pair_out_of_the_environment(self, project_dir, monkeypatch):
+        started = self._project_with_a_stale_pair(project_dir, monkeypatch, {"rkd_shared": True, "has_db_backup": False})
+
+        report = core_unpack.unpack(project_dir, restore=True)
+
+        assert started == [], "neither the database nor the filestore restore may start"
+        assert report["db_restored"] is False
+        assert report["filestore_restored"] is False
+
+    def test_the_recipient_is_told_which_file_was_ignored(self, project_dir, monkeypatch):
+        """Silently dropping it would leave the recipient with an empty Odoo
+        and a dump sitting right there, with nothing connecting the two.
+        """
+        self._project_with_a_stale_pair(project_dir, monkeypatch, {"rkd_shared": True, "has_db_backup": False})
+
+        report = core_unpack.unpack(project_dir, restore=True)
+
+        assert any("db_vieja_20260101_120000.dump" in w for w in report["warnings"]), report["warnings"]
+
+    def test_a_manifest_without_the_key_still_restores(self, project_dir, monkeypatch):
+        """An older manifest cannot answer, so nothing changes for it."""
+        started = self._project_with_a_stale_pair(project_dir, monkeypatch, {"rkd_shared": True})
+
+        core_unpack.unpack(project_dir, restore=True)
+
+        assert started[:1] == ["db"]
+
+    def test_a_manifest_rkd_never_wrote_still_restores(self, project_dir, monkeypatch):
+        """Without `rkd_shared` the manifest is reset to {} before any of
+        this, so its `has_db_backup` must not steer the restore either.
+        """
+        started = self._project_with_a_stale_pair(project_dir, monkeypatch, {"has_db_backup": False})
+
+        core_unpack.unpack(project_dir, restore=True)
+
+        assert started[:1] == ["db"]
