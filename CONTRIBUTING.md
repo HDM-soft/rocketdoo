@@ -193,6 +193,41 @@ pip install git+https://YOUR_TOKEN@github.com/HDM-soft/rocketdoo.git@feature/my-
 | `pipx install git+... --suffix=-test` | **Recommended.** Test CLI commands without touching the production install |
 | `pip install git+...` inside a venv | Test Python imports or script integrations |
 
+### A trap worth knowing about
+
+If you work inside a clone with its own virtualenv, that venv's `rkd` wins the
+PATH over the one you installed with `pipx`:
+
+```bash
+$ which rkd
+/path/to/rocketdoo/venv/bin/rkd
+```
+
+With `pip install -e .`, that `rkd` runs **the source tree you are editing** —
+which is what you want while developing, and exactly what you do *not* want when
+you mean to check what a published release does. Verify a release from a clean
+venv or a `pipx` install with its own suffix, never from the repository.
+
+The version it prints is its own trap. `__version__` comes from
+`importlib.metadata`, which reads the *installed* metadata rather than
+`pyproject.toml`, and an editable install does not refresh that metadata when
+you bump the version. Two records of the same package can coexist — the
+`rocketdoo.egg-info/` directory in the repository root and the
+`rocketdoo-X.Y.Z.dist-info` in the venv — and which one answers depends on the
+working directory, because the repository root joins `sys.path` when you run
+from it. The result is the same install reporting two different versions:
+
+```bash
+$ venv/bin/rkd --version        # from the repository root
+Rocketdoo, version 3.8.1        # ...the egg-info answers
+$ cd /tmp && venv/bin/rkd --version
+Rocketdoo, version 3.5.0        # ...the venv's stale dist-info answers
+```
+
+Re-running `pip install -e .` rewrites the metadata and settles it. Do that
+after every version bump, or `rkd --version` from your clone will keep stating a
+number that is not the one in `pyproject.toml`.
+
 ---
 
 ## Tests and CI
