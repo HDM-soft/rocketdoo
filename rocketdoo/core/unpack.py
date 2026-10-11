@@ -20,7 +20,8 @@ import subprocess
 import time
 from pathlib import Path
 
-from rocketdoo.core.compose import run_compose, run_compose_result
+from rocketdoo.core.compose import compose_ls, run_compose, run_compose_result
+from rocketdoo.core.mailpit import is_enabled as mailpit_is_enabled
 from rocketdoo.core.pack import BACKUP_FILENAME
 from rocketdoo.core.port_validation import find_available_port, is_port_in_use
 from rocketdoo.core.project_info import project_exists, read_docker_compose
@@ -92,6 +93,17 @@ def _check_ports(meta: dict, auto_accept: bool = True) -> tuple[int, int, bool]:
 def _update_ports_in_compose(project_dir: Path, new_odoo_port: int, new_vsc_port: int) -> None:
     """Rewrites only the two port mappings docker-compose.yaml carries for
     Odoo and its debugger, in place, leaving the rest of the file untouched.
+
+    Bytes in, bytes out, because the text helpers translate newlines on both
+    sides. `read_text()` applies universal newlines and hands back a string
+    with every CRLF already collapsed to LF, so remapping one port in a
+    compose saved with CRLF - a Windows editor, or git's own core.autocrlf,
+    on a tool whose users are largely on WSL - rewrote every line in the file.
+    That is the half measured here. `write_text()` is the mirror image and
+    only bites on a host where os.linesep is CRLF, which is why reverting it
+    alone changes nothing on Linux and no test can pin it from here.
+    Line endings are not ours to change; #196 reached the same conclusion for
+    the generated workflows.
     """
     compose_path = project_dir / "docker-compose.yaml"
     if not compose_path.exists():
@@ -99,10 +111,212 @@ def _update_ports_in_compose(project_dir: Path, new_odoo_port: int, new_vsc_port
     if not compose_path.exists():
         return
 
-    content = compose_path.read_text()
+    content = compose_path.read_bytes().decode()
     content = re.sub(r'"\d+:8069"', f'"{new_odoo_port}:8069"', content)
     content = re.sub(r'"\d+:8888"', f'"{new_vsc_port}:8888"', content)
-    compose_path.write_text(content)
+    compose_path.write_bytes(content.encode())
+
+
+# `\r?` because a compose saved with CRLF leaves one before the line end, and
+# `[ \t]*$` does not match it: the name came back as None, so every CRLF
+# compose looked like one without a `name:` and the whole conflict check
+# quietly did nothing on it.
+_PROJECT_NAME_LINE = re.compile(r"^name:[ \t]*(\S+)[ \t]*\r?$", re.MULTILINE)
+_PROJECT_NAME_MAX_SUFFIX = 99
+_VALID_PROJECT_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+_MAILPIT_PORTS = (1025, 8025)
+
+
+def _compose_file(project_dir: Path) -> Path | None:
+    for name in ("docker-compose.yaml", "docker-compose.yml"):
+        candidate = project_dir / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _compose_project_name(project_dir: Path) -> str | None:
+    """Value of the top-level `name:` line, read as text so it is the same
+    expression that later rewrites it.
+    """
+    compose_path = _compose_file(project_dir)
+    if compose_path is None:
+        return None
+    match = _PROJECT_NAME_LINE.search(compose_path.read_bytes().decode())
+    if not match:
+        return None
+    # YAML quotes are not part of the name. Read raw, `name: "demo"` came back
+    # as '"demo"', which never matched the manifest's parsed `demo`, so the
+    # copy was taken for one already renamed and the inventory was never
+    # consulted at all.
+    return match.group(1).strip("\"'") or None
+
+
+def _docker_inventory() -> dict:
+    """{"ok": bool, "projects": {name: [config_files]}, "volumes": {name: project_label}}.
+
+    Any failure in either query yields `ok: False` with empty collections, so
+    a partial answer can never be read as "the name is free".
+    """
+    failed = {"ok": False, "projects": {}, "volumes": {}}
+
+    entries, error = compose_ls("--all")
+    if error:
+        return failed
+
+    projects = {}
+    for entry in entries:
+        name = entry.get("Name")
+        if name:
+            files = str(entry.get("ConfigFiles") or "")
+            projects[name] = [f.strip() for f in files.split(",") if f.strip()]
+
+    try:
+        result = subprocess.run(
+            ["docker", "volume", "ls", "--format", '{{.Name}}\t{{.Label "com.docker.compose.project"}}'],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return failed
+    if result.returncode != 0:
+        return failed
+
+    volumes = {}
+    for line in result.stdout.splitlines():
+        name, _, label = line.partition("\t")
+        if name.strip():
+            volumes[name.strip()] = label.strip()
+
+    return {"ok": True, "projects": projects, "volumes": volumes}
+
+
+def _own_projects(root: Path, inventory: dict) -> set[str]:
+    """Compose projects whose config file lives directly inside `root`."""
+    resolved = Path(root).resolve()
+    return {name for name, files in inventory["projects"].items() if any(Path(f).resolve().parent == resolved for f in files)}
+
+
+def _name_taken_reason(name: str, own: set[str], inventory: dict) -> str:
+    """Why `name` is already used by something that is not this copy, or ''."""
+    if name in inventory["projects"] and name not in own:
+        files = inventory["projects"][name]
+        where = f" in {Path(files[0]).parent}" if files else ""
+        return f"the Compose project '{name}' already exists{where}"
+    # Matched on the label, not on the volume's name. Compose names a project
+    # volume `{project}_{key}`, so a prefix test for `{name}-` never fires on a
+    # real one -- and this is the half that covers the case that actually
+    # destroys data: an original stopped with `rkd down` (no -v) is gone from
+    # `compose ls` but its volumes are still here, and a copy that reuses the
+    # project would mount them and let the restore DROP the original's
+    # database. The label is what Compose puts there to answer exactly this.
+    for volume, label in inventory["volumes"].items():
+        if label == name and label not in own:
+            return f"the Docker volume '{volume}' already belongs to the Compose project '{name}'"
+    return ""
+
+
+def _resolve_project_name(root: Path, current: str | None, meta: dict, inventory: dict) -> dict:
+    """Decide which Compose project name the copy should use. Writes nothing
+    and does not query Docker: the inventory is passed in.
+    """
+    if current is None:
+        return {
+            "name": None,
+            "conflict": False,
+            "reason": "the compose file has no 'name:'; renaming only the containers would damage the other copy",
+            "renamable": False,
+        }
+
+    meta_name = (meta or {}).get("project_name")
+    if meta_name and meta_name != current:
+        return {"name": current, "conflict": False, "reason": "", "renamable": True}
+
+    if not inventory["ok"]:
+        return {
+            "name": current,
+            "conflict": None,
+            "reason": "Docker could not be queried, so name conflicts were not checked",
+            "renamable": True,
+        }
+
+    own = _own_projects(root, inventory)
+    reason = _name_taken_reason(current, own, inventory)
+    if not reason:
+        return {"name": current, "conflict": False, "reason": "", "renamable": True}
+
+    for suffix in range(2, _PROJECT_NAME_MAX_SUFFIX + 1):
+        candidate = f"{current}-{suffix}"
+        if not _name_taken_reason(candidate, own, inventory):
+            return {"name": candidate, "conflict": True, "reason": reason, "renamable": True}
+
+    return {
+        "name": current,
+        "conflict": True,
+        "reason": f"{reason}, and every name from '{current}-2' to '{current}-{_PROJECT_NAME_MAX_SUFFIX}' is taken too",
+        "renamable": True,
+    }
+
+
+def _rename_project_in_compose(project_dir: Path, old: str, new: str) -> bool:
+    """Rewrites the Compose identity (project name, image, container names and
+    named volumes) in place as text, line by line. PyYAML would drop the
+    `# rkd:mailpit` markers, and every line that is not identity must stay
+    byte for byte the same.
+
+    All or nothing. A compose whose top-level `name:` does not say `old` is
+    not renamed at all, not even its `container_name` lines: a copy that
+    renames only its containers while sharing the project name is the
+    destructive case, not a partial improvement on it. Compose then treats the
+    other copy's containers as this project's, recreates them and mounts its
+    volumes. Measured, not inferred. `unpack()` refuses the same case one
+    level up; this guard is here so no future caller can reach past it.
+    """
+    compose_path = _compose_file(project_dir)
+    if compose_path is None:
+        return False
+    if _compose_project_name(project_dir) != old:
+        return False
+
+    token = re.compile(r"(?<![A-Za-z0-9_.])" + re.escape(old) + r"(?![A-Za-z0-9_.])")
+    value_line = re.compile(r"^(\s*#?\s*(?:-\s+)?(?:name|image):[ \t]*)(\S+)([ \t]*\r?\n?)$")
+    body_prefix = re.compile(r"^\s*#?\s*(?:-\s+)?")
+
+    original = compose_path.read_bytes().decode()
+    lines = []
+    for line in original.splitlines(keepends=True):
+        body = body_prefix.sub("", line)
+        if body.startswith(("name:", "image:")):
+            match = value_line.match(line)
+            if match and match.group(2) == old:
+                line = f"{match.group(1)}{new}{match.group(3)}"
+        elif body.startswith("container_name:") or body.startswith(f"{old}-"):
+            line = token.sub(new, line)
+        lines.append(line)
+
+    updated = "".join(lines)
+    if updated == original:
+        return False
+    compose_path.write_bytes(updated.encode())
+    return True
+
+
+def _update_db_host_in_conf(project_dir: Path, old_host: str, new_host: str) -> bool:
+    """Points `db_host` at the renamed database container, but only when it
+    still holds the old container name: `db` or an external host is the
+    user's, not ours.
+    """
+    conf_path = project_dir / "config" / "odoo.conf"
+    if not conf_path.exists():
+        return False
+    pattern = re.compile(r"^(db_host\s*=\s*)" + re.escape(old_host) + r"([ \t]*\r?)$", re.MULTILINE)
+    original = conf_path.read_bytes().decode()
+    updated = pattern.sub(lambda m: f"{m.group(1)}{new_host}{m.group(2)}", original)
+    if updated == original:
+        return False
+    conf_path.write_bytes(updated.encode())
+    return True
 
 
 def _get_db_container_name(project_dir: Path) -> str | None:
@@ -462,6 +676,10 @@ def inspect(project_root: Path | str | None = None) -> dict:
 
     dump, filestore = _find_backup_files(root)
 
+    current_name = _compose_project_name(root)
+    inventory = _docker_inventory() if current_name else {"ok": False, "projects": {}, "volumes": {}}
+    resolved = _resolve_project_name(root, current_name, meta, inventory)
+
     return {
         "meta": raw_meta,
         "has_meta": has_meta,
@@ -479,6 +697,14 @@ def inspect(project_root: Path | str | None = None) -> dict:
         },
         "uses_private_repos": bool(meta.get("uses_private_repos")),
         "ssh_keys": list_private_keys(),
+        "project": {
+            "name": current_name,
+            "suggested_name": resolved["name"],
+            "conflict": resolved["conflict"],
+            "reason": resolved["reason"],
+            "renamable": resolved["renamable"],
+        },
+        "mailpit_port_conflict": mailpit_is_enabled(root) and any(is_port_in_use(p) for p in _MAILPIT_PORTS),
     }
 
 
@@ -489,6 +715,7 @@ def unpack(
     project_root: Path | str,
     *,
     ports: dict | None = None,
+    project_name: str | None = None,
     ssh_key: str | None = None,
     restore: bool = True,
     build: bool = False,
@@ -497,7 +724,8 @@ def unpack(
     """Starts a previously packed environment.
 
     Never prompts (RF9.2): `ports` and `ssh_key` arrive already decided by
-    the caller. When a database backup is present and `restore` is True, the
+    the caller (`project_name` too: the Compose project name the copy should
+    take, or None to keep the one in the compose). When a database backup is present and `restore` is True, the
     database and filestore are restored before the full environment starts;
     `restore=False` (`--no-restore`) skips that whole branch even when a
     backup exists, since a step failing mid-restore must never look like it
@@ -512,6 +740,12 @@ def unpack(
             "Make sure you are inside the unzipped environment directory.",
         )
 
+    if project_name is not None and not _VALID_PROJECT_NAME.match(project_name):
+        raise UnpackError(
+            f"'{project_name}' is not a valid Compose project name.",
+            "Use lowercase letters, digits, '-' and '_', starting with a letter or digit.",
+        )
+
     meta = _effective_meta(_load_shared_meta(root) or {})
     original_odoo_port = int(meta.get("odoo_port") or 8069)
     original_vsc_port = int(meta.get("vsc_port") or 8888)
@@ -520,11 +754,41 @@ def unpack(
     vsc_port = int(ports.get("vsc_port", original_vsc_port))
     ports_changed = odoo_port != original_odoo_port or vsc_port != original_vsc_port
 
+    warnings: list[str] = []
+
     if ports_changed:
         _update_ports_in_compose(root, odoo_port, vsc_port)
         report("docker-compose.yaml updated with new ports.", "ok")
 
-    warnings: list[str] = []
+    current_name = _compose_project_name(root)
+    renamed_from = None
+    if project_name and current_name is None:
+        message = "The compose file has no 'name:', so the project was not renamed."
+        report(message, "warn")
+        warnings.append(message)
+    elif project_name and project_name != current_name:
+        old_db_host = _get_db_container_name(root)
+        if _rename_project_in_compose(root, current_name, project_name):
+            renamed_from = current_name
+            report(f"Compose project renamed from '{current_name}' to '{project_name}'.", "ok")
+            new_db_host = _get_db_container_name(root)
+            if old_db_host and new_db_host:
+                if _update_db_host_in_conf(root, old_db_host, new_db_host):
+                    report(f"config/odoo.conf db_host updated to {new_db_host}.", "ok")
+            else:
+                message = "Could not read the renamed database container name; check db_host in config/odoo.conf."
+                report(message, "warn")
+                warnings.append(message)
+            leftovers = []
+            if (root / "docker-compose.override.yml").exists():
+                leftovers.append(
+                    "docker-compose.override.yml still carries the Traefik labels of the original copy; review them."
+                )
+            if mailpit_is_enabled(root):
+                leftovers.append("Mailpit is enabled: ports 1025 and 8025 are not remapped and may clash with the other copy.")
+            for message in leftovers:
+                report(message, "warn")
+                warnings.append(message)
 
     ssh_configured = False
     if ssh_key:
@@ -613,6 +877,9 @@ def unpack(
     return {
         "ports": {"odoo_port": odoo_port, "vsc_port": vsc_port},
         "ports_changed": ports_changed,
+        "project_name": _compose_project_name(root),
+        "project_renamed": renamed_from is not None,
+        "renamed_from": renamed_from,
         "ssh_configured": ssh_configured,
         "db_restored": db_restored,
         "filestore_restored": filestore_restored,

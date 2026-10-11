@@ -117,7 +117,12 @@ def compose_ps_result(*args: str, cwd: Path | None = None, timeout: int = 15) ->
     if result.returncode != 0:
         return [], result.stderr.strip()
 
-    output = result.stdout.strip()
+    return _parse_json_objects(result.stdout)
+
+
+def _parse_json_objects(stdout: str) -> tuple[list[dict], str]:
+    """Parse Compose's JSON output, either a single array or one object per line."""
+    output = stdout.strip()
     if not output:
         return [], ""
 
@@ -128,7 +133,7 @@ def compose_ps_result(*args: str, cwd: Path | None = None, timeout: int = 15) ->
             return [], "unparseable compose output"
         return [item for item in parsed if isinstance(item, dict)], ""
 
-    containers = []
+    items = []
     for line in output.splitlines():
         line = line.strip()
         if not line:
@@ -138,8 +143,19 @@ def compose_ps_result(*args: str, cwd: Path | None = None, timeout: int = 15) ->
         except json.JSONDecodeError:
             continue
         if isinstance(item, dict):
-            containers.append(item)
-    return containers, ""
+            items.append(item)
+    return items, ""
+
+
+def compose_ls(*args: str, timeout: int = 15) -> tuple[list[dict], str]:
+    """`docker compose ls --format json` as a list of dicts, plus the reason it came back empty.
+
+    A host-wide query to the daemon, so it takes no `cwd`.
+    """
+    result = run_compose_result("ls", "--format", "json", *args, timeout=timeout)
+    if not result["ok"]:
+        return [], result["stderr"]
+    return _parse_json_objects(result["stdout"])
 
 
 def is_running(container: dict) -> bool:

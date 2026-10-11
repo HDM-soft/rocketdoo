@@ -20,9 +20,14 @@ import pytest
 import rocketdoo.core.unpack as core_unpack
 from rocketdoo.core.unpack import (
     _check_ports,
+    _compose_project_name,
+    _docker_inventory,
     _find_backup_files,
     _get_db_container_name,
     _load_shared_meta,
+    _rename_project_in_compose,
+    _resolve_project_name,
+    _update_db_host_in_conf,
     _update_ports_in_compose,
 )
 
@@ -319,6 +324,345 @@ class TestUpdatePortsInCompose:
 
         assert not (project_dir / "docker-compose.yaml").exists()
         assert not (project_dir / "docker-compose.yml").exists()
+
+
+class TestComposeProjectName:
+    def test_reads_the_top_level_name(self, project_dir):
+        (project_dir / "docker-compose.yaml").write_text(COMPOSE_TEMPLATE)
+
+        assert _compose_project_name(project_dir) == "demo"
+
+    def test_a_missing_compose_is_none(self, project_dir):
+        assert _compose_project_name(project_dir) is None
+
+    def test_a_compose_without_name_is_none(self, project_dir):
+        (project_dir / "docker-compose.yaml").write_text("services:\n  web:\n    image: odoo\n")
+
+        assert _compose_project_name(project_dir) is None
+
+    def test_a_nested_name_key_is_not_the_project_name(self, project_dir):
+        """Mutation: dropping the line anchor would read `name: web` from
+        inside a service and rename the wrong thing.
+        """
+        (project_dir / "docker-compose.yaml").write_text("services:\n  web:\n    name: web\n")
+
+        assert _compose_project_name(project_dir) is None
+
+
+class _Run:
+    """Stand-in for subprocess.run keyed on the docker subcommand."""
+
+    def __init__(self, compose_ls=None, volume_ls=None):
+        self.compose_ls = compose_ls
+        self.volume_ls = volume_ls
+
+    def __call__(self, cmd, **kwargs):
+        reply = self.volume_ls if "volume" in cmd else self.compose_ls
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def _done(stdout="", code=0, stderr=""):
+    return subprocess.CompletedProcess([], code, stdout, stderr)
+
+
+class TestDockerInventory:
+    def _patch(self, monkeypatch, run):
+        monkeypatch.setattr("rocketdoo.core.compose.subprocess.run", run)
+        monkeypatch.setattr(core_unpack.subprocess, "run", run)
+
+    def test_collects_projects_and_volumes(self, monkeypatch):
+        run = _Run(
+            _done('[{"Name":"demo","Status":"running(1)","ConfigFiles":"/a/demo/docker-compose.yaml"}]'),
+            # `{project}_{key}`, which is how Compose actually names a project
+            # volume; `anon` with no label is an anonymous one.
+            _done("demo_demo-db-data\tdemo\nanon\t\n"),
+        )
+        self._patch(monkeypatch, run)
+
+        assert _docker_inventory() == {
+            "ok": True,
+            "projects": {"demo": ["/a/demo/docker-compose.yaml"]},
+            "volumes": {"demo_demo-db-data": "demo", "anon": ""},
+        }
+
+    def test_a_failing_compose_ls_is_not_ok(self, monkeypatch):
+        self._patch(monkeypatch, _Run(_done("", 1, "boom"), _done("v\tp\n")))
+
+        assert _docker_inventory()["ok"] is False
+
+    def test_a_failing_volume_ls_is_not_ok(self, monkeypatch):
+        """Mutation: "one query answering is enough" would treat a host whose
+        volumes could not be listed as having none, and call a name free.
+        """
+        self._patch(monkeypatch, _Run(_done("[]"), _done("", 1, "boom")))
+
+        assert _docker_inventory()["ok"] is False
+
+    def test_a_missing_docker_binary_is_not_ok(self, monkeypatch):
+        self._patch(monkeypatch, _Run(FileNotFoundError("docker"), FileNotFoundError("docker")))
+
+        assert _docker_inventory()["ok"] is False
+
+    def test_a_failure_carries_no_partial_data(self, monkeypatch):
+        """Mutation: keeping the projects already parsed when volume ls fails
+        hands the resolver half an inventory that reads as "complete".
+        """
+        projects = _done('[{"Name":"demo","ConfigFiles":"/a/docker-compose.yaml"}]')
+        for volume_ls in (_done("", 1, "boom"), FileNotFoundError("docker")):
+            self._patch(monkeypatch, _Run(projects, volume_ls))
+
+            assert _docker_inventory() == {"ok": False, "projects": {}, "volumes": {}}
+
+
+def _inv(projects=None, volumes=None, ok=True):
+    return {"ok": ok, "projects": projects or {}, "volumes": volumes or {}}
+
+
+class TestResolveProjectName:
+    def test_no_name_line_is_not_renamable(self, tmp_path):
+        """Mutation: renaming anyway would rewrite container_name alone, the
+        one path that destroys the other copy's environment.
+        """
+        got = _resolve_project_name(tmp_path, None, {}, _inv({"demo": ["/x/docker-compose.yaml"]}))
+
+        assert got["renamable"] is False
+        assert got["conflict"] is False
+        assert got["name"] is None
+
+    def test_an_already_renamed_copy_is_left_alone(self, tmp_path):
+        """Mutation: ignoring the manifest renames on every unpack."""
+        got = _resolve_project_name(tmp_path, "demo-2", {"project_name": "demo"}, _inv({"demo-2": ["/x/docker-compose.yaml"]}))
+
+        assert got["conflict"] is False
+        assert got["name"] == "demo-2"
+
+    def test_an_unreachable_docker_is_undetermined(self, tmp_path):
+        """`is None`, not falsy: "unknown" must not read as "free" nor as "taken"."""
+        got = _resolve_project_name(tmp_path, "demo", {}, _inv(ok=False))
+
+        assert got["conflict"] is None
+        assert got["name"] == "demo"
+        assert "Docker" in got["reason"]
+
+    def test_a_free_name_is_kept(self, tmp_path):
+        got = _resolve_project_name(tmp_path, "demo", {}, _inv({"other": ["/x/docker-compose.yaml"]}))
+
+        assert got["conflict"] is False
+        assert got["name"] == "demo"
+
+    def test_a_foreign_project_forces_a_suffix_and_is_named(self, tmp_path):
+        got = _resolve_project_name(tmp_path, "demo", {}, _inv({"demo": ["/other/demo/docker-compose.yaml"]}))
+
+        assert got["conflict"] is True
+        assert got["name"] == "demo-2"
+        assert "/other/demo" in got["reason"]
+
+    def test_our_own_project_is_not_a_conflict(self, tmp_path):
+        """Mutation: checking the name alone re-renames a copy that is
+        already running from this very directory.
+        """
+        inv = _inv({"demo": [str(tmp_path / "docker-compose.yaml")]})
+
+        got = _resolve_project_name(tmp_path, "demo", {}, inv)
+
+        assert got["conflict"] is False
+
+    def test_a_foreign_volume_alone_is_a_conflict(self, tmp_path):
+        """The original shut down with `rkd down` is absent from `compose ls`
+        but its volumes remain; restoring over them would overwrite its database.
+
+        The volume names here are the ones Docker actually produces,
+        `{project}_{key}` with an underscore. An earlier version of this test
+        used `demo-db-data`, a name Compose never writes, and so passed against
+        a check that tested `startswith("demo-")` and therefore never fired on
+        a real volume: 23 of the shut-down projects on the development machine
+        reported no conflict at all. Feed this one real shapes or it pins
+        nothing.
+        """
+        inv = _inv(volumes={"demo_demo-db-data": "demo", "demo_demo-web-data": "demo"})
+
+        got = _resolve_project_name(tmp_path, "demo", {}, inv)
+
+        assert got["conflict"] is True
+        assert got["name"] == "demo-2"
+        assert "demo_demo-db-data" in got["reason"]
+
+    def test_a_project_whose_name_merely_starts_the_same_is_not_a_conflict(self, tmp_path):
+        """`demos-v19` is not `demo`. Matching the volume name by prefix made
+        every sibling look like a collision and renamed copies that had none.
+        """
+        inv = _inv(volumes={"demos-v19_demos-v19-db-data": "demos-v19"})
+
+        assert _resolve_project_name(tmp_path, "demo", {}, inv)["conflict"] is False
+
+    def test_our_own_volume_is_not_a_conflict(self, tmp_path):
+        inv = _inv({"demo": [str(tmp_path / "docker-compose.yaml")]}, {"demo_demo-db-data": "demo"})
+
+        assert _resolve_project_name(tmp_path, "demo", {}, inv)["conflict"] is False
+
+    def test_the_suffix_keeps_counting(self, tmp_path):
+        """Mutation: a fixed `-2` would collide with the second copy."""
+        inv = _inv({"demo": ["/a/docker-compose.yaml"], "demo-2": ["/b/docker-compose.yaml"]})
+
+        assert _resolve_project_name(tmp_path, "demo", {}, inv)["name"] == "demo-3"
+
+    def test_an_exhausted_range_does_not_rename(self, tmp_path):
+        projects = {"demo": ["/a/docker-compose.yaml"]}
+        projects.update({f"demo-{k}": ["/a/docker-compose.yaml"] for k in range(2, 100)})
+
+        got = _resolve_project_name(tmp_path, "demo", {}, _inv(projects))
+
+        assert got["conflict"] is True
+        assert got["name"] == "demo"
+
+
+class TestRenameProjectInCompose:
+    RENAMES = [
+        ("name: demo\n", "name: demo-2\n"),
+        ("    image: demo\n", "    image: demo-2\n"),
+        ("container_name: odoo-demo\n", "container_name: odoo-demo-2\n"),
+        ("container_name: db-demo\n", "container_name: db-demo-2\n"),
+        ("container_name: demo-mailpit\n", "container_name: demo-2-mailpit\n"),
+        ("      - demo-web-data:/var/lib/odoo\n", "      - demo-2-web-data:/var/lib/odoo\n"),
+        ("      - demo-db-data:/var/lib/postgresql", "      - demo-2-db-data:/var/lib/postgresql"),
+        ("  demo-web-data:\n", "  demo-2-web-data:\n"),
+        ("  demo-db-data:\n", "  demo-2-db-data:\n"),
+        ("  #demo-mailpit-data:\n", "  #demo-2-mailpit-data:\n"),
+    ]
+
+    def _write(self, project_dir, text=COMPOSE_TEMPLATE):
+        path = project_dir / "docker-compose.yaml"
+        path.write_text(text)
+        return path
+
+    def test_only_the_identity_lines_change(self, project_dir):
+        """Whole-file comparison: a regex that strays past the ten identity
+        lines fails here, not in a user's compose.
+        """
+        path = self._write(project_dir)
+        expected = COMPOSE_TEMPLATE
+        for before, after in self.RENAMES:
+            assert before in expected
+            expected = expected.replace(before, after)
+
+        assert _rename_project_in_compose(project_dir, "demo", "demo-2") is True
+
+        assert path.read_text() == expected
+
+    def test_mailpit_markers_survive_and_the_block_stays_disabled(self, project_dir):
+        """Mutation: a PyYAML round trip drops the markers and the comments."""
+        from rocketdoo.core.mailpit import is_enabled
+
+        path = self._write(project_dir)
+        before = is_enabled(project_dir)
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        content = path.read_text()
+        assert "  # rkd:mailpit\n" in content
+        assert "  # /rkd:mailpit\n" in content
+        assert "  #mailpit:\n" in content
+        assert is_enabled(project_dir) == before
+
+    def test_a_project_named_postgres_keeps_the_postgres_image(self, project_dir):
+        """Mutation: token replacement on `image:` would turn the database
+        image into `postgres-2:16`.
+        """
+        path = self._write(project_dir)
+
+        _rename_project_in_compose(project_dir, "postgres", "postgres-2")
+
+        assert "    image: postgres:16\n" in path.read_text()
+
+    def test_unrelated_lines_are_untouched(self, project_dir):
+        """Mutation: a global `text.replace(old, new)` reaches all of these
+        when the project is called after a word the file uses elsewhere.
+        """
+        path = self._write(project_dir)
+        for old in ("db", "config", "odoo", "postgres", "web"):
+            path.write_text(COMPOSE_TEMPLATE)
+            _rename_project_in_compose(project_dir, old, f"{old}-2")
+            content = path.read_text()
+            for line in (
+                "      - ./config:/etc/odoo\n",
+                "      - POSTGRES_DB=postgres\n",
+                "      - postgresql_password\n",
+                "    file: odoo_pg_pass\n",
+                "      - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode\n",
+            ):
+                assert line in content, (old, line)
+
+    def test_depends_on_db_survives_a_project_named_db(self, project_dir):
+        path = self._write(project_dir)
+
+        _rename_project_in_compose(project_dir, "db", "db-2")
+
+        assert "    depends_on:\n      - db\n" in path.read_text()
+
+    def test_a_similarly_named_token_is_untouched(self, project_dir):
+        """Mutation: a bare substring match (no token boundary) renames
+        `demos`, `mydemo` and `demo_x`, which belong to something else.
+        """
+        text = COMPOSE_TEMPLATE.replace(
+            "      - demo-web-data:/var/lib/odoo\n",
+            "      - demo-web-data:/var/lib/odoo/demos\n      - demos-data:/a\n      - demo-x:/mydemo\n",
+        ).replace("    container_name: db-demo\n", "    container_name: db-demo-mydemo_demo.demos\n")
+        path = self._write(project_dir, text)
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        content = path.read_text()
+        assert "      - demo-2-web-data:/var/lib/odoo/demos\n" in content
+        assert "      - demos-data:/a\n" in content
+        assert "      - demo-2-x:/mydemo\n" in content
+        assert "    container_name: db-demo-2-mydemo_demo.demos\n" in content
+
+    def test_crlf_line_endings_are_preserved(self, project_dir):
+        """Mutation: `splitlines()` without keepends rejoins with \\n."""
+        path = project_dir / "docker-compose.yaml"
+        path.write_bytes(COMPOSE_TEMPLATE.replace("\n", "\r\n").encode())
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        raw = path.read_bytes()
+        assert b"name: demo-2\r\n" in raw
+        assert raw.count(b"\n") == raw.count(b"\r\n")
+
+    def test_a_missing_compose_returns_false(self, project_dir):
+        assert _rename_project_in_compose(project_dir, "demo", "demo-2") is False
+
+
+class TestUpdateDbHostInConf:
+    CONF = "[options]\n; comment\n#db_host = False\ndb_host = db-demo\ndb_port = 5432\n"
+
+    def _conf(self, project_dir, text):
+        (project_dir / "config").mkdir()
+        path = project_dir / "config" / "odoo.conf"
+        path.write_text(text)
+        return path
+
+    def test_rewrites_only_the_matching_host(self, project_dir):
+        path = self._conf(project_dir, self.CONF)
+
+        assert _update_db_host_in_conf(project_dir, "db-demo", "db-demo-2") is True
+
+        assert path.read_text() == self.CONF.replace("db_host = db-demo\n", "db_host = db-demo-2\n")
+
+    def test_a_host_that_is_not_the_old_container_is_left_alone(self, project_dir):
+        """Mutation: writing the new name unconditionally would clobber `db`
+        or an external server the user pointed Odoo at.
+        """
+        text = self.CONF.replace("db-demo", "db")
+        path = self._conf(project_dir, text)
+
+        assert _update_db_host_in_conf(project_dir, "db-demo", "db-demo-2") is False
+
+        assert path.read_text() == text
+
+    def test_a_missing_conf_returns_false(self, project_dir):
+        assert _update_db_host_in_conf(project_dir, "db-demo", "db-demo-2") is False
 
 
 class TestGetDbContainerName:
@@ -754,3 +1098,459 @@ class TestAManifestThatSaysThereIsNoDatabase:
         core_unpack.unpack(project_dir, restore=True)
 
         assert started[:1] == ["db"]
+
+
+class TestTheRewritersLeaveLineEndingsAlone:
+    """Both in-place rewriters read and write bytes.
+
+    `Path.read_text()` applies universal newlines, so it hands back a string
+    with every CRLF already collapsed to LF. Remapping a single port in a
+    compose saved with CRLF -- a Windows editor, or git's own core.autocrlf,
+    on a tool whose users are largely on WSL -- rewrote every line in the
+    file. Nothing asked for that, and a diff of the whole file is what the
+    receiving developer sees.
+
+    These two tests pin the read side, which is the half that misbehaves on
+    Linux. The matching `write_bytes()` only pays off where os.linesep is
+    CRLF, so reverting it alone survives every mutation run from here -- it
+    stays for the platform this suite cannot reach, not for decoration.
+
+    `_rename_project_in_compose` was written with bytes from the start; this
+    pins both, so the pair cannot drift apart again.
+    """
+
+    CRLF = (
+        b"name: demo\r\n"
+        b"services:\r\n"
+        b"  web:\r\n"
+        b"    image: demo\r\n"
+        b"    container_name: odoo-demo\r\n"
+        b"    ports:\r\n"
+        b'      - "8069:8069"\r\n'
+        b'      - "8888:8888"\r\n'
+    )
+
+    def test_remapping_a_port_keeps_crlf(self, project_dir):
+        compose = project_dir / "docker-compose.yaml"
+        compose.write_bytes(self.CRLF)
+
+        core_unpack._update_ports_in_compose(project_dir, 9069, 9888)
+
+        after = compose.read_bytes()
+        assert after.count(b"\r\n") == self.CRLF.count(b"\r\n")
+        assert b'"9069:8069"' in after
+
+    def test_renaming_the_project_keeps_crlf(self, project_dir):
+        compose = project_dir / "docker-compose.yaml"
+        compose.write_bytes(self.CRLF)
+
+        core_unpack._rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        after = compose.read_bytes()
+        assert after.count(b"\r\n") == self.CRLF.count(b"\r\n")
+        assert b"name: demo-2\r\n" in after
+
+
+def _write_named_project(project_dir):
+    """The full compose template plus the odoo.conf rkd generates."""
+    (project_dir / "docker-compose.yaml").write_text(COMPOSE_TEMPLATE)
+    (project_dir / "Dockerfile").write_text("FROM odoo:18.0\n")
+    (project_dir / "config").mkdir()
+    (project_dir / "config" / "odoo.conf").write_text("[options]\ndb_host = db-demo\ndb_port = 5432\n")
+    return project_dir
+
+
+def _stub_launch(monkeypatch):
+    monkeypatch.setattr(core_unpack, "_find_backup_files", lambda root: (None, None))
+    monkeypatch.setattr(core_unpack, "_launch_environment", lambda root, build, report: True)
+    monkeypatch.setattr(core_unpack, "_is_container_running", lambda name: True)
+    monkeypatch.setattr(core_unpack.time, "sleep", lambda *_a: None)
+
+
+class TestInspectProject:
+    def _inventory(self, monkeypatch, inventory):
+        monkeypatch.setattr(core_unpack, "_docker_inventory", lambda: inventory)
+
+    def test_conflict_is_reported_with_the_five_keys(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        self._inventory(monkeypatch, _inv(projects={"demo": ["/elsewhere/docker-compose.yaml"]}))
+
+        project = core_unpack.inspect(project_dir)["project"]
+
+        assert project == {
+            "name": "demo",
+            "suggested_name": "demo-2",
+            "conflict": True,
+            "reason": project["reason"],
+            "renamable": True,
+        }
+        assert "/elsewhere" in project["reason"]
+
+    def test_docker_down_means_unknown_and_the_name_is_kept(self, project_dir, monkeypatch):
+        """Mutation: reading an unreachable Docker as 'free' (False) or as a conflict."""
+        _write_named_project(project_dir)
+        self._inventory(monkeypatch, _inv(ok=False))
+
+        project = core_unpack.inspect(project_dir)["project"]
+
+        assert project["conflict"] is None
+        assert project["suggested_name"] == project["name"] == "demo"
+
+    def test_inspect_still_never_writes_with_a_conflict(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        self._inventory(monkeypatch, _inv(projects={"demo": ["/elsewhere/docker-compose.yaml"]}))
+        before = {p: p.read_bytes() for p in project_dir.rglob("*") if p.is_file()}
+
+        core_unpack.inspect(project_dir)
+
+        assert {p: p.read_bytes() for p in project_dir.rglob("*") if p.is_file()} == before
+
+    def test_the_old_keys_keep_their_meaning(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        self._inventory(monkeypatch, _inv())
+
+        info = core_unpack.inspect(project_dir)
+
+        for key in ("meta", "has_meta", "port_conflicts", "suggested_ports", "backups", "uses_private_repos", "ssh_keys"):
+            assert key in info
+
+    def test_mailpit_port_conflict_needs_the_block_enabled(self, project_dir, monkeypatch):
+        """Mutation: warning whenever 1025/8025 is busy, enabled or not."""
+        _write_named_project(project_dir)
+        self._inventory(monkeypatch, _inv())
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: port in (1025, 8025))
+
+        assert core_unpack.inspect(project_dir)["mailpit_port_conflict"] is False
+
+        monkeypatch.setattr(core_unpack, "mailpit_is_enabled", lambda root: True)
+        assert core_unpack.inspect(project_dir)["mailpit_port_conflict"] is True
+
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
+        assert core_unpack.inspect(project_dir)["mailpit_port_conflict"] is False
+
+
+class TestUnpackProjectName:
+    def test_without_a_name_the_compose_is_byte_for_byte_the_same(self, project_dir, monkeypatch):
+        """CA2: the clean-machine case must not change."""
+        _write_named_project(project_dir)
+        _stub_launch(monkeypatch)
+
+        report = core_unpack.unpack(project_dir, restore=False)
+
+        assert (project_dir / "docker-compose.yaml").read_text() == COMPOSE_TEMPLATE
+        assert "db_host = db-demo\n" in (project_dir / "config" / "odoo.conf").read_text()
+        assert report["project_renamed"] is False
+        assert report["renamed_from"] is None
+        assert report["project_name"] == "demo"
+        assert report["odoo_container"] == "odoo-demo"
+
+    def test_a_name_renames_compose_and_conf_before_anything_starts(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        _stub_launch(monkeypatch)
+        seen = {}
+
+        def launch(root, build, report):
+            seen["compose"] = (root / "docker-compose.yaml").read_text()
+            seen["conf"] = (root / "config" / "odoo.conf").read_text()
+            return True
+
+        monkeypatch.setattr(core_unpack, "_launch_environment", launch)
+
+        report = core_unpack.unpack(project_dir, project_name="demo-2", restore=False)
+
+        expected = (project_dir / "docker-compose.yaml").read_text()
+        assert seen["compose"] == expected
+        assert "name: demo-2\n" in expected
+        assert "container_name: db-demo-2\n" in expected
+        assert "db_host = db-demo-2\n" in seen["conf"]
+        assert report["project_name"] == "demo-2"
+        assert report["project_renamed"] is True
+        assert report["renamed_from"] == "demo"
+        assert report["odoo_container"] == "odoo-demo-2"
+
+    def test_restore_reads_the_renamed_db_container(self, project_dir, monkeypatch):
+        """Mutation: renaming after the restore leaves it aimed at the other copy's database."""
+        _write_named_project(project_dir)
+        _stub_launch(monkeypatch)
+        dump = project_dir / "db_demo_20240101_010101.dump"
+        dump.write_bytes(b"x")
+        monkeypatch.setattr(core_unpack, "_find_backup_files", lambda root: (dump, None))
+        monkeypatch.setattr(core_unpack, "_launch_db_only", lambda root, report: True)
+        monkeypatch.setattr(core_unpack, "_wait_for_postgres", lambda c, r: True)
+        monkeypatch.setattr(core_unpack, "_clear_generated_assets", lambda *a: None)
+        restored_into = []
+        monkeypatch.setattr(core_unpack, "_restore_database", lambda c, d, r: restored_into.append(c) or "demo")
+
+        core_unpack.unpack(project_dir, project_name="demo-2")
+
+        assert restored_into == ["db-demo-2"]
+
+    def test_the_same_name_rewrites_nothing(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        _stub_launch(monkeypatch)
+
+        report = core_unpack.unpack(project_dir, project_name="demo", restore=False)
+
+        assert (project_dir / "docker-compose.yaml").read_text() == COMPOSE_TEMPLATE
+        assert report["project_renamed"] is False
+
+    @pytest.mark.parametrize("bad", ["Demo 2", "-demo", "demo/2", ""])
+    def test_an_invalid_name_raises_before_writing(self, project_dir, monkeypatch, bad):
+        """Mutation: validating after the ports/compose were already rewritten."""
+        _write_named_project(project_dir)
+        _stub_launch(monkeypatch)
+
+        with pytest.raises(core_unpack.UnpackError) as exc:
+            core_unpack.unpack(project_dir, project_name=bad, ports={"odoo_port": 9999, "vsc_port": 9998}, restore=False)
+
+        assert exc.value.hint
+        assert (project_dir / "docker-compose.yaml").read_text() == COMPOSE_TEMPLATE
+
+    def test_a_compose_without_name_is_not_touched(self, project_dir, monkeypatch):
+        """Mutation: renaming container_name alone is the destructive path."""
+        _write_project(project_dir)
+        before = (project_dir / "docker-compose.yaml").read_text()
+        _stub_launch(monkeypatch)
+
+        report = core_unpack.unpack(project_dir, project_name="demo-2", restore=False)
+
+        assert (project_dir / "docker-compose.yaml").read_text() == before
+        assert report["project_renamed"] is False
+        assert any("name:" in w for w in report["warnings"])
+
+    def test_an_unreadable_db_container_warns_about_db_host(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        _stub_launch(monkeypatch)
+        monkeypatch.setattr(core_unpack, "_get_db_container_name", lambda root: None)
+
+        report = core_unpack.unpack(project_dir, project_name="demo-2", restore=False)
+
+        assert report["project_renamed"] is True
+        assert "db_host = db-demo\n" in (project_dir / "config" / "odoo.conf").read_text()
+        assert any("db_host" in w for w in report["warnings"])
+
+    def test_override_and_mailpit_leftovers_are_warned(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        (project_dir / "docker-compose.override.yml").write_text("services: {}\n")
+        monkeypatch.setattr(core_unpack, "mailpit_is_enabled", lambda root: True)
+        _stub_launch(monkeypatch)
+
+        report = core_unpack.unpack(project_dir, project_name="demo-2", restore=False)
+
+        assert any("override" in w for w in report["warnings"])
+        assert any("Mailpit" in w for w in report["warnings"])
+
+    def test_no_leftover_warnings_when_there_are_no_leftovers(self, project_dir, monkeypatch):
+        """Mutation: warning about an override that is not there."""
+        _write_named_project(project_dir)
+        _stub_launch(monkeypatch)
+
+        report = core_unpack.unpack(project_dir, project_name="demo-2", restore=False)
+
+        assert report["warnings"] == []
+
+    def test_no_warnings_without_a_rename(self, project_dir, monkeypatch):
+        _write_named_project(project_dir)
+        (project_dir / "docker-compose.override.yml").write_text("services: {}\n")
+        _stub_launch(monkeypatch)
+
+        assert core_unpack.unpack(project_dir, restore=False)["warnings"] == []
+
+
+class TestUnpackCliProjectName:
+    @pytest.fixture
+    def cli(self, project_dir, monkeypatch):
+        from click.testing import CliRunner
+
+        from rocketdoo import unpack_environment
+        from rocketdoo.cli import main
+
+        _write_named_project(project_dir)
+        calls = {}
+
+        def fake_unpack(root, **kwargs):
+            calls.update(kwargs)
+            return {
+                "ports": {"odoo_port": 8069, "vsc_port": 8888},
+                "started": True,
+                "launched": True,
+                "odoo_container": "odoo-demo",
+                "logs_tail": [],
+                "warnings": [],
+                "project_name": kwargs["project_name"] or "demo",
+                "project_renamed": bool(kwargs["project_name"]),
+                "renamed_from": "demo" if kwargs["project_name"] else None,
+            }
+
+        def set_info(project, mailpit=False):
+            info = {
+                "meta": {"rkd_shared": True},
+                "has_meta": True,
+                "port_conflicts": {"odoo_port": False, "vsc_port": False},
+                "suggested_ports": {"odoo_port": 8069, "vsc_port": 8888},
+                "uses_private_repos": False,
+                "ssh_keys": [],
+                "project": project,
+                "mailpit_port_conflict": mailpit,
+            }
+            monkeypatch.setattr(unpack_environment, "inspect", lambda root: info)
+
+        monkeypatch.setattr(unpack_environment, "unpack", fake_unpack)
+        monkeypatch.setattr(unpack_environment.questionary, "confirm", lambda *a, **k: _Answer(True))
+
+        def run(*args):
+            return CliRunner().invoke(main, ["unpack", "--no-ssh", *args])
+
+        return run, set_info, calls, unpack_environment
+
+    CONFLICT = {"name": "demo", "suggested_name": "demo-2", "conflict": True, "reason": "taken", "renamable": True}
+    FREE = {"name": "demo", "suggested_name": "demo", "conflict": False, "reason": "", "renamable": True}
+    UNKNOWN = {"name": "demo", "suggested_name": "demo", "conflict": None, "reason": "no docker", "renamable": True}
+
+    def test_yes_passes_the_suggestion_and_says_so(self, cli):
+        run, set_info, calls, _ = cli
+        set_info(self.CONFLICT)
+
+        result = run("--yes")
+
+        assert calls["project_name"] == "demo-2"
+        assert "demo-2" in result.output
+        assert "renamed" in result.output
+
+    def test_no_conflict_passes_none(self, cli):
+        run, set_info, calls, _ = cli
+        set_info(self.FREE)
+
+        run("--yes")
+
+        assert calls["project_name"] is None
+
+    def test_unknown_passes_none_and_warns(self, cli):
+        run, set_info, calls, _ = cli
+        set_info(self.UNKNOWN)
+
+        result = run("--yes")
+
+        assert calls["project_name"] is None
+        assert "not verified" in result.output
+
+    def test_declining_the_rename_passes_none_and_says_what_that_costs(self, cli, monkeypatch):
+        """The warning has to name the real consequence.
+
+        Sharing `name:` is not a conflict for Compose, it is adoption: `up`
+        takes the other copy's containers as this project's, recreates them and
+        mounts its volumes. An earlier wording said `up` "will probably fail",
+        which reads as a harmless retry and is the opposite of what happens.
+        """
+        run, set_info, calls, unpack_environment = cli
+        set_info(self.CONFLICT)
+        monkeypatch.setattr(unpack_environment.questionary, "confirm", lambda *a, **k: _Answer(False))
+
+        result = run()
+
+        assert calls["project_name"] is None
+        output = " ".join(result.output.split())
+        assert "recreate the other copy's containers" in output
+        assert "overwrite its database" in output
+
+    def test_yes_does_not_ask(self, cli, monkeypatch):
+        """Mutation: dropping the `auto_accept` branch left `--yes` asking.
+
+        The other tests patch `questionary.confirm` to answer yes, so they
+        cannot tell "accepted because of --yes" from "asked and was told yes".
+        Here the prompt itself is the failure: without a terminal questionary
+        raises, and `rkd unpack --yes` runs in scripts.
+        """
+        run, set_info, calls, unpack_environment = cli
+        set_info(self.CONFLICT)
+
+        def must_not_ask(*_a, **_k):
+            raise AssertionError("--yes must not reach questionary")
+
+        monkeypatch.setattr(unpack_environment.questionary, "confirm", must_not_ask)
+
+        result = run("--yes")
+
+        assert result.exit_code == 0, result.output
+        assert calls["project_name"] == "demo-2"
+
+    def test_accepting_the_rename_passes_the_suggestion(self, cli):
+        run, set_info, calls, _ = cli
+        set_info(self.CONFLICT)
+
+        run()
+
+        assert calls["project_name"] == "demo-2"
+
+    def test_without_a_terminal_it_declines_cleanly(self, cli, monkeypatch):
+        """EOFError from questionary must not become a traceback in a script."""
+        run, set_info, calls, unpack_environment = cli
+        set_info(self.CONFLICT)
+
+        class _NoTerminal:
+            def ask(self):
+                raise EOFError
+
+        monkeypatch.setattr(unpack_environment.questionary, "confirm", lambda *a, **k: _NoTerminal())
+
+        result = run()
+
+        assert result.exception is None, result.output
+        assert calls["project_name"] is None
+        assert "--yes" in result.output
+
+    def test_mailpit_port_conflict_suggests_mail_off(self, cli):
+        run, set_info, _, _ = cli
+        set_info(self.FREE, mailpit=True)
+
+        assert "rkd mail off" in run("--yes").output
+
+        set_info(self.FREE, mailpit=False)
+        assert "rkd mail off" not in run("--yes").output
+
+
+class _Answer:
+    def __init__(self, value):
+        self.value = value
+
+    def ask(self):
+        return self.value
+
+
+class TestTheRenameIsAllOrNothing:
+    """`_rename_project_in_compose` refuses a compose it cannot rename whole.
+
+    The guard used to live only in `unpack()`. Reaching the helper directly
+    with a compose whose `name:` says something else -- which a quoted
+    `name: "demo"` used to produce from inside this very module -- rewrote the
+    `container_name` lines and left `name:` alone: the exact shape that makes
+    Compose adopt and recreate the other copy's containers.
+    """
+
+    COMPOSE = "name: otro\nservices:\n  db:\n    container_name: db-demo\n"
+
+    def test_a_compose_naming_another_project_is_not_touched(self, project_dir):
+        compose = project_dir / "docker-compose.yaml"
+        compose.write_text(self.COMPOSE)
+
+        assert core_unpack._rename_project_in_compose(project_dir, "demo", "demo-2") is False
+        assert compose.read_text() == self.COMPOSE
+
+    def test_a_quoted_name_is_read_without_its_quotes(self, project_dir):
+        """`name: "demo"` is the project `demo`, not `"demo"`."""
+        compose = project_dir / "docker-compose.yaml"
+        compose.write_text('name: "demo"\nservices:\n  db:\n    container_name: db-demo\n')
+
+        assert core_unpack._compose_project_name(project_dir) == "demo"
+
+    def test_a_crlf_compose_still_reports_its_project_name(self, project_dir):
+        """`[ \\t]*$` does not match the `\\r` CRLF leaves before the newline.
+
+        The name came back as None, so a compose saved on Windows looked like
+        one with no `name:` at all and the conflict check quietly skipped it --
+        on a tool whose users are largely on WSL.
+        """
+        compose = project_dir / "docker-compose.yaml"
+        compose.write_bytes(b"name: demo\r\nservices:\r\n  db:\r\n    container_name: db-demo\r\n")
+
+        assert core_unpack._compose_project_name(project_dir) == "demo"
