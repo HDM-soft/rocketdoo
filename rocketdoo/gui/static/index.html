@@ -304,7 +304,7 @@ const L = {
     cliInstanceStatus: `Muestra los entornos de despliegue configurados`,
     cliLogs: `Transmite los logs del contenedor en vivo`,
     cliMail: `Activa o desactiva el servidor SMTP de pruebas Mailpit`,
-    cliMailOpen: `Abre la interfaz web de Mailpit en localhost:8025`,
+    cliMailOpen: `Abre la interfaz web de Mailpit en el puerto que muestra la pestaña Servicios`,
     cliPack: `Empaqueta el entorno (código + BD) en un ZIP`,
     cliQuickReference: `Referencia rápida de la CLI`,
     cliRestart: `Reinicia todos los servicios`,
@@ -385,7 +385,7 @@ const L = {
     helpModulesDesc: `Escanea el directorio <code style="color:var(--lk);font-size:11px;">addons/</code> y lista todos los módulos de Odoo con su versión y dependencias. La sección <b style="color:var(--tx);">Repositorios externos</b> muestra y edita <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — agrega, edita o elimina repos y luego dispara una reconstrucción de Docker para traer los cambios al contenedor.`,
     helpPackDesc: `Crea un ZIP portable de todo el entorno — código fuente, volcado de la base de datos y filestore — para compartir con un compañero. Quien lo recibe extrae el ZIP y ejecuta <b style="color:var(--tx);">Desempaquetar</b> para restaurarlo con un solo comando. Las claves SSH nunca se incluyen en el archivo.`,
     helpProjectsDesc: `Recorre el sistema de archivos para abrir proyectos Rocketdoo existentes. Cambiar de proyecto reinicia el servidor de la GUI en el nuevo directorio para que todas las pantallas reflejen el contexto seleccionado.`,
-    helpServicesDesc: `<b style="color:var(--tx);">Mailpit</b> — activa o desactiva un servidor SMTP de pruebas. Odoo le envía los correos en vez de a un servidor real; abre <code style="color:var(--lk);font-size:11px;">localhost:8025</code> para inspeccionarlos. <b style="color:var(--tx);">Traefik</b> — configura un proxy inverso con HTTPS local o de producción, y obtén instrucciones para actualizar tu archivo hosts.`,
+    helpServicesDesc: `<b style="color:var(--tx);">Mailpit</b> — activa o desactiva un servidor SMTP de pruebas. Odoo le envía los correos en vez de a un servidor real; abre su interfaz web, en el puerto que muestra la tarjeta, para inspeccionarlos. <b style="color:var(--tx);">Traefik</b> — configura un proxy inverso con HTTPS local o de producción, y obtén instrucciones para actualizar tu archivo hosts.`,
     helpSetupDesc: `<b style="color:var(--tx);">Scaffold</b> copia los archivos base de la plantilla (Dockerfile, docker-compose, odoo.conf…) al directorio actual. El <b style="color:var(--tx);">asistente de inicialización</b> te guía para elegir la versión de Odoo, la edición, los puertos, las claves SSH y los repos de terceros, y luego genera todas las plantillas.`,
     helpSubtitle: `Referencia de todas las funciones de la GUI con sus equivalentes de línea de comandos`,
     helpTitle: `Ayuda y guía rápida`,
@@ -681,7 +681,7 @@ const L = {
     cliInstanceStatus: `Show configured deployment environments`,
     cliLogs: `Stream container logs (live follow)`,
     cliMail: `Toggle Mailpit SMTP testing server`,
-    cliMailOpen: `Open Mailpit web UI at localhost:8025`,
+    cliMailOpen: `Open the Mailpit web UI at the port shown in the Services tab`,
     cliPack: `Package environment (code + DB) as a ZIP`,
     cliQuickReference: `CLI Quick Reference`,
     cliRestart: `Restart all services`,
@@ -762,7 +762,7 @@ const L = {
     helpModulesDesc: `Scans the <code style="color:var(--lk);font-size:11px;">addons/</code> directory and lists every Odoo module with its version and dependencies. The <b style="color:var(--tx);">External Repos</b> section shows and edits <code style="color:var(--lk);font-size:11px;">gitman.yaml</code> — add, edit, or delete repos and then trigger a Docker rebuild to pull the changes into the container.`,
     helpPackDesc: `Create a portable ZIP of the entire environment — source code, database dump, and filestore — to share with a teammate. The recipient extracts the ZIP and runs <b style="color:var(--tx);">Unpack</b> to restore it with a single command. SSH keys are never included in the archive.`,
     helpProjectsDesc: `Browse the filesystem to open existing Rocketdoo projects. Switching a project restarts the GUI server in the new directory so all views reflect the selected context.`,
-    helpServicesDesc: `<b style="color:var(--tx);">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open <code style="color:var(--lk);font-size:11px;">localhost:8025</code> to inspect them. <b style="color:var(--tx);">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.`,
+    helpServicesDesc: `<b style="color:var(--tx);">Mailpit</b> — toggle an SMTP testing server. Odoo sends emails to it instead of a real server; open its web UI, at the port the card shows, to inspect them. <b style="color:var(--tx);">Traefik</b> — configure a reverse proxy with local or production HTTPS, and get instructions to update your hosts file.`,
     helpSetupDesc: `<b style="color:var(--tx);">Scaffold</b> copies the base template files (Dockerfile, docker-compose, odoo.conf…) into the current directory. <b style="color:var(--tx);">Init Wizard</b> walks you through choosing the Odoo version, edition, ports, SSH keys, and third-party repos, then renders all templates.`,
     helpSubtitle: `Reference for all GUI features with their CLI equivalents`,
     helpTitle: `Help & Quick Guide`,
@@ -2030,7 +2030,7 @@ const Instances = {
 ══════════════════════════════════════════════════════════════════════════ */
 const Services = {
   setup() {
-    const mail = ref({ enabled:false, running:false })
+    const mail = ref({ enabled:false, running:false, smtp_port:null, web_port:null })
     const traefik = ref({ enabled:false, mode:null, domain:null, override_exists:false })
     const busy = ref(true)
     const mailBusy = ref(false)
@@ -2119,12 +2119,12 @@ const Services = {
           <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">{{ $t('container') }}</span>
             <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:var(--mu);">{{ mail.running?$t('runningState'):$t('stoppedState') }}</span></div>
           </div>
-          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">SMTP</span><span style="color:var(--tx);font-family:monospace;">:1025</span></div>
-          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('webUiLabel') }}</span><span style="color:var(--tx);font-family:monospace;">:8025</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">SMTP</span><span style="color:var(--tx);font-family:monospace;">{{ mail.smtp_port ? ':' + mail.smtp_port : '—' }}</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('webUiLabel') }}</span><span style="color:var(--tx);font-family:monospace;">{{ mail.web_port ? ':' + mail.web_port : '—' }}</span></div>
         </div>
 
         <div style="border-top:1px solid var(--ln);padding-top:12px;">
-          <a href="http://localhost:8025" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
+          <a v-if="mail.web_port" :href="'http://localhost:' + mail.web_port" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
             <span v-html="I.ext"></span> {{ $t('openMailpit') }}
           </a>
         </div>

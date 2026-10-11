@@ -116,15 +116,18 @@ def _host_port(port_mapping) -> int | None:
         return None
 
 
-def _iter_compose_files(exclude_dir=None, max_depth: int = _MAX_SCAN_DEPTH):
+def _iter_compose_files(exclude_dir=None, max_depth: int = _MAX_SCAN_DEPTH, base=None):
     """
     Recorre los archivos de compose de proyectos hermanos/padres.
 
     Excluye el proyecto actual (o 'exclude_dir'), poda directorios ocultos y
     pesados, limita la profundidad y no devuelve el mismo archivo dos veces
     aunque las raíces de búsqueda se solapen.
+
+    'base' reemplaza al directorio de trabajo como origen de las raíces de
+    búsqueda, para quien conoce la raíz de su proyecto y no depende del cwd.
     """
-    cwd = Path.cwd().resolve()
+    cwd = Path(base if base else Path.cwd()).resolve()
     try:
         excluded = Path(exclude_dir).resolve() if exclude_dir else cwd
     except OSError:
@@ -169,7 +172,7 @@ def _iter_compose_files(exclude_dir=None, max_depth: int = _MAX_SCAN_DEPTH):
                     yield compose_file
 
 
-def collect_declared_ports(exclude_dir=None) -> dict[int, str]:
+def collect_declared_ports(exclude_dir=None, base=None) -> dict[int, str]:
     """
     Devuelve {puerto_host: nombre_de_proyecto} leyendo cada compose una sola vez.
 
@@ -178,7 +181,7 @@ def collect_declared_ports(exclude_dir=None) -> dict[int, str]:
     futura.
     """
     declared: dict[int, str] = {}
-    for compose_file in _iter_compose_files(exclude_dir):
+    for compose_file in _iter_compose_files(exclude_dir, base=base):
         try:
             with open(compose_file, "r", encoding="utf-8") as f:
                 content = yaml.safe_load(f)

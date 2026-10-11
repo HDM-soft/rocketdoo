@@ -10,7 +10,21 @@ from rocketdoo.core.service import ServiceError
 def _scaffolded_project(tmp_path):
     tmp_path.mkdir(exist_ok=True)
     compose = tmp_path / "docker-compose.yaml"
-    compose.write_text("# rkd:mailpit\n  mailpit:\n    image: x\n# /rkd:mailpit\n")
+    # The shape templates/docker-compose.yaml.jinja actually emits: the block
+    # commented out, with its two published ports. The old fixture wrote it
+    # already uncommented and with no `ports:`, so `enable()` here always took
+    # the already-enabled early return and the port assertions pinned
+    # `None`/`None` as if that were the normal case (#234).
+    compose.write_text(
+        "  # rkd:mailpit\n"
+        "  #mailpit:\n"
+        "  #  image: axllent/mailpit:latest\n"
+        "  #  container_name: demo-mailpit\n"
+        "  #  ports:\n"
+        '  #    - "1025:1025"\n'
+        '  #    - "8025:8025"\n'
+        "  # /rkd:mailpit\n"
+    )
     conf_dir = tmp_path / "config"
     conf_dir.mkdir()
     (conf_dir / "odoo.conf").write_text("[options]\n; smtp_server = localhost\n; smtp_port = 25\n; smtp_ssl = False\n")
@@ -25,6 +39,10 @@ def _patch_externals(monkeypatch, db_names=("dev",)):
     monkeypatch.setattr(mailpit, "databases_result", lambda *a, **k: (list(db_names), ""))
     monkeypatch.setattr(mailpit, "enable_mailpit_server", lambda *a, **k: "")
     monkeypatch.setattr(mailpit, "disable_mailpit_server", lambda *a, **k: (1, ""))
+    # Without these the port choice reads the real host and these tests say
+    # different things on different machines -- 8028 here, 8025 on a quiet one.
+    monkeypatch.setattr(mailpit, "is_port_in_use", lambda port: False)
+    monkeypatch.setattr(mailpit, "collect_declared_ports", lambda **_k: {})
 
 
 class TestMailpitErrorIsAServiceError:
@@ -79,7 +97,9 @@ class TestIsEnabledAndStatus:
         _patch_externals(monkeypatch)
         root = _scaffolded_project(tmp_path)
         enable(root)
-        assert status(root) == {"enabled": True, "running": False}
+        # The ports the template publishes, read back from the file. They were
+        # pinned as None while the fixture wrote a block with no `ports:`.
+        assert status(root) == {"enabled": True, "running": False, "smtp_port": 1025, "web_port": 8025}
 
 
 class TestTheDatabaseIsResolvedFromProjectRoot:

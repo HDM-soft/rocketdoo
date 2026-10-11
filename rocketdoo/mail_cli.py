@@ -24,6 +24,7 @@ from rocketdoo.core.mailpit import (
     _resolve_db,
     disable,
     enable,
+    published_ports,
 )
 
 # MAILPIT_SMTP_HOST is not used below: tests/test_mail_cli.py reads it off
@@ -31,8 +32,6 @@ from rocketdoo.core.mailpit import (
 from rocketdoo.core.odoo_db import MAILPIT_SERVER_NAME, MAILPIT_SMTP_HOST, mail_servers  # noqa: F401
 
 console = Console()
-
-_MAILPIT_WEB_PORT = 8025
 
 
 # ─── status presentation helpers ─────────────────────────────────────────────
@@ -91,6 +90,20 @@ def _print_disable_mail_server(report: dict) -> None:
         console.print(f"[dim]no Rocketdoo mail server found in database {report['db']}[/dim]")
 
 
+def _port_rows(web_port: int | None, smtp_port: int | None) -> list[str]:
+    rows = []
+    if web_port:
+        rows.append(f"[dim]Web UI :[/dim]  [cyan underline]http://localhost:{web_port}[/cyan underline]\n")
+    if smtp_port:
+        rows.append(f"[dim]SMTP   :[/dim]  localhost:{smtp_port}\n")
+    return rows
+
+
+def _describe_ports(web_port: int | None, smtp_port: int | None) -> str:
+    named = [f"{name} {port}" for name, port in (("Web UI", web_port), ("SMTP", smtp_port)) if port]
+    return ", ".join(named)
+
+
 # ─── command group ────────────────────────────────────────────────────────────
 
 
@@ -136,7 +149,9 @@ def mail_on(db):
     if not report["changed"]:
         console.print("\n[green]Mailpit is already enabled.[/green]")
         _print_enable_mail_server(report)
-        console.print(f"[dim]Web UI → http://localhost:{_MAILPIT_WEB_PORT}[/dim]\n")
+        if report["web_port"]:
+            console.print(f"[dim]Web UI → http://localhost:{report['web_port']}[/dim]")
+        console.print()
         return
 
     console.print()
@@ -163,17 +178,24 @@ def mail_on(db):
     else:
         console.print("[yellow]⚠ Could not start mailpit (is Docker running?)[/yellow]")
 
+    if report["ports_moved"]:
+        console.print(
+            "[yellow]⚠[/yellow] the default Mailpit ports were taken; published on "
+            f"{_describe_ports(report['web_port'], report['smtp_port'])}"
+        )
+
     _print_enable_mail_server(report)
 
     if report["restarted"]:
         console.print(f"[green]✓[/green] {_WEB_SERVICE} restarted")
 
+    rows = "".join(_port_rows(report["web_port"], report["smtp_port"]))
     console.print()
     console.print(
         Panel(
             "[bold green]Mailpit is ready[/bold green]\n\n"
-            f"[dim]Web UI :[/dim]  [cyan underline]http://localhost:{_MAILPIT_WEB_PORT}[/cyan underline]\n"
-            f"[dim]SMTP   :[/dim]  localhost:{_MAILPIT_SMTP_PORT}\n\n"
+            f"{rows}"
+            f"[dim]Odoo reaches it at mailpit:{_MAILPIT_SMTP_PORT} inside the Compose network.[/dim]\n\n"
             "[dim]All outgoing emails from Odoo will be captured here instead of being sent.[/dim]",
             border_style="green",
             box=box.ROUNDED,
@@ -248,8 +270,11 @@ def mail_status(db):
     table.add_row("Container running", "[green]Yes[/green]" if running else "[dim]No[/dim]")
 
     if running:
-        table.add_row("Web UI", f"[cyan underline]http://localhost:{_MAILPIT_WEB_PORT}[/cyan underline]")
-        table.add_row("SMTP", f"localhost:{_MAILPIT_SMTP_PORT}")
+        ports = published_ports()
+        if ports["web_port"]:
+            table.add_row("Web UI", f"[cyan underline]http://localhost:{ports['web_port']}[/cyan underline]")
+        if ports["smtp_port"]:
+            table.add_row("SMTP", f"localhost:{ports['smtp_port']}")
 
     table.add_row("Mailpit mail server", f"[{mailpit_style}]{mailpit_line}[/{mailpit_style}]")
     table.add_row("Other active servers", _format_other_servers(others))
@@ -276,6 +301,11 @@ def mail_open():
         console.print("\n[yellow]Mailpit is not running.[/yellow] Run [cyan bold]rkd mail on[/cyan bold] first.\n")
         return
 
-    url = f"http://localhost:{_MAILPIT_WEB_PORT}"
+    web_port = published_ports()["web_port"]
+    if not web_port:
+        console.print("\n[yellow]docker-compose.yaml does not publish the Mailpit Web UI.[/yellow]\n")
+        return
+
+    url = f"http://localhost:{web_port}"
     webbrowser.open(url)
     console.print(f"\n[green]✓[/green] Opened [cyan underline]{url}[/cyan underline]\n")

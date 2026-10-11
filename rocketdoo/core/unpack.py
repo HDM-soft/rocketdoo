@@ -22,6 +22,7 @@ from pathlib import Path
 
 from rocketdoo.core.compose import compose_ls, run_compose, run_compose_result
 from rocketdoo.core.mailpit import is_enabled as mailpit_is_enabled
+from rocketdoo.core.mailpit import published_ports as mailpit_published_ports
 from rocketdoo.core.pack import BACKUP_FILENAME
 from rocketdoo.core.port_validation import find_available_port, is_port_in_use
 from rocketdoo.core.project_info import project_exists, read_docker_compose
@@ -133,7 +134,6 @@ def _update_ports_in_compose(project_dir: Path, new_odoo_port: int, new_vsc_port
 _PROJECT_NAME_LINE = re.compile(r"^name:[ \t]*(\S+)[ \t]*\r?$", re.MULTILINE)
 _PROJECT_NAME_MAX_SUFFIX = 99
 _VALID_PROJECT_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
-_MAILPIT_PORTS = (1025, 8025)
 
 
 def _compose_file(project_dir: Path) -> Path | None:
@@ -694,6 +694,8 @@ def inspect(project_root: Path | str | None = None) -> dict:
     ports_reserved = bool(resolved["conflict"])
     suggested_odoo_port, suggested_vsc_port, _ = _check_ports(meta, name_taken=ports_reserved)
 
+    mailpit_ports = [port for port in mailpit_published_ports(root).values() if port] if mailpit_is_enabled(root) else []
+
     return {
         "meta": raw_meta,
         "has_meta": has_meta,
@@ -722,7 +724,8 @@ def inspect(project_root: Path | str | None = None) -> dict:
             "reason": resolved["reason"],
             "renamable": resolved["renamable"],
         },
-        "mailpit_port_conflict": mailpit_is_enabled(root) and any(is_port_in_use(p) for p in _MAILPIT_PORTS),
+        "mailpit_ports": mailpit_ports,
+        "mailpit_port_conflict": any(is_port_in_use(p) for p in mailpit_ports),
     }
 
 
@@ -803,7 +806,7 @@ def unpack(
                     "docker-compose.override.yml still carries the Traefik labels of the original copy; review them."
                 )
             if mailpit_is_enabled(root):
-                leftovers.append("Mailpit is enabled: ports 1025 and 8025 are not remapped and may clash with the other copy.")
+                leftovers.append("Mailpit is enabled: its published ports are not remapped and may clash with the other copy.")
             for message in leftovers:
                 report(message, "warn")
                 warnings.append(message)

@@ -84,6 +84,15 @@ class TestCollectDeclaredPorts:
         (broken / "docker-compose.yaml").write_text("services: [unclosed\n")
         assert pv.collect_declared_ports()[8070] == "other-a"
 
+    def test_base_anchors_the_scan_to_the_project_not_the_cwd(self, workspace, tmp_path, monkeypatch):
+        elsewhere = tmp_path / "far" / "a" / "b" / "c" / "d" / "e"
+        elsewhere.mkdir(parents=True)
+        monkeypatch.chdir(elsewhere)
+        assert 8070 not in pv.collect_declared_ports(exclude_dir=workspace)
+        declared = pv.collect_declared_ports(exclude_dir=workspace, base=workspace)
+        assert declared[8070] == "other-a"
+        assert 8069 not in declared
+
     def test_reservation_message_names_the_other_project(self, workspace):
         msg = pv.get_port_reservation(8070)
         assert msg and "other-a" in msg and "8070" in msg
