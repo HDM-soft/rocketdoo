@@ -912,3 +912,40 @@ class TestGuiRefusesABusyPort:
         flat = " ".join(result.output.split())
         assert "rkd gui" in flat
         assert "--port" in flat
+
+
+class TestUnpackProjectName:
+    """The GUI has no terminal, so it auto-accepts the suggested project name
+    the same way it accepts the suggested ports.
+    """
+
+    def _info(self, suggested):
+        return {
+            "meta": {},
+            "ssh_keys": [],
+            "suggested_ports": {"odoo_port": 8069, "vsc_port": 8888},
+            "project": {"name": "demo", "suggested_name": suggested, "conflict": True, "reason": "", "renamable": True},
+        }
+
+    def test_unpack_passes_the_suggested_name(self, client, monkeypatch):
+        from rocketdoo.gui.api import pack_ops
+
+        seen = {}
+        monkeypatch.setattr(pack_ops.core_unpack, "inspect", lambda root: self._info("demo-2"))
+
+        def fake_unpack(root, **kwargs):
+            seen.update(kwargs)
+            return {"started": True, "logs_tail": []}
+
+        monkeypatch.setattr(pack_ops.core_unpack, "unpack", fake_unpack)
+
+        assert client.post("/api/pack/unpack", json={}).json()["ok"] is True
+        assert seen["project_name"] == "demo-2"
+
+    def test_unpack_info_exposes_the_project(self, client, monkeypatch):
+        from rocketdoo.gui.api import pack_ops
+
+        info = self._info("demo-2")
+        monkeypatch.setattr(pack_ops.core_unpack, "inspect", lambda root: info)
+
+        assert client.get("/api/pack/unpack-info").json()["project"] == info["project"]
