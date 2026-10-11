@@ -22,6 +22,7 @@ import yaml
 from click.testing import CliRunner
 
 from rocketdoo.cli import main
+from rocketdoo.core.unpack import _rename_project_in_compose
 from rocketdoo.init_project import init_from_profile
 from rocketdoo.scaffold import scaffold_project
 
@@ -70,11 +71,9 @@ def _installed_module_count(root, database):
 def _bind_port(port):
     """Occupies a host port with a plain listening socket.
 
-    This is the trigger `_check_ports` reacts to. A second live copy of the
-    same rkd project would occupy the port too, but it would also collide on
-    `container_name` (fixed per project_name, see the report) before the
-    port ever came into play -- a plain socket isolates the port-conflict
-    path from that unrelated, pre-existing limitation.
+    This is the trigger `_check_ports` reacts to. A plain socket isolates the
+    port-conflict path from the project-name conflict, which
+    `test_two_copies_of_a_project_coexist` covers on its own.
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -127,11 +126,9 @@ def test_pack_then_unpack_restores_the_database(tmp_path, docker_available, monk
         assert result.exit_code == 0, result.output
         assert zip_path.exists()
 
-        # Stopped and removed *before* the restore starts: `container_name`
-        # is derived from project_name alone (init_project.py), identical in
-        # every copy of a shared project, so two live copies of this exact
-        # project collide on the container name regardless of ports -- a
-        # limitation this test works around, not fixes (see the report).
+        # Removed before the restore only to keep this test about the
+        # database; the original does not have to come down, see
+        # `test_two_copies_of_a_project_coexist`.
         _compose(original, "down", "-v", timeout=300, check=False)
 
         restore.mkdir()
@@ -165,3 +162,81 @@ def test_pack_then_unpack_restores_the_database(tmp_path, docker_available, monk
         subprocess.run(["docker", "rmi", "-f", PROJECT_NAME], capture_output=True)
         shutil.rmtree(original, ignore_errors=True)
         shutil.rmtree(restore, ignore_errors=True)
+
+
+COEXIST_PROJECT = "rkd205probe"
+COEXIST_COMPOSE = f"""name: {COEXIST_PROJECT}
+services:
+  db:
+    image: postgres:16
+    container_name: db-{COEXIST_PROJECT}
+    environment:
+      - POSTGRES_PASSWORD=probe
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - {COEXIST_PROJECT}-db-data:/var/lib/postgresql/data/pgdata
+volumes:
+  {COEXIST_PROJECT}-db-data:
+"""
+
+
+@pytest.fixture
+def compose_copy(tmp_path):
+    """Makes a directory holding the probe compose; tears every copy down."""
+    made = []
+
+    def make(name):
+        root = tmp_path / name
+        root.mkdir()
+        (root / "docker-compose.yaml").write_text(COEXIST_COMPOSE)
+        made.append(root)
+        return root
+
+    yield make
+    for root in made:
+        _compose(root, "down", "-v", timeout=120, check=False)
+
+
+def _container_id(name):
+    result = subprocess.run(["docker", "inspect", "-f", "{{.Id}}", name], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+@pytest.mark.docker
+def test_two_copies_of_a_project_coexist(compose_copy, docker_available):
+    """#205: the renamed copy runs next to the original, which stays untouched.
+
+    Only `db` comes up -- seconds, not the minutes a full Odoo `up` costs.
+    Renaming just `container_name` would make Compose see the original's
+    containers as its own and recreate them, so the original's container id
+    is the witness that the identity moved as a whole.
+    """
+    if not docker_available:
+        pytest.skip("Docker daemon not available")
+
+    original = compose_copy("original")
+    copy = compose_copy("copy")
+    new_name = f"{COEXIST_PROJECT}-2"
+
+    _compose(original, "up", "-d", "db", timeout=300)
+    id_before = _container_id(f"db-{COEXIST_PROJECT}")
+
+    assert _rename_project_in_compose(copy, COEXIST_PROJECT, new_name)
+    _compose(copy, "up", "-d", "db", timeout=300)
+
+    assert _container_id(f"db-{COEXIST_PROJECT}") == id_before
+    assert _container_id(f"db-{new_name}") != id_before
+
+    volumes = subprocess.run(
+        ["docker", "volume", "ls", "--format", "{{.Name}}"], capture_output=True, text=True
+    ).stdout.split()
+    assert f"{COEXIST_PROJECT}_{COEXIST_PROJECT}-db-data" in volumes
+    assert f"{new_name}_{new_name}-db-data" in volumes
+
+    for root, name in ((original, f"db-{COEXIST_PROJECT}"), (copy, f"db-{new_name}")):
+        running = _compose(root, "ps", "--status", "running", "-q", "db", timeout=30).stdout.strip()
+        assert running == _container_id(name)
+
+    assert f"db-{COEXIST_PROJECT}\n" not in (copy / "docker-compose.yaml").read_text()
+    assert (original / "docker-compose.yaml").read_text() == COEXIST_COMPOSE

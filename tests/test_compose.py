@@ -138,6 +138,42 @@ class TestComposePsResult:
         assert compose.compose_ps_result() == ([], "docker not found")
 
 
+class TestComposeLs:
+    """`compose ls` is the host-wide inventory #205 uses to find taken project names."""
+
+    def _patch(self, monkeypatch, result):
+        def _run(*a, **kw):
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        monkeypatch.setattr(compose.subprocess, "run", _run)
+
+    def test_array_and_ndjson_give_the_same_list(self, monkeypatch):
+        """Compose has shipped both shapes; parsing only one silently hides
+        every project on hosts running the other.
+        """
+        self._patch(monkeypatch, subprocess.CompletedProcess([], 0, '[{"Name":"a"},{"Name":"b"}]', ""))
+        from_array = compose.compose_ls("--all")
+        self._patch(monkeypatch, subprocess.CompletedProcess([], 0, '{"Name":"a"}\n{"Name":"b"}\n', ""))
+        from_ndjson = compose.compose_ls("--all")
+
+        assert from_array == from_ndjson == ([{"Name": "a"}, {"Name": "b"}], "")
+
+    def test_missing_docker_reports_why(self, monkeypatch):
+        self._patch(monkeypatch, FileNotFoundError("docker"))
+        assert compose.compose_ls() == ([], "docker not found")
+
+    def test_a_failing_command_reports_its_stderr(self, monkeypatch):
+        """An empty list with no reason would read as "no projects"."""
+        self._patch(monkeypatch, subprocess.CompletedProcess([], 1, "", "daemon down"))
+        assert compose.compose_ls() == ([], "daemon down")
+
+    def test_entries_that_are_not_objects_are_dropped(self, monkeypatch):
+        self._patch(monkeypatch, subprocess.CompletedProcess([], 0, '["x", {"Name":"a"}, 3]', ""))
+        assert compose.compose_ls() == ([{"Name": "a"}], "")
+
+
 class TestRunCompose:
     def test_returns_the_exit_code(self, monkeypatch):
         monkeypatch.setattr(compose.subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess([], 7))
