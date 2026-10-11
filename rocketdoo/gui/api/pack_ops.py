@@ -37,6 +37,7 @@ def unpack_info():
     return {
         "meta": info["meta"],
         "ssh_keys": info["ssh_keys"],
+        "project": info["project"],
         # Plain existence, like /status reports it: the SPA gates the unpack
         # button on that endpoint's flag, and two answers to the same
         # question under the same key is a trap. `meta` already comes back
@@ -105,7 +106,7 @@ def unpack(body: UnpackRequest = UnpackRequest()):
     Calls core.unpack.unpack() directly instead of shelling out to `rkd
     unpack` (#143 T13), for the same reason `pack` above does: a `def` here
     runs in FastAPI's threadpool, so a restore that takes minutes never
-    blocks the event loop. Port conflicts are auto-accepted -- the same
+    blocks the event loop. Port and project-name conflicts are auto-accepted -- the same
     behaviour `--yes` gives the CLI -- since there is no terminal here to ask.
     """
     info = core_unpack.inspect(Path.cwd())
@@ -118,6 +119,11 @@ def unpack(body: UnpackRequest = UnpackRequest()):
         report = core_unpack.unpack(
             Path.cwd(),
             ports=info["suggested_ports"],
+            # Only when there is a conflict, like the CLI. Without one the
+            # suggestion IS the current name, and passing it put every unpack
+            # through the name validation -- so a compose whose `name:` the
+            # validator rejects stopped restoring at all.
+            project_name=(info["project"]["suggested_name"] if info["project"]["conflict"] else None),
             ssh_key=body.ssh_key if body.use_ssh else None,
             on_progress=_collect,
         )

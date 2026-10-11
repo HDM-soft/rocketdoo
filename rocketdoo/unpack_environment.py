@@ -71,6 +71,63 @@ def _decide_ports(info: dict, *, auto_accept: bool) -> dict:
     return {"odoo_port": odoo_port, "vsc_port": vsc_port}
 
 
+def _confirm_rename(suggested: str) -> bool:
+    """Answers "no" when there is nobody to ask: `questionary` raises EOFError
+    without a TTY, and a scripted `rkd unpack` should not die with a traceback
+    over it. `--yes` is the way to say yes in that setting.
+    """
+    try:
+        return bool(questionary.confirm(f"Rename this copy to {suggested}?", default=True).ask())
+    except EOFError:
+        console.print("  [dim]No terminal to ask on; use [cyan]--yes[/cyan] to accept the rename.[/dim]")
+        return False
+
+
+def _decide_project_name(info: dict, *, auto_accept: bool) -> str | None:
+    """Turns `inspect()`'s `project` into the name `unpack()` will apply, or
+    None to keep the one in the compose.
+    """
+    console.print()
+    console.print("[bold]🏷️  Checking the Compose project name...[/bold]")
+
+    project = info["project"]
+    if project["conflict"] is None:
+        console.print(f"  [yellow]⚠[/yellow]  Name not verified: {project['reason']}.")
+        return None
+    if not project["conflict"]:
+        if project["name"]:
+            console.print(f"  [green]✓[/green] Project name [cyan]{project['name']}[/cyan] is available.")
+        else:
+            # Without this the header printed with nothing under it. A compose
+            # with no `name:` cannot be renamed at all, and the reason is the
+            # one thing worth saying here.
+            console.print(f"  [yellow]⚠[/yellow]  Not checked: {project['reason']}.")
+        return None
+
+    suggested = project["suggested_name"]
+    console.print(f"  [yellow]⚠[/yellow]  {project['name']}: {project['reason']}.")
+    if suggested == project["name"]:
+        console.print(
+            "  [yellow]⚠[/yellow]  No free name found. The copy keeps the project name, "
+            "so `docker compose up` will take over the other copy's containers and volumes."
+        )
+        return None
+    if auto_accept:
+        console.print(f"  [dim]Auto-selecting project name [green]{suggested}[/green][/dim]")
+        return suggested
+    if _confirm_rename(suggested):
+        return suggested
+    # Not "it will fail": sharing `name:` is not a conflict for Compose, it is
+    # adoption. `up` treats the other copy's containers as this project's,
+    # recreates them and mounts its volumes. Measured. Saying "probably fail"
+    # would read as a harmless retry.
+    console.print(
+        "  [yellow]⚠[/yellow]  Keeping the name. `docker compose up` here will recreate the other copy's "
+        "containers and mount its volumes, which can overwrite its database."
+    )
+    return None
+
+
 def _select_ssh_key(meta: dict, available_keys: list[str]) -> str | None:
     """Interactive key picker for when the caller has no `--ssh-key` value.
 
@@ -229,6 +286,13 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
     console.print()
     ports = _decide_ports(info, auto_accept=yes)
 
+    project_name = _decide_project_name(info, auto_accept=yes)
+    if info["mailpit_port_conflict"]:
+        console.print(
+            "  [yellow]⚠[/yellow]  Mailpit is enabled and its ports (1025/8025) are in use; "
+            "run [cyan]rkd mail off[/cyan] in one of the two copies."
+        )
+
     # ── 3. Configure SSH if the environment used private repos ──
     resolved_ssh_key = _decide_ssh_key(info, ssh_key_option=ssh_key, no_ssh=no_ssh)
 
@@ -238,6 +302,7 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
         report = unpack(
             project_dir,
             ports=ports,
+            project_name=project_name,
             ssh_key=resolved_ssh_key,
             restore=not no_restore,
             build=build,
@@ -251,6 +316,11 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
         return
 
     console.print()
+    if report["project_renamed"]:
+        console.print(
+            f"[dim]Compose project renamed: [cyan]{report['renamed_from']}[/cyan] → "
+            f"[cyan]{report['project_name']}[/cyan] (this is the name in rkd status and docker logs).[/dim]"
+        )
     if report["started"]:
         console.print(
             Panel(
