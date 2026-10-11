@@ -136,7 +136,7 @@ class TestReportHonesty:
         monkeypatch.setattr(mail_cli, "_odoo_conf_path", lambda *a, **k: conf)
         monkeypatch.setattr(mail_cli, "_has_markers", lambda c: True)
         monkeypatch.setattr(mail_cli, "_is_enabled", lambda c: False)
-        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable: c)
+        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable, ports=None: c)
         monkeypatch.setattr(mail_cli, "run_compose", lambda *a, **k: 0)
         monkeypatch.setattr(mail_cli, "container_running", lambda *a, **k: False)
         monkeypatch.setattr(mail_cli, "_apply_mail_server", lambda *a, **k: {"db": None, "db_error": "", "db_archived": None})
@@ -159,7 +159,7 @@ class TestReportHonesty:
         monkeypatch.setattr(mail_cli, "_odoo_conf_path", lambda *a, **k: conf)
         monkeypatch.setattr(mail_cli, "_has_markers", lambda c: True)
         monkeypatch.setattr(mail_cli, "_is_enabled", lambda c: False)
-        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable: c)
+        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable, ports=None: c)
         monkeypatch.setattr(mail_cli, "run_compose", lambda *a, **k: 0)
         monkeypatch.setattr(mail_cli, "container_running", lambda *a, **k: False)
         monkeypatch.setattr(mail_cli, "_apply_mail_server", lambda *a, **k: {"db": None, "db_error": "", "db_archived": None})
@@ -307,7 +307,7 @@ class TestEnableMailpitWritesTheMailServer:
         monkeypatch.setattr(mail_cli, "_odoo_conf_path", lambda *a, **k: None)
         monkeypatch.setattr(mail_cli, "_has_markers", lambda c: True)
         monkeypatch.setattr(mail_cli, "_is_enabled", lambda c: enabled)
-        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable: c)
+        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable, ports=None: c)
         monkeypatch.setattr(mail_cli, "run_compose", lambda *a, **k: 0)
         monkeypatch.setattr(mail_cli, "container_running", lambda *a, **k: False)
         return mail_cli
@@ -385,7 +385,7 @@ class TestDisableMailpitWritesTheMailServer:
         monkeypatch.setattr(mail_cli, "_odoo_conf_path", lambda *a, **k: None)
         monkeypatch.setattr(mail_cli, "_has_markers", lambda c: True)
         monkeypatch.setattr(mail_cli, "_is_enabled", lambda c: enabled)
-        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable: c)
+        monkeypatch.setattr(mail_cli, "_toggle_compose", lambda c, enable, ports=None: c)
         monkeypatch.setattr(mail_cli, "run_compose", lambda *a, **k: 0)
         monkeypatch.setattr(mail_cli, "container_running", lambda *a, **k: False)
         return mail_cli
@@ -623,3 +623,93 @@ class TestMailStatusCommand:
             "smtp_host": mail_cli.MAILPIT_SMTP_HOST,
             "active": True,
         }
+
+
+class TestMailOpen:
+    """`rkd mail open` used to have no coverage and a hardcoded port."""
+
+    def _invoke(self, monkeypatch, ports, running=True):
+        from click.testing import CliRunner
+        from rich.console import Console
+
+        import rocketdoo.mail_cli as mail_cli
+
+        opened = []
+        monkeypatch.setattr(mail_cli, "console", Console(width=200))
+        monkeypatch.setattr(mail_cli, "container_running", lambda *a, **k: running)
+        monkeypatch.setattr(mail_cli, "published_ports", lambda *a, **k: ports)
+        monkeypatch.setattr(mail_cli.webbrowser, "open", opened.append)
+        result = CliRunner().invoke(mail_cli.mail, ["open"])
+        return result, opened
+
+    def test_open_uses_the_published_port(self, monkeypatch):
+        result, opened = self._invoke(monkeypatch, {"web_port": 8125, "smtp_port": 1125})
+
+        assert result.exit_code == 0
+        assert opened == ["http://localhost:8125"]
+
+    def test_open_does_nothing_when_no_web_port_is_published(self, monkeypatch):
+        result, opened = self._invoke(monkeypatch, {"web_port": None, "smtp_port": None})
+
+        assert result.exit_code == 0
+        assert opened == []
+        assert "does not publish" in " ".join(result.output.split())
+
+    def test_open_does_nothing_when_mailpit_is_not_running(self, monkeypatch):
+        result, opened = self._invoke(monkeypatch, {"web_port": 8125, "smtp_port": 1125}, running=False)
+
+        assert opened == []
+
+
+class TestMailOnReportsThePublishedPorts:
+    def _invoke(self, monkeypatch, **overrides):
+        from click.testing import CliRunner
+        from rich.console import Console
+
+        import rocketdoo.mail_cli as mail_cli
+
+        report = {
+            "changed": True,
+            "conf_found": True,
+            "conf_updated": True,
+            "started": True,
+            "restarted": False,
+            "smtp_port": 1125,
+            "web_port": 8125,
+            "ports_moved": True,
+            "db": "demo",
+            "db_error": "",
+            "db_archived": None,
+            **overrides,
+        }
+        monkeypatch.setattr(mail_cli, "console", Console(width=200))
+        monkeypatch.setattr(mail_cli, "enable", lambda **k: report)
+        result = CliRunner().invoke(mail_cli.mail, ["on"])
+        return " ".join(result.output.split())
+
+    def test_mail_on_reports_the_moved_ports(self, monkeypatch):
+        output = self._invoke(monkeypatch)
+
+        assert "http://localhost:8125" in output
+        assert "localhost:1125" in output
+        assert "localhost:1025" not in output
+        assert "Odoo reaches it at mailpit:1025 inside the Compose network." in output
+        assert "smtp_port = 1025" in output
+        assert "were taken" in output
+
+    def test_mail_on_without_moving_stays_quiet_about_it(self, monkeypatch):
+        output = self._invoke(monkeypatch, ports_moved=False, smtp_port=1025, web_port=8025)
+
+        assert "were taken" not in output
+        assert "localhost:1025" in output
+
+    def test_mail_on_with_a_block_without_ports_does_not_crash(self, monkeypatch):
+        output = self._invoke(monkeypatch, ports_moved=False, smtp_port=None, web_port=None)
+
+        assert "Mailpit is ready" in output
+        assert "None" not in output
+
+    def test_already_enabled_names_the_real_web_port(self, monkeypatch):
+        output = self._invoke(monkeypatch, changed=False, ports_moved=False)
+
+        assert "http://localhost:8125" in output

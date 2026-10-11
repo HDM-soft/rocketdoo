@@ -108,6 +108,8 @@ def mailpit_double(monkeypatch):
     monkeypatch.setattr(mail_cli, "databases_result", fake_databases_result)
     monkeypatch.setattr(mail_cli, "enable_mailpit_server", fake_enable_mailpit_server)
     monkeypatch.setattr(mail_cli, "disable_mailpit_server", fake_disable_mailpit_server)
+    monkeypatch.setattr(mail_cli, "is_port_in_use", lambda port: False)
+    monkeypatch.setattr(mail_cli, "collect_declared_ports", lambda **kwargs: {})
 
     return calls
 
@@ -124,6 +126,9 @@ class TestMailOnHappyPath:
             "conf_updated": True,
             "started": True,
             "restarted": False,
+            "smtp_port": 1025,
+            "web_port": 8025,
+            "ports_moved": False,
             "db": "dev",
             "db_error": "",
             "db_archived": None,
@@ -171,6 +176,9 @@ class TestMailOnIsIdempotent:
             "conf_updated": False,
             "started": False,
             "restarted": False,
+            "smtp_port": 1025,
+            "web_port": 8025,
+            "ports_moved": False,
             "db": "dev",
             "db_error": "",
             "db_archived": None,

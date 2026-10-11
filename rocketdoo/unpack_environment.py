@@ -303,8 +303,9 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
 
     project_name = _decide_project_name(info, auto_accept=yes)
     if info["mailpit_port_conflict"]:
+        mailpit_ports = "/".join(str(p) for p in info["mailpit_ports"])
         console.print(
-            "  [yellow]⚠[/yellow]  Mailpit is enabled and its ports (1025/8025) are in use; "
+            f"  [yellow]⚠[/yellow]  Mailpit is enabled and its ports ({mailpit_ports}) are in use; "
             "run [cyan]rkd mail off[/cyan] in one of the two copies."
         )
 

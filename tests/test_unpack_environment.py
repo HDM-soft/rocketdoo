@@ -1214,6 +1214,27 @@ class TestInspectProject:
         for key in ("meta", "has_meta", "port_conflicts", "suggested_ports", "backups", "uses_private_repos", "ssh_keys"):
             assert key in info
 
+    def test_mailpit_port_conflict_reads_the_real_ports(self, project_dir, monkeypatch):
+        """Mutation: a fixed (1025, 8025) pair instead of the published ports."""
+        _write_named_project(project_dir)
+        compose = project_dir / "docker-compose.yaml"
+        text = (
+            compose.read_text()
+            .replace("#    - ", "    - ")
+            .replace("1025:1025", "1125:1025")
+            .replace("8025:8025", "8125:8025")
+        )
+        compose.write_text(text.replace("  #mailpit:", "  mailpit:"))
+        self._inventory(monkeypatch, _inv())
+
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: port == 1025)
+        assert core_unpack.inspect(project_dir)["mailpit_port_conflict"] is False
+
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: port == 1125)
+        info = core_unpack.inspect(project_dir)
+        assert info["mailpit_port_conflict"] is True
+        assert info["mailpit_ports"] == [1125, 8125]
+
     def test_mailpit_port_conflict_needs_the_block_enabled(self, project_dir, monkeypatch):
         """Mutation: warning whenever 1025/8025 is busy, enabled or not."""
         _write_named_project(project_dir)
@@ -1391,6 +1412,7 @@ class TestUnpackCliProjectName:
                 "uses_private_repos": False,
                 "ssh_keys": [],
                 "project": project,
+                "mailpit_ports": [1125, 8125],
                 "mailpit_port_conflict": mailpit,
             }
             monkeypatch.setattr(unpack_environment, "inspect", lambda root: info)
@@ -1503,7 +1525,10 @@ class TestUnpackCliProjectName:
         run, set_info, _, _ = cli
         set_info(self.FREE, mailpit=True)
 
-        assert "rkd mail off" in run("--yes").output
+        output = " ".join(run("--yes").output.split())
+        assert "rkd mail off" in output
+        assert "(1125/8125)" in output
+        assert "1025/8025" not in output
 
         set_info(self.FREE, mailpit=False)
         assert "rkd mail off" not in run("--yes").output
