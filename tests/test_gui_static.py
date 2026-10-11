@@ -938,3 +938,13 @@ if (TOKEN) {
     assert "sessionStorage.getItem(TOKEN_KEY)" in html
     assert "sessionStorage.setItem(TOKEN_KEY" in html
     assert html.count("catch (e)") >= 2
+
+
+def test_the_mailpit_ports_are_not_hardcoded():
+    """The card and the help text read the published ports instead of 8025/1025."""
+    html = INDEX_HTML.read_text()
+
+    assert "8025" not in html
+    assert ":1025" not in html
+    assert "mail.web_port" in html
+    assert "mail.smtp_port" in html

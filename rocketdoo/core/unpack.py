@@ -22,6 +22,7 @@ from pathlib import Path
 
 from rocketdoo.core.compose import compose_ls, run_compose, run_compose_result
 from rocketdoo.core.mailpit import is_enabled as mailpit_is_enabled
+from rocketdoo.core.mailpit import published_ports as mailpit_published_ports
 from rocketdoo.core.pack import BACKUP_FILENAME
 from rocketdoo.core.port_validation import find_available_port, is_port_in_use
 from rocketdoo.core.project_info import project_exists, read_docker_compose
@@ -65,7 +66,7 @@ def _find_backup_files(project_dir: Path) -> tuple[Path | None, Path | None]:
     return (dumps[0] if dumps else None), (filestores[0] if filestores else None)
 
 
-def _check_ports(meta: dict, auto_accept: bool = True) -> tuple[int, int, bool]:
+def _check_ports(meta: dict, auto_accept: bool = True, *, name_taken: bool = False) -> tuple[int, int, bool]:
     """Detects port conflicts and returns the ports that should be used.
 
     Always non-interactive: RF3 moved the branch this used to have in
@@ -74,16 +75,25 @@ def _check_ports(meta: dict, auto_accept: bool = True) -> tuple[int, int, bool]:
     `auto_accept` stays a parameter only because it is part of this
     function's existing, characterised signature; the computation below is
     the same regardless of its value.
+
+    `name_taken` says another project on this host already answers to the
+    name in the compose, so these ports are its ports and they move whether
+    or not something is listening on them right now (#238). `is_port_in_use`
+    only sees live listeners: an original stopped with `rkd down` leaves 8069
+    free, the copy took it, and the original then could not start --
+    `Bind for 0.0.0.0:8069 failed: port is already allocated`. Same blind
+    spot #205 closed for the Compose identity by reading the volume labels,
+    which survive a `down`; here the project name is what survives.
     """
     odoo_port = int(meta.get("odoo_port") or 8069)
     vsc_port = int(meta.get("vsc_port") or 8888)
     changed = False
 
-    if is_port_in_use(odoo_port):
+    if name_taken or is_port_in_use(odoo_port):
         odoo_port = find_available_port(odoo_port + 1)
         changed = True
 
-    if is_port_in_use(vsc_port):
+    if name_taken or is_port_in_use(vsc_port):
         vsc_port = find_available_port(vsc_port + 1)
         changed = True
 
@@ -124,7 +134,6 @@ def _update_ports_in_compose(project_dir: Path, new_odoo_port: int, new_vsc_port
 _PROJECT_NAME_LINE = re.compile(r"^name:[ \t]*(\S+)[ \t]*\r?$", re.MULTILINE)
 _PROJECT_NAME_MAX_SUFFIX = 99
 _VALID_PROJECT_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
-_MAILPIT_PORTS = (1025, 8025)
 
 
 def _compose_file(project_dir: Path) -> Path | None:
@@ -670,15 +679,22 @@ def inspect(project_root: Path | str | None = None) -> dict:
     has_meta = bool(raw_meta.get("rkd_shared"))
     meta = _effective_meta(raw_meta)
 
-    original_odoo_port = int(meta.get("odoo_port") or 8069)
-    original_vsc_port = int(meta.get("vsc_port") or 8888)
-    suggested_odoo_port, suggested_vsc_port, _ = _check_ports(meta)
-
     dump, filestore = _find_backup_files(root)
 
+    # The project has to be resolved before the ports: whether its name is
+    # taken is what decides if these ports belong to someone else (#238).
     current_name = _compose_project_name(root)
     inventory = _docker_inventory() if current_name else {"ok": False, "projects": {}, "volumes": {}}
     resolved = _resolve_project_name(root, current_name, meta, inventory)
+
+    original_odoo_port = int(meta.get("odoo_port") or 8069)
+    original_vsc_port = int(meta.get("vsc_port") or 8888)
+    # `conflict` is None when Docker could not answer: no guessing, fall back
+    # to what is listening.
+    ports_reserved = bool(resolved["conflict"])
+    suggested_odoo_port, suggested_vsc_port, _ = _check_ports(meta, name_taken=ports_reserved)
+
+    mailpit_ports = [port for port in mailpit_published_ports(root).values() if port] if mailpit_is_enabled(root) else []
 
     return {
         "meta": raw_meta,
@@ -691,6 +707,10 @@ def inspect(project_root: Path | str | None = None) -> dict:
             "odoo_port": suggested_odoo_port,
             "vsc_port": suggested_vsc_port,
         },
+        # True when the ports moved because another project claims them, not
+        # because something is listening. The CLI says so instead of
+        # reporting a port "already in use" that anyone can see is free.
+        "ports_reserved": ports_reserved,
         "backups": {
             "db_dump": str(dump) if dump else None,
             "filestore": str(filestore) if filestore else None,
@@ -704,7 +724,8 @@ def inspect(project_root: Path | str | None = None) -> dict:
             "reason": resolved["reason"],
             "renamable": resolved["renamable"],
         },
-        "mailpit_port_conflict": mailpit_is_enabled(root) and any(is_port_in_use(p) for p in _MAILPIT_PORTS),
+        "mailpit_ports": mailpit_ports,
+        "mailpit_port_conflict": any(is_port_in_use(p) for p in mailpit_ports),
     }
 
 
@@ -785,7 +806,7 @@ def unpack(
                     "docker-compose.override.yml still carries the Traefik labels of the original copy; review them."
                 )
             if mailpit_is_enabled(root):
-                leftovers.append("Mailpit is enabled: ports 1025 and 8025 are not remapped and may clash with the other copy.")
+                leftovers.append("Mailpit is enabled: its published ports are not remapped and may clash with the other copy.")
             for message in leftovers:
                 report(message, "warn")
                 warnings.append(message)
