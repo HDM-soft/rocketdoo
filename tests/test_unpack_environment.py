@@ -1554,3 +1554,69 @@ class TestTheRenameIsAllOrNothing:
         compose.write_bytes(b"name: demo\r\nservices:\r\n  db:\r\n    container_name: db-demo\r\n")
 
         assert core_unpack._compose_project_name(project_dir) == "demo"
+
+
+class TestPortsOfAStoppedOriginal:
+    """A project name that is taken takes its ports with it (#238).
+
+    `is_port_in_use()` only sees live listeners. An original stopped with
+    `rkd down` (no -v) leaves 8069 free, so the copy used to keep it -- and
+    when the original came back its web container could not start:
+    `Bind for 0.0.0.0:8069 failed: port is already allocated`, left in
+    `Created` while its db came up fine.
+
+    It is the same blind spot #205 closed for the Compose identity, where the
+    answer was to read the volume labels, which survive a `down`. Here what
+    survives is the project name, so a name already taken moves the ports
+    whether or not anything is listening.
+    """
+
+    def test_a_taken_name_moves_the_ports_with_nothing_listening(self, monkeypatch):
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
+        monkeypatch.setattr(core_unpack, "find_available_port", lambda start: start)
+
+        odoo_port, vsc_port, changed = _check_ports({"odoo_port": 8069, "vsc_port": 8888}, name_taken=True)
+
+        assert (odoo_port, vsc_port) == (8070, 8889)
+        assert changed is True
+
+    def test_a_free_name_leaves_free_ports_alone(self, monkeypatch):
+        """Today's behaviour, unchanged: no conflict, no remap."""
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
+
+        assert _check_ports({"odoo_port": 8069, "vsc_port": 8888}, name_taken=False) == (8069, 8888, False)
+
+    def test_inspect_does_not_move_the_ports_when_docker_cannot_answer(self, project_dir, monkeypatch):
+        """`conflict is None` means unknown, and unknown is not a conflict.
+
+        Mutation: reading it as truthy would remap the ports of every unpack
+        run on a host without a reachable Docker.
+        """
+        _write_named_project(project_dir)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
+        monkeypatch.setattr(core_unpack, "_docker_inventory", lambda: {"ok": False, "projects": {}, "volumes": {}})
+
+        info = core_unpack.inspect(project_dir)
+
+        assert info["project"]["conflict"] is None
+        assert info["ports_reserved"] is False
+        assert info["port_conflicts"] == {"odoo_port": False, "vsc_port": False}
+
+    def test_inspect_reports_why_the_ports_moved(self, project_dir, monkeypatch):
+        """`ports_reserved` is what lets the CLI stop calling a port that
+        anyone can see is free "already in use".
+        """
+        _write_named_project(project_dir)
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
+        monkeypatch.setattr(core_unpack, "find_available_port", lambda start: start)
+        monkeypatch.setattr(
+            core_unpack,
+            "_docker_inventory",
+            lambda: {"ok": True, "projects": {}, "volumes": {"demo_demo-db-data": "demo"}},
+        )
+
+        info = core_unpack.inspect(project_dir)
+
+        assert info["project"]["conflict"] is True
+        assert info["ports_reserved"] is True
+        assert info["suggested_ports"] == {"odoo_port": 8070, "vsc_port": 8889}
