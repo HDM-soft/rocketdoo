@@ -34,9 +34,18 @@ from rocketdoo.core.unpack import UnpackError, inspect, unpack
 console = Console()
 
 
-def _resolve_port(label: str, current_port: int, suggested_port: int, *, auto_accept: bool) -> int:
+def _resolve_port(label: str, current_port: int, suggested_port: int, *, auto_accept: bool, reserved: bool = False) -> int:
     """Asks which port to use once `inspect()` already flagged a conflict."""
-    console.print(f"  [yellow]⚠[/yellow]  {label} port [cyan]{current_port}[/cyan] is already in use.")
+    if reserved:
+        # Saying "already in use" about a port anyone can see is free reads as
+        # a bug in rkd. It is not in use: it belongs to the other copy, which
+        # is stopped and will want it back (#238).
+        console.print(
+            f"  [yellow]⚠[/yellow]  {label} port [cyan]{current_port}[/cyan] belongs to the other copy of this "
+            "project, which is not running right now."
+        )
+    else:
+        console.print(f"  [yellow]⚠[/yellow]  {label} port [cyan]{current_port}[/cyan] is already in use.")
     if auto_accept:
         console.print(f"  [dim]Auto-selecting port [green]{suggested_port}[/green][/dim]")
         return suggested_port
@@ -58,13 +67,19 @@ def _decide_ports(info: dict, *, auto_accept: bool) -> dict:
     odoo_port = int(meta.get("odoo_port") or 8069)
     vsc_port = int(meta.get("vsc_port") or 8888)
 
+    reserved = bool(info.get("ports_reserved"))
+
     if info["port_conflicts"]["odoo_port"]:
-        odoo_port = _resolve_port("Odoo", odoo_port, info["suggested_ports"]["odoo_port"], auto_accept=auto_accept)
+        odoo_port = _resolve_port(
+            "Odoo", odoo_port, info["suggested_ports"]["odoo_port"], auto_accept=auto_accept, reserved=reserved
+        )
     else:
         console.print(f"  [green]✓[/green] Odoo port [cyan]{odoo_port}[/cyan] is available.")
 
     if info["port_conflicts"]["vsc_port"]:
-        vsc_port = _resolve_port("VSCode", vsc_port, info["suggested_ports"]["vsc_port"], auto_accept=auto_accept)
+        vsc_port = _resolve_port(
+            "VSCode", vsc_port, info["suggested_ports"]["vsc_port"], auto_accept=auto_accept, reserved=reserved
+        )
     else:
         console.print(f"  [green]✓[/green] VSCode port [cyan]{vsc_port}[/cyan] is available.")
 
@@ -288,8 +303,9 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
 
     project_name = _decide_project_name(info, auto_accept=yes)
     if info["mailpit_port_conflict"]:
+        mailpit_ports = "/".join(str(p) for p in info["mailpit_ports"])
         console.print(
-            "  [yellow]⚠[/yellow]  Mailpit is enabled and its ports (1025/8025) are in use; "
+            f"  [yellow]⚠[/yellow]  Mailpit is enabled and its ports ({mailpit_ports}) are in use; "
             "run [cyan]rkd mail off[/cyan] in one of the two copies."
         )
 

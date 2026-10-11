@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "3.9.0"
+   - "3.9.1"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -382,11 +382,13 @@ This private information is as ephemeral as your environment.
 Rocketdoo v3 integrates [Mailpit](https://github.com/axllent/mailpit), a local SMTP testing server. All emails sent by Odoo are captured in Mailpit's web UI instead of reaching real inboxes.
 
 ```bash
-rkd mail on      # Enable Mailpit (SMTP on port 1025, Web UI on port 8025)
+rkd mail on      # Enable Mailpit; the output shows the host ports it was published on
 rkd mail off     # Disable Mailpit and restore Odoo mail settings
 rkd mail status  # Check if Mailpit is active
-rkd mail open    # Open http://localhost:8025 in your browser
+rkd mail open    # Open the Mailpit web UI in your browser
 ```
+
+Mailpit publishes its ports on the host at `1025` (SMTP) and `8025` (Web UI) when they are free. If another project already uses or declares them, `rkd mail on` picks the next free ones and prints them; `rkd mail off` leaves them written in `docker-compose.yaml`. Odoo always reaches Mailpit at `mailpit:1025` inside the Compose network, whatever the host port.
 
 Mailpit is toggled by commenting/uncommenting its service block in `docker-compose.yaml` using special markers (`# rkd:mailpit`). When enabled, Odoo's SMTP configuration is automatically updated to route emails through Mailpit.
 

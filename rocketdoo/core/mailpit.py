@@ -7,6 +7,7 @@ Presentation-free per the core/ contract (RF1.2): callers render their own
 progress and error messages from the returned report or from MailpitError.
 """
 
+import re
 from pathlib import Path
 
 from rocketdoo.core.compose import compose_path, container_running, run_compose
@@ -21,6 +22,7 @@ from rocketdoo.core.odoo_db import (
 from rocketdoo.core.odoo_db import (
     MAILPIT_SMTP_PORT as _MAILPIT_SMTP_PORT,
 )
+from rocketdoo.core.port_validation import _host_port, collect_declared_ports, find_available_port, is_port_in_use
 from rocketdoo.core.project_info import read_docker_compose
 from rocketdoo.core.service import ProgressCallback, ServiceError
 
@@ -28,6 +30,10 @@ _MARKER_START = "# rkd:mailpit"
 _MARKER_END = "# /rkd:mailpit"
 _WEB_SERVICE = "web"
 _CONF_PATHS = ("config/odoo.conf", "odoo.conf")
+_MAILPIT_WEB_TARGET = 8025
+_PORT_TARGETS = (_MAILPIT_SMTP_PORT, _MAILPIT_WEB_TARGET)
+_PORT_KEY = {_MAILPIT_SMTP_PORT: "smtp_port", _MAILPIT_WEB_TARGET: "web_port"}
+_PORT_LINE = re.compile(r"""^(?P<head>[ \t]*#?[ \t]*-[ \t]*["']?)(?P<host>\d+)(?P<tail>:(?P<target>\d+)["']?[ \t]*\r?)$""")
 _SMTP_KEYS = frozenset({"smtp_server", "smtp_port", "smtp_ssl", "smtp_user", "smtp_password"})
 
 
@@ -67,8 +73,110 @@ def _is_enabled(content: str) -> bool:
     return False
 
 
-def _toggle_compose(content: str, enable: bool) -> str:
-    """Comment/uncomment every rkd:mailpit block in the compose file."""
+def _port_match(line: str) -> re.Match | None:
+    """Match a published-port line of the block, commented or not, for a Mailpit target."""
+    match = _PORT_LINE.match(line.rstrip("\n"))
+    if match and int(match["target"]) in _PORT_TARGETS:
+        return match
+    return None
+
+
+def _rewrite_port(line: str, ports: dict[int, int]) -> str:
+    """Swap the host side of a port line; the container side and the rest stay as written."""
+    match = _port_match(line)
+    if not match or int(match["target"]) not in ports:
+        return line
+    newline = "\n" if line.endswith("\n") else ""
+    return f"{match['head']}{ports[int(match['target'])]}{match['tail']}{newline}"
+
+
+def _block_lines(content: str):
+    in_block = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped == _MARKER_START:
+            in_block = True
+        elif stripped == _MARKER_END:
+            in_block = False
+        elif in_block:
+            yield line
+
+
+def _block_ports(content: str) -> dict[int, int]:
+    """{container port: published host port} declared by the block, commented or not.
+
+    A host side outside 1-65535 is not a port, so it reads as absent and the
+    caller falls back to the default for that mapping. The compose is a file
+    the user edits by hand: `- "70000:1025"` used to reach `is_port_in_use()`,
+    whose `connect_ex` raises `OverflowError` outside the try, and `rkd mail
+    on` died with a bare traceback on a file that worked before.
+    """
+    ports: dict[int, int] = {}
+    for line in _block_lines(content):
+        match = _port_match(line)
+        if match and 0 < int(match["host"]) <= 65535:
+            ports.setdefault(int(match["target"]), int(match["host"]))
+    return ports
+
+
+def _ports_report(ports: dict[int, int]) -> dict:
+    return {key: ports.get(target) for target, key in _PORT_KEY.items()}
+
+
+def _own_published_ports(project_root: Path) -> set[int]:
+    """Host ports this project already publishes, outside the Mailpit block."""
+    compose = read_docker_compose(project_root) or {}
+    services = compose.get("services")
+    if not isinstance(services, dict):
+        return set()
+    own: set[int] = set()
+    for service in services.values():
+        if not isinstance(service, dict):
+            continue
+        for mapping in service.get("ports") or []:
+            host = _host_port(mapping)
+            if host:
+                own.add(host)
+    return own
+
+
+def _choose_ports(current: dict[int, int], project_root: Path) -> tuple[dict[int, int], bool]:
+    """Keep each declared host port when free, otherwise move to the next free one.
+
+    Free means nothing listens on it and no sibling project declares it, so a
+    stopped sibling with Mailpit enabled is avoided too.
+    """
+    if not current:
+        return {}, False
+    declared = collect_declared_ports(exclude_dir=project_root, base=project_root)
+    # `exclude_dir` poda este proyecto del barrido, asi que sus propios puertos
+    # publicados -- el de Odoo, el del debugger -- quedaban invisibles y Mailpit
+    # podia elegir justo uno de ellos: con Odoo en 8026 y el 8025 ocupado,
+    # elegia 8026 y el `rkd up` siguiente fallaba, despues de informar exito.
+    declared.update(dict.fromkeys(_own_published_ports(project_root), "this project"))
+    chosen: dict[int, int] = {}
+    moved = False
+    for target, host in sorted(current.items()):
+        if host in declared or is_port_in_use(host):
+            try:
+                host = find_available_port(host + 1, declared=declared)
+            except RuntimeError as exc:
+                raise MailpitError(
+                    f"No free host port for Mailpit (container port {target}).",
+                    "Free a port or edit the ports of the rkd:mailpit block in docker-compose.yaml.",
+                ) from exc
+            moved = True
+        declared[host] = "mailpit"
+        chosen[target] = host
+    return chosen, moved
+
+
+def _toggle_compose(content: str, enable: bool, ports: dict[int, int] | None = None) -> str:
+    """Comment/uncomment every rkd:mailpit block in the compose file.
+
+    With `ports`, the host side of the Mailpit port lines is rewritten as the
+    block is uncommented.
+    """
     lines = content.splitlines(keepends=True)
     out = []
     in_block = False
@@ -95,7 +203,8 @@ def _toggle_compose(content: str, enable: bool) -> str:
         if enable:
             # Remove the leading '#' to uncomment
             if rest.startswith("#"):
-                out.append(indent + rest[1:] + "\n")
+                uncommented = indent + rest[1:] + "\n"
+                out.append(_rewrite_port(uncommented, ports) if ports else uncommented)
             else:
                 out.append(line)
         else:
@@ -287,7 +396,7 @@ def enable(
     if not compose:
         raise MailpitError("No docker-compose.yaml found.", "Run rkd init first.")
 
-    content = compose.read_text()
+    content = compose.read_bytes().decode()
     if not _has_markers(content):
         raise MailpitError(
             "Mailpit block not found in docker-compose.yaml.",
@@ -305,10 +414,13 @@ def enable(
             "conf_updated": False,
             "started": False,
             "restarted": False,
+            **_ports_report(_block_ports(content)),
+            "ports_moved": False,
             **_apply_mail_server(enable=True, db=db, compose_data=read_docker_compose(root)),
         }
 
-    compose.write_text(_toggle_compose(content, enable=True))
+    chosen, ports_moved = _choose_ports(_block_ports(content), root)
+    compose.write_bytes(_toggle_compose(content, enable=True, ports=chosen).encode())
 
     conf = _odoo_conf_path(root)
     conf_updated = False
@@ -337,6 +449,8 @@ def enable(
         "conf_updated": conf_updated,
         "started": started,
         "restarted": restarted,
+        **_ports_report(chosen),
+        "ports_moved": ports_moved,
         **mail_server_report,
     }
 
@@ -357,7 +471,7 @@ def disable(
     if not compose:
         raise MailpitError("No docker-compose.yaml found.")
 
-    content = compose.read_text()
+    content = compose.read_bytes().decode()
     if not _has_markers(content):
         raise MailpitError("Mailpit block not found in docker-compose.yaml.")
 
@@ -374,7 +488,7 @@ def disable(
     run_compose("stop", "mailpit", cwd=root)
     run_compose("rm", "-f", "mailpit", cwd=root)
 
-    compose.write_text(_toggle_compose(content, enable=False))
+    compose.write_bytes(_toggle_compose(content, enable=False).encode())
 
     conf = _odoo_conf_path(root)
     conf_updated = False
@@ -415,12 +529,21 @@ def is_enabled(project_root: Path | str | None = None) -> bool:
     compose = compose_path(project_root)
     if not compose:
         return False
-    return _is_enabled(compose.read_text())
+    return _is_enabled(compose.read_bytes().decode())
+
+
+def published_ports(project_root: Path | str | None = None) -> dict:
+    """Host ports the block publishes, `{"smtp_port", "web_port"}`; None when absent."""
+    compose = compose_path(project_root)
+    if not compose:
+        return _ports_report({})
+    return _ports_report(_block_ports(compose.read_bytes().decode()))
 
 
 def status(project_root: Path | str | None = None) -> dict:
-    """`{"enabled", "running"}`, what the GUI status endpoint needs."""
+    """`{"enabled", "running", "smtp_port", "web_port"}`, what the GUI status endpoint needs."""
     return {
         "enabled": is_enabled(project_root),
+        **published_ports(project_root),
         "running": container_running("mailpit", cwd=Path(project_root) if project_root else None),
     }
