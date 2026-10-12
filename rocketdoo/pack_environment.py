@@ -126,11 +126,11 @@ def pack_environment(no_db, output, db_name, yes):
         console.print()
         return
 
-    if report["ssh_found_in_zip"]:
+    if report["secrets_found_in_zip"]:
         console.print()
         console.print("[bold red]⚠️  SECURITY WARNING:[/bold red]")
-        console.print("[red]Possible private SSH keys detected inside the ZIP:[/red]")
-        for name in report["ssh_suspicious"]:
+        console.print("[red]Files rkd treats as secrets were found inside the ZIP:[/red]")
+        for name in report["secrets_suspicious"]:
             console.print(f"  [red]• {name}[/red]")
         console.print("[dim]Please review the ZIP contents before sharing.[/dim]")
 

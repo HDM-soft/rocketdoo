@@ -13,6 +13,7 @@ whether to go on without a backup) and hands the answers over as arguments;
 everything past that point runs here, once, for the CLI and the GUI alike.
 """
 
+import fnmatch
 import json
 import re
 import subprocess
@@ -21,6 +22,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
+from rocketdoo.core.gitignore_manager import SENSITIVE_ENTRIES
 from rocketdoo.core.odoo_db import databases_result, db_container
 from rocketdoo.core.project_info import get_project_info, project_exists, read_docker_compose
 from rocketdoo.core.service import ProgressCallback, ServiceError, reporter
@@ -33,6 +35,45 @@ _SSH_DOCKERFILE_PATTERNS = [
 ]
 
 _ALWAYS_EXCLUDE = {".ssh", "__pycache__", "node_modules", ".mypy_cache"}
+
+# Of what gitignore_manager declares sensitive, these two have to travel or the
+# shared environment does not work: docker-compose mounts odoo_pg_pass as a
+# Docker secret, and Dockerfile.jinja:3 does `COPY ./config/odoo.conf` at build
+# time. They are the local credentials of the very environment being handed
+# over, which is the point of the ZIP.
+#
+# Everything else on that list stays out, and that is the direction the default
+# has to point: a new entry in SENSITIVE_ENTRIES is excluded from the ZIP until
+# someone adds it here on purpose. The two lists used to be unrelated -- one
+# knew what a secret was, the other guessed from filenames -- and that is why
+# .rkd/secrets/ travelled while the panel reported the archive clean (#245).
+_SHAREABLE_SECRETS = {"odoo_pg_pass", "config/odoo.conf"}
+
+
+def _secret_paths() -> list[str]:
+    """Project-relative paths that must not leave the machine inside the ZIP."""
+    return [entry.rstrip("/") for entry, _reason in SENSITIVE_ENTRIES if entry.rstrip("/") not in _SHAREABLE_SECRETS]
+
+
+def _is_under(name: str, path: str) -> bool:
+    """Whether a ZIP entry is `path` itself, something below it, or matches it.
+
+    `SENSITIVE_ENTRIES` is a list of gitignore patterns, so the next entry
+    someone adds may well be `*.pem` rather than a literal path. Matching only
+    literal prefixes would have let it through while the comment above claimed
+    the opposite -- the kind of promise that is worse than no promise.
+
+    Case-insensitive, because `/mnt/c` is: rkd's own `mkdir(exist_ok=True)`
+    writes into an existing `.rkd/Secrets` there, and the file would travel.
+    Same reason `is_the_archive()` compares by identity rather than by name.
+    """
+    lowered, target = name.lower(), path.lower()
+    if lowered == target or lowered.startswith(target + "/"):
+        return True
+    if not any(ch in path for ch in "*?["):
+        return False
+    return fnmatch.fnmatch(lowered, target) or fnmatch.fnmatch(Path(lowered).name, target)
+
 
 # The names pack writes under rkd_backups/. Public because core/unpack.py
 # reads back what this module writes, and the two drifting apart is its own
@@ -171,12 +212,24 @@ def _restore_dockerfile(dockerfile_path: Path, original_content: str) -> None:
     dockerfile_path.write_text(original_content)
 
 
-def _verify_no_ssh_in_zip(zip_path: Path) -> list[str]:
-    """Safety double-check: scans the ZIP for files that look like private SSH keys."""
+def _scan_zip_for_secrets(zip_path: Path) -> list[str]:
+    """Last check before the ZIP is handed over: anything in it that should not be.
+
+    Two questions, because neither covers the other. The path list answers
+    "did something rkd itself calls a secret end up in here", which is how
+    .rkd/secrets/ travelled while this function reported the archive clean
+    (#245): it only knew about SSH key filenames. The name heuristics answer
+    "is there a private key under some other name", which a path list cannot,
+    since the user picks those names.
+    """
+    secret_paths = _secret_paths()
     suspicious = []
     with zipfile.ZipFile(zip_path, "r") as zf:
         for name in zf.namelist():
             basename = Path(name).name
+            if any(_is_under(name, path) for path in secret_paths):
+                suspicious.append(name)
+                continue
             if any(
                 [
                     basename.startswith("id_rsa") and not basename.endswith(".pub"),
@@ -189,7 +242,13 @@ def _verify_no_ssh_in_zip(zip_path: Path) -> list[str]:
     return suspicious
 
 
-def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str], exclude_files: Iterable[Path] = ()) -> int:
+def _create_zip(
+    project_dir: Path,
+    zip_path: Path,
+    exclude_dirs: list[str],
+    exclude_files: Iterable[Path] = (),
+    exclude_paths: Iterable[str] = (),
+) -> int:
     """Creates the ZIP archive of the full environment.
 
     Excludes: .ssh/, __pycache__, node_modules, any extra dirs provided, and
@@ -204,6 +263,10 @@ def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str], excl
     """
     excluded = _ALWAYS_EXCLUDE | set(exclude_dirs)
     excluded_rel = {Path(item).relative_to(project_dir) for item in exclude_files}
+    # By relative path, not by component name: excluding the component "secrets"
+    # would drop any directory of that name anywhere in the project, including
+    # one belonging to an addon.
+    excluded_paths = tuple(exclude_paths)
 
     def is_the_archive(item: Path) -> bool:
         """Whether this entry is the archive being written, under any name.
@@ -233,6 +296,8 @@ def _create_zip(project_dir: Path, zip_path: Path, exclude_dirs: list[str], excl
         for item in project_dir.rglob("*"):
             rel = item.relative_to(project_dir)
             if rel in excluded_rel or set(rel.parts) & excluded:
+                continue
+            if any(_is_under(rel.as_posix(), path) for path in excluded_paths):
                 continue
             if item.is_file() and not is_the_archive(item):
                 zf.write(item, rel)
@@ -408,7 +473,13 @@ def pack(
         report(f"{len(stale)} backup file(s) left out of the ZIP; unpack only restores the newest pair.")
 
     try:
-        file_count = _create_zip(project_dir=root, zip_path=zip_path, exclude_dirs=[".ssh"], exclude_files=stale)
+        file_count = _create_zip(
+            project_dir=root,
+            zip_path=zip_path,
+            exclude_dirs=[".ssh"],
+            exclude_files=stale,
+            exclude_paths=_secret_paths(),
+        )
     except Exception as exc:
         if original_dockerfile is not None:
             _restore_dockerfile(dockerfile_path, original_dockerfile)
@@ -421,9 +492,9 @@ def pack(
 
     meta_path.unlink(missing_ok=True)
 
-    ssh_found_in_zip = _verify_no_ssh_in_zip(zip_path)
-    if ssh_found_in_zip:
-        message = "Possible private SSH keys detected inside the ZIP."
+    secrets_in_zip = _scan_zip_for_secrets(zip_path)
+    if secrets_in_zip:
+        message = "Files rkd treats as secrets were found inside the ZIP."
         report(message, "warn")
         warnings.append(message)
 
@@ -434,8 +505,8 @@ def pack(
         "db_backup": db_backup_path is not None and db_backup_path.exists(),
         "filestore_backup": fs_backup_path is not None and fs_backup_path.exists(),
         "ssh_sanitized": original_dockerfile is not None,
-        "ssh_found_in_zip": bool(ssh_found_in_zip),
-        "ssh_suspicious": list(ssh_found_in_zip),
+        "secrets_found_in_zip": bool(secrets_in_zip),
+        "secrets_suspicious": list(secrets_in_zip),
         "file_count": file_count,
         "stale_backups_skipped": len(stale),
         "warnings": warnings,

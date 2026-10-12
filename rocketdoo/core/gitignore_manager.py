@@ -21,6 +21,7 @@ SENSITIVE_ENTRIES = [
     (".rkd/secrets/", "VPS passwords"),
     ("odoo_pg_pass", "PostgreSQL password"),
     (".rkd/instance.yaml", "deployment config with admin_passwd"),
+    (".rkd/deploy.yaml", "deploy targets with VPS host, user and SSH key path"),
     ("config/odoo.conf", "Odoo config with admin_passwd"),
 ]
 

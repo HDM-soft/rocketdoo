@@ -44,17 +44,50 @@ todo esto. CORS es una política que **solo respetan los navegadores**; un scrip
 
 | Credencial | Dónde vive | Protección |
 |---|---|---|
-| Password de VPS (deploy de instancia) | `.rkd/secrets/instance_{env}.env` | 0600, gitignored |
-| Password de VPS (deploy de módulos) | `.rkd/secrets/vps_{target}.env` | 0600, gitignored |
-| `odoo_pg_pass` / `admin_passwd` runtime (instancia) | `.rkd/secrets/instance_{env}_db.env` | 0600, gitignored |
-| `admin_passwd` (proyecto local) | `config/odoo.conf`, en claro | gitignored, sin permisos restringidos explícitos |
-| `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos |
+| Password de VPS (deploy de instancia) | `.rkd/secrets/instance_{env}.env` | 0600, gitignored, **excluido de `rkd pack`** |
+| Password de VPS (deploy de módulos) | `.rkd/secrets/vps_{target}.env` | 0600, gitignored, **excluido de `rkd pack`** |
+| `odoo_pg_pass` / `admin_passwd` runtime (instancia) | `.rkd/secrets/instance_{env}_db.env` | 0600, gitignored, **excluido de `rkd pack`** |
+| `admin_passwd` (proyecto local) | `config/odoo.conf`, en claro | gitignored, sin permisos restringidos explícitos; **viaja en el ZIP de `rkd pack`** (ver abajo) |
+| `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos, **excluido de `rkd pack`** |
+| Targets de deploy (host, usuario, ruta de la clave SSH) | `.rkd/deploy.yaml`, en claro | gitignored y excluido de `rkd pack` desde 3.9.2 |
 | Clave SSH privada (build de imagen) | copiada a `.ssh/<clave>` dentro del contexto de build | gitignored (`.ssh/` en `SENSITIVE_ENTRIES`) |
 | `SSHPASS` (autenticación por password a un VPS) | variable de entorno del subproceso `sshpass`, nunca en disco | vive solo en memoria del proceso hijo (desde 3.2.1) |
 | Token de sesión de la GUI | memoria del proceso `rkd gui` (`app.state.rkd_token`) | efímero, no se persiste en disco |
 
 `rkd scaffold`/`rkd init` generan un `.gitignore` que cubre las rutas marcadas "gitignored"
 arriba; `rkd info` avisa si un proyecto existente le falta cobertura.
+
+#### El ZIP de `rkd pack` es un canal de salida, igual que git (#245, 3.9.2)
+
+Hasta la 3.9.1, `rkd pack` excluía únicamente `.ssh/`, así que `.rkd/secrets/`,
+`.rkd/instance.yaml` y `.rkd/deploy.yaml` —password del VPS, host, usuario, ruta de la clave—
+viajaban dentro del archivo cuyo propósito es entregárselo a otra persona. El verificador del ZIP
+sólo buscaba nombres de clave SSH (`id_rsa` y parientes), así que el panel informaba éxito sin
+advertencias.
+
+Desde la 3.9.2 la exclusión y el verificador se derivan de la **misma** lista,
+`gitignore_manager.SENSITIVE_ENTRIES`: lo que rkd declara secreto queda fuera del ZIP por
+defecto, y que algo viaje requiere agregarlo explícitamente a `_SHAREABLE_SECRETS` en
+`core/pack.py`. Hoy esa excepción tiene dos entradas, por necesidad del entorno recibido:
+
+- **`odoo_pg_pass`** — `docker-compose.yaml` lo monta como Docker secret; sin él la base no arranca.
+- **`config/odoo.conf`** — `Dockerfile.jinja:3` hace `COPY ./config/odoo.conf`; sin él no buildea.
+
+Las dos son credenciales locales del entorno que se está compartiendo a propósito, no de un
+servidor remoto. Con todo, **el `admin_passwd` de `config/odoo.conf` viaja en claro**: es el que
+el usuario tipeó en `rkd init`, `rkd unpack` no lo rota, y el receptor queda corriendo con el
+master password del emisor. Si ese password se reusa en otro lado, conviene cambiarlo antes de
+empaquetar.
+
+**Si ya compartiste un ZIP hecho con 3.9.1 o anterior** en un proyecto donde corriste
+`rkd instance init` o `rkd deploy init`, esas credenciales salieron de tu máquina y hay que
+rotarlas: un archivo enviado no se puede desenviar.
+
+**Límites conocidos de la exclusión.** Se compara la ruta relativa dentro del proyecto, sin
+distinguir mayúsculas y aceptando patrones de gitignore. Pero sigue sin cubrir dos casos, que
+tienen su propia issue: un **symlink** dentro del proyecto que apunte a un secreto (`zipfile`
+sigue el enlace y guarda el contenido bajo el nombre del enlace), y un `.rkd/` **anidado** más
+abajo del árbol, que `rkd instance init` puede crear si se lo corre desde un subdirectorio.
 
 ## Las tres defensas y qué cubre cada una
 
