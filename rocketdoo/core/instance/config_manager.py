@@ -173,6 +173,7 @@ class InstanceConfigManager:
         traefik_email = Prompt.ask("Email for Let's Encrypt")
         db_version = Prompt.ask("PostgreSQL version", default="16")
         db_user = Prompt.ask("DB user", default=f"odoo_{env}")
+        db_name = Prompt.ask("Database name", default=db_user)
         generated_passwd = _random_password()
         admin_passwd = Prompt.ask("Odoo master password", password=True, show_default=False, default=generated_passwd)
         if admin_passwd == generated_passwd:
@@ -211,6 +212,7 @@ class InstanceConfigManager:
             "traefik_email": traefik_email,
             "db_version": db_version,
             "db_user": db_user,
+            "db_name": db_name,
             "admin_passwd": admin_passwd,
             "use_enterprise": use_enterprise,
             "use_gitman": use_gitman,

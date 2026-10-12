@@ -165,7 +165,7 @@ class DockerInstanceDeployer:
 
         creds = self._resolve_secrets(allow_remote_lookup=allow_remote_lookup)
 
-        db_user = self.cfg.get("db_user", f"odoo_{self.env}")
+        db_user = self.cfg.get("db_user") or f"odoo_{self.env}"
         use_enterprise = self.cfg.get("use_enterprise", False)
         use_gitman = self.cfg.get("use_gitman", False)
         gitman_config = self.cfg.get("gitman_config", "gitman.yml")

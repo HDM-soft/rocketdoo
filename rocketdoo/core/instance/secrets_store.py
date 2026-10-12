@@ -17,7 +17,13 @@ import string
 from pathlib import Path
 
 PG_PASS = "ODOO_PG_PASS"
+# The master password, which guards the database manager.
 ADMIN_PASSWD = "ODOO_ADMIN_PASSWD"
+# The password of the `admin` user, which guards the Odoo itself. Odoo
+# installs `base` with the literal "admin" and only the web database
+# manager ever replaces it, so a deploy that creates the database has to
+# set it (#248).
+ADMIN_LOGIN_PASSWD = "ODOO_ADMIN_LOGIN_PASSWD"
 
 _HEADER = "# Rocketdoo instance secrets - do not commit\n"
 
