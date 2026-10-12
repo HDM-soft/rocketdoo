@@ -192,17 +192,25 @@ def instance_deploy(env, dry_run, yes):
     # ── Result ──
     console.print()
     if success:
-        scheme = "https"
-        console.print(
-            Panel(
+        if dep_type == "native":
+            # Nothing stands in front of a native deploy until #211: the
+            # domain has no certificate and nothing listens on 443, so
+            # promising https there sends the operator to a dead URL.
+            body = (
                 f"[bold green]Deployment successful![/bold green]\n\n"
                 f"[dim]Environment:[/dim] {env}\n"
-                f"[dim]URL        :[/dim] [cyan underline]{scheme}://{domain}[/cyan underline]\n\n"
-                "[dim]It may take a few minutes for Let's Encrypt to issue the certificate.[/dim]",
-                border_style="green",
-                box=box.DOUBLE,
+                f"[dim]URL        :[/dim] [cyan underline]http://{host}:8069[/cyan underline]\n"
+                f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env\n\n"
+                "[dim]Plain HTTP on port 8069: a native deploy has no reverse proxy yet.[/dim]"
             )
-        )
+        else:
+            body = (
+                f"[bold green]Deployment successful![/bold green]\n\n"
+                f"[dim]Environment:[/dim] {env}\n"
+                f"[dim]URL        :[/dim] [cyan underline]https://{domain}[/cyan underline]\n\n"
+                "[dim]It may take a few minutes for Let's Encrypt to issue the certificate.[/dim]"
+            )
+        console.print(Panel(body, border_style="green", box=box.DOUBLE))
     else:
         console.print(
             Panel(

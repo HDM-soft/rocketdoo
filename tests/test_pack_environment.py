@@ -262,10 +262,16 @@ class TestSshSafetyNet:
     @pytest.mark.parametrize(
         "name",
         [
-            "project/.ssh/id_rsa",
-            "project/id_ed25519",
-            "project/id_ecdsa",
-            "project/.ssh/deploy_key",
+            # The shapes `_create_zip` actually writes: paths relative to the
+            # project root, with no prefix. The four used to carry a
+            # `project/` one, which `pack` never emits -- and under which the
+            # path list does not match at all, so the `.ssh` entry added by
+            # #245 was never exercised and only the filename heuristics were.
+            ".ssh/id_rsa",
+            "id_ed25519",
+            "id_ecdsa",
+            ".ssh/deploy_key",
+            "addons/mi_modulo/id_rsa_viejo",
         ],
     )
     def test_a_private_key_is_reported(self, tmp_path, name):

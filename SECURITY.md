@@ -47,6 +47,8 @@ todo esto. CORS es una política que **solo respetan los navegadores**; un scrip
 | Password de VPS (deploy de instancia) | `.rkd/secrets/instance_{env}.env` | 0600, gitignored, **excluido de `rkd pack`** |
 | Password de VPS (deploy de módulos) | `.rkd/secrets/vps_{target}.env` | 0600, gitignored, **excluido de `rkd pack`** |
 | `odoo_pg_pass` / `admin_passwd` runtime (instancia) | `.rkd/secrets/instance_{env}_db.env` | 0600, gitignored, **excluido de `rkd pack`** |
+| Password del rol PostgreSQL de la instancia (deploy nativo) | `.rkd/secrets/instance_{env}_db.env` en local; `/etc/odoo/odoo.conf` en el VPS | 0600 en local; en el VPS `odoo:odoo` 640, escrito por `stdin` y nunca como argumento (#248) |
+| Password del usuario `admin` de la instancia (deploy nativo) | `.rkd/secrets/instance_{env}_db.env`, y hasheada en la base | 0600 en local; se fija sólo al crear la base, viaja por `stdin` y se anuncia una vez en el panel (#248) |
 | `admin_passwd` (proyecto local) | `config/odoo.conf`, en claro | gitignored, sin permisos restringidos explícitos; **viaja en el ZIP de `rkd pack`** (ver abajo) |
 | `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos, **excluido de `rkd pack`** |
 | Targets de deploy (host, usuario, ruta de la clave SSH) | `.rkd/deploy.yaml`, en claro | gitignored y excluido de `rkd pack` desde 3.9.2 |
@@ -167,7 +169,10 @@ Riesgos residuales aceptados, documentados en lugar de prometidos como resueltos
   confiable.** `remote_path`, `container_name` y `service_name` (entre otros) del propio
   `deploy.yaml`/`instance.yaml` del usuario se interpolan en comandos SSH sin sanitizar; están
   fuera de alcance porque son configuración que el propio usuario escribe, no entrada de un
-  tercero.
+  tercero. La excepción son `db_user` y `db_name` del deploy nativo, que
+  desde #248 se validan como identificadores PostgreSQL antes de que se arme un solo comando:
+  ahí el valor entra además en una sentencia SQL, y un nombre con comillas se escapa de ella
+  sin necesidad de tocar el shell.
 - **El mensaje de error del wizard puede contener una ruta.** `/api/setup/init` devuelve
   `str(e)`, y una excepción de archivo trae la ruta que falló (`'/home/<usuario>/.ssh/...'`).
   Se acepta: es la ruta que el propio usuario pidió en la petición, y sin ella el error deja de

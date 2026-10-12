@@ -83,8 +83,19 @@ class InstanceEnvironment(BaseModel):
     traefik_email: str = ""
 
     db_version: str = "16"
-    db_user: str = "odoo"
+    # Empty means "derive from the environment name", which InstanceConfig
+    # does below. A literal default here would be a second answer to the
+    # same question: the wizard asks for `odoo_{env}`, and two
+    # environments sharing one role also share one database (#248).
+    db_user: str = ""
+    # The database Odoo serves. Empty means "same as db_user", filled in below.
+    db_name: str = ""
     admin_passwd: str = ""
+
+    # Only meaningful with a reverse proxy in front; a native deploy has
+    # none today, and trusting X-Forwarded-* without one lets any caller
+    # spoof its address.
+    proxy_mode: bool = False
 
     use_enterprise: bool = False
     use_gitman: bool = False
@@ -128,6 +139,8 @@ class InstanceEnvironment(BaseModel):
     def _fill_derived_defaults(self) -> "InstanceEnvironment":
         if not self.odoo_tag:
             self.odoo_tag = self.odoo_version
+        if not self.db_name:
+            self.db_name = self.db_user
         return self
 
     @property
@@ -164,11 +177,31 @@ class InstanceConfig(BaseModel):
         The GUI's own reader assumed this shape, so a file written that way
         must not be lost.
         """
-        if not isinstance(data, dict) or "environments" in data:
+        if not isinstance(data, dict):
             return data
+        if "environments" in data:
+            return cls._name_the_database_roles(data)
         if data and all(isinstance(v, dict) for v in data.values()):
-            return {"environments": data}
+            return cls._name_the_database_roles({"environments": data})
         return data
+
+    @staticmethod
+    def _name_the_database_roles(data: dict) -> dict:
+        """Give each environment its own role name when the file omits one.
+
+        Only here is the environment's name known; the environment model sees
+        its own fields and nothing else.
+        """
+        environments = data.get("environments")
+        if not isinstance(environments, dict):
+            return data
+
+        named = {}
+        for name, env in environments.items():
+            if isinstance(env, dict) and not env.get("db_user"):
+                env = {**env, "db_user": f"odoo_{name}"}
+            named[name] = env
+        return {**data, "environments": named}
 
     def get(self, env: str) -> InstanceEnvironment | None:
         return self.environments.get(env)
