@@ -337,6 +337,23 @@ def unpack_environment(no_restore, build, ssh_key, no_ssh, yes):
             f"[dim]Compose project renamed: [cyan]{report['renamed_from']}[/cyan] → "
             f"[cyan]{report['project_name']}[/cyan] (this is the name in rkd status and docker logs).[/dim]"
         )
+    if report["started"] and report["db_backup_present"] and not report["db_restored"]:
+        # The containers came up, so `started` is true and the panel below used
+        # to go green -- while the database the ZIP carried never made it in.
+        # Same shape as #245 and the Traefik case of #143: a panel affirming a
+        # success that did not happen. The warning scrolled past above it.
+        console.print(
+            Panel(
+                "[bold yellow]⚠️  The environment started, but the database was not restored[/bold yellow]\n\n"
+                "[dim]The ZIP carries a dump that did not make it in; the reason is in the output above\n"
+                "(most often PostgreSQL not accepting connections in time on a busy machine).\n\n"
+                "[bold]Retry the restore with:[/bold]\n"
+                "  [cyan]rkd down[/cyan] and then [cyan]rkd unpack --yes[/cyan][/dim]",
+                border_style="yellow",
+                box=box.ROUNDED,
+            )
+        )
+
     if report["started"]:
         console.print(
             Panel(
