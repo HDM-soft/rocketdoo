@@ -244,9 +244,12 @@ class TestSshSafetyNet:
 
     The existing tests prove the exclusion works, which is what makes this
     scanner dead quiet in practice -- and therefore easy to neuter without
-    anyone noticing. RF8.5 moved it into core/pack.py in T11 -- the one
-    authorised change here is following the import to its new home; the
-    asserts are untouched.
+    anyone noticing. RF8.5 moved it into core/pack.py in T11.
+
+    #245 widened it: it used to know only about SSH key filenames, which is
+    why `.rkd/secrets/` travelled inside shared ZIPs while the panel reported
+    the archive clean. The key heuristics below are unchanged -- a path list
+    cannot catch a private key the user named something else.
     """
 
     def _zip_with(self, tmp_path, *names):
@@ -266,12 +269,12 @@ class TestSshSafetyNet:
         ],
     )
     def test_a_private_key_is_reported(self, tmp_path, name):
-        found = core_pack._verify_no_ssh_in_zip(self._zip_with(tmp_path, name))
+        found = core_pack._scan_zip_for_secrets(self._zip_with(tmp_path, name))
         assert found == [name]
 
     @pytest.mark.parametrize("name", ["project/.ssh/id_rsa.pub", "project/config/odoo.conf"])
     def test_public_keys_and_ordinary_files_are_not_reported(self, tmp_path, name):
-        assert core_pack._verify_no_ssh_in_zip(self._zip_with(tmp_path, name)) == []
+        assert core_pack._scan_zip_for_secrets(self._zip_with(tmp_path, name)) == []
 
 
 class TestPackWithDatabaseBackup:
@@ -871,3 +874,177 @@ class TestAFilestoreWithNoDumpBesideIt:
         with zipfile.ZipFile(output) as zf:
             shipped = [n for n in zf.namelist() if n.startswith("rkd_backups/")]
         assert shipped == [], shipped
+
+
+class TestSecretsDoNotTravelInTheZip:
+    """rkd declares five things sensitive in the .gitignore it generates, and
+    four of them used to travel inside the ZIP meant to be shared (#245).
+
+    Two of those four have to: docker-compose mounts `odoo_pg_pass` as a
+    Docker secret and the Dockerfile COPYs `config/odoo.conf` at build time,
+    so without them the received environment neither starts nor builds. They
+    are the local credentials of the environment being handed over.
+
+    The other two are credentials for the *sender's own servers* -- VPS host,
+    user and password, the production PostgreSQL password, the master
+    password -- and have no function in the recipient's environment.
+    """
+
+    def _with_deployment_secrets(self, project_dir):
+        secrets = project_dir / ".rkd" / "secrets"
+        secrets.mkdir(parents=True, exist_ok=True)
+        (secrets / "instance_prod.env").write_text("INSTANCE_PROD_PASSWORD=elPasswordDelVps\n")
+        (project_dir / ".rkd" / "instance.yaml").write_text("prod:\n  vps:\n    host: 10.0.0.1\n    user: root\n")
+
+    def test_the_senders_server_credentials_stay_out(self, packable_project):
+        self._with_deployment_secrets(packable_project)
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert not [n for n in names if n.startswith(".rkd/secrets")], names
+        assert ".rkd/instance.yaml" not in names
+
+    def test_what_the_environment_needs_still_travels(self, packable_project):
+        """Excluding every sensitive file would ship a ZIP that does not run."""
+        self._with_deployment_secrets(packable_project)
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert "odoo_pg_pass" in names
+        assert "config/odoo.conf" in names
+
+    def test_a_directory_of_the_user_named_secrets_still_travels(self, packable_project):
+        """Excluded by relative path, not by component name: dropping every
+        directory called `secrets` would quietly delete an addon's own.
+        """
+        addon_secrets = packable_project / "addons" / "mi_modulo" / "secrets"
+        addon_secrets.mkdir(parents=True)
+        (addon_secrets / "datos.txt").write_text("contenido del addon\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "addons/mi_modulo/secrets/datos.txt" in zf.namelist()
+
+    def test_the_scanner_reports_a_secret_that_slipped_through(self, tmp_path):
+        """The exclusion and the scanner are two separate guards: if the first
+        one regresses, the second has to say so instead of reporting clean.
+        """
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr(".rkd/secrets/instance_prod.env", "INSTANCE_PROD_PASSWORD=x")
+            zf.writestr(".rkd/instance.yaml", "prod: {}")
+            zf.writestr("odoo_pg_pass", "local")
+
+        found = core_pack._scan_zip_for_secrets(path)
+
+        assert sorted(found) == [".rkd/instance.yaml", ".rkd/secrets/instance_prod.env"]
+
+    def test_the_exclusion_list_comes_from_the_sensitive_entries(self):
+        """One list, not two. A new entry in SENSITIVE_ENTRIES stays out of
+        the ZIP by default; letting it travel takes an explicit decision.
+        """
+        from rocketdoo.core.gitignore_manager import SENSITIVE_ENTRIES
+
+        declared = {entry.rstrip("/") for entry, _reason in SENSITIVE_ENTRIES}
+        excluded = set(core_pack._secret_paths())
+
+        assert excluded == declared - core_pack._SHAREABLE_SECRETS
+
+    def test_a_name_that_merely_starts_like_a_secret_still_travels(self, packable_project):
+        """`.rkd/secrets` excludes that path and what is under it, not every
+        name beginning with those letters. A loose prefix would silently drop
+        the user's own `.rkd/secretsnotas.txt` from the shared copy.
+        """
+        rkd = packable_project / ".rkd"
+        rkd.mkdir(exist_ok=True)
+        (rkd / "secretsnotas.txt").write_text("notas mias\n")
+        (rkd / "instance.yaml.ejemplo").write_text("plantilla\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert ".rkd/secretsnotas.txt" in names
+        assert ".rkd/instance.yaml.ejemplo" in names
+
+    def test_a_flagged_secret_reaches_the_report_and_the_cli(self, packable_project, monkeypatch):
+        """The scanner wired to what the user actually sees.
+
+        It was covered as a function and nowhere else, so replacing its call
+        in `pack()` with `[]` left the whole suite green -- the exact shape of
+        #245, where the archive carried a secret and the panel said it was
+        clean. The exclusion and the scanner are two guards; this pins the
+        second one all the way to the warning.
+        """
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        monkeypatch.setattr(core_pack, "_scan_zip_for_secrets", lambda _zip: [".rkd/secrets/instance_prod.env"])
+
+        result = CliRunner().invoke(main, ["pack", "--no-db", "-o", str(packable_project / "x.zip")])
+
+        assert result.exit_code == 0, result.output
+        output = " ".join(result.output.split())
+        assert "SECURITY WARNING" in output
+        assert ".rkd/secrets/instance_prod.env" in output
+
+    def test_a_pattern_entry_is_excluded_too(self, packable_project, monkeypatch):
+        """SENSITIVE_ENTRIES holds gitignore patterns, so the next one added
+        may be `*.pem` rather than a literal path. Matching only literal
+        prefixes would let it travel while the comment in pack.py promises it
+        will not -- a false promise is worse than none.
+        """
+        monkeypatch.setattr(core_pack, "SENSITIVE_ENTRIES", [*core_pack.SENSITIVE_ENTRIES, ("*.pem", "clave TLS")])
+        (packable_project / "certs").mkdir()
+        (packable_project / "certs" / "server.pem").write_text("-----BEGIN PRIVATE KEY-----\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "certs/server.pem" not in zf.namelist()
+
+    def test_a_deploy_target_file_stays_out(self, packable_project):
+        """`.rkd/deploy.yaml` carries the VPS host, user and the path to the
+        SSH key -- the same class of data as instance.yaml. It was in neither
+        list, so it travelled in the ZIP *and* was not gitignored.
+        """
+        rkd = packable_project / ".rkd"
+        rkd.mkdir(exist_ok=True)
+        (rkd / "deploy.yaml").write_text("targets:\n  prod:\n    connection:\n      host: vps.cliente.com\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert ".rkd/deploy.yaml" not in zf.namelist()
+
+    def test_the_match_ignores_case_because_mnt_c_does(self, packable_project):
+        """On `/mnt/c` -- where this project is normally developed -- `.rkd/Secrets`
+        and `.rkd/secrets` are the same directory, and rkd's own
+        `mkdir(exist_ok=True)` writes into whichever spelling is already there.
+        A case-sensitive comparison would ship the password from one of them.
+
+        Same reasoning as `is_the_archive()`, which compares by file identity
+        for this exact filesystem.
+        """
+        odd = packable_project / ".rkd" / "Secrets"
+        odd.mkdir(parents=True, exist_ok=True)
+        (odd / "instance_prod.env").write_text("INSTANCE_PROD_PASSWORD=elPasswordDelVps\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert not [n for n in names if n.lower().startswith(".rkd/secrets")], names

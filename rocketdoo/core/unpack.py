@@ -363,8 +363,17 @@ def _is_container_running(container_name: str | None) -> bool:
         return False
 
 
-def _wait_for_postgres(db_container: str, report: ProgressCallback, max_wait: int = 60) -> bool:
-    """Polls pg_isready, reporting progress every 10s (RF9.3 keeps the cadence)."""
+def _wait_for_postgres(db_container: str, report: ProgressCallback, max_wait: int = 150) -> bool:
+    """Polls pg_isready, reporting progress every 10s (RF9.3 keeps the cadence).
+
+    The two outcomes are not symmetric. Waiting longer than necessary costs a
+    slower failure on an environment that is broken anyway, and the progress
+    line keeps saying so every 10s. Giving up too early costs the restore:
+    the containers are up, so the command carries on and finishes with a
+    database that never arrived -- the whole reason the ZIP was unpacked.
+    60s was enough on an idle machine and not on a busy one; it was how the
+    round-trip e2e failed on CI while passing four times in a row locally.
+    """
     report(f"Waiting for PostgreSQL to be ready (max {max_wait}s)...")
     for i in range(max_wait):
         result = subprocess.run(["docker", "exec", db_container, "pg_isready", "-U", "root"], capture_output=True)
@@ -902,6 +911,11 @@ def unpack(
         "project_renamed": renamed_from is not None,
         "renamed_from": renamed_from,
         "ssh_configured": ssh_configured,
+        # Whether there was anything to restore, so a caller can tell "this ZIP
+        # carried no database" from "the restore did not run". Without it the
+        # CLI could not say which of the two had happened, and showed the same
+        # green panel either way.
+        "db_backup_present": db_dump is not None,
         "db_restored": db_restored,
         "filestore_restored": filestore_restored,
         "started": started,

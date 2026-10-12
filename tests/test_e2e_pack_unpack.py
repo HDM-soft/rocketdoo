@@ -143,6 +143,15 @@ def test_pack_then_unpack_restores_the_database(tmp_path, docker_available, monk
         monkeypatch.chdir(restore)
         result = runner.invoke(main, ["unpack", "--yes", "--no-ssh"])
         assert result.exit_code == 0, result.output
+        # `exit_code == 0` does not mean the restore ran: since #143 a database
+        # that is not ready in time warns and carries on. Without this the next
+        # assertion failed with a bare "database does not exist" from psql,
+        # which reads like a product bug instead of PostgreSQL being slow on a
+        # loaded machine -- that is how this test failed on CI while passing
+        # four times in a row locally.
+        assert "database was not restored" not in " ".join(result.output.split()), (
+            "unpack finished without restoring the database; nothing below proves anything.\n" + result.output
+        )
 
         compose_data = yaml.safe_load((restore / "docker-compose.yaml").read_text())
         web_ports = compose_data["services"]["web"]["ports"]

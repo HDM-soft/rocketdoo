@@ -2536,7 +2536,9 @@ const Pack = {
         if (packForm.value.db_name) body.db_name = packForm.value.db_name
         const r = await api.post('/pack/pack', body)
         output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
-        r.ok ? notify(t('packCompleted')) : notify(r.stderr||t('packFailed'),'err')
+        if (!r.ok) notify(r.stderr || t('packFailed'), 'err')
+        else if (r.stderr) notify(r.stderr.split('\n')[0], 'err')
+        else notify(t('packCompleted'))
         if (r.ok) await load()
       } finally { packBusy.value = false }
     }

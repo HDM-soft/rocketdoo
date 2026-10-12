@@ -11,6 +11,8 @@ odoo_pg_pass
 !*.env.example
 # Deployment config: contains admin_passwd in clear text
 .rkd/instance.yaml
+# Deploy targets: VPS host, user and the path to the SSH key
+.rkd/deploy.yaml
 # Odoo config: contains admin_passwd in clear text.
 # `rkd init` regenerates it. To version it, commit a sanitized
 # copy as config/odoo.conf.example instead.

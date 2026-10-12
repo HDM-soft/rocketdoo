@@ -1396,6 +1396,8 @@ class TestUnpackCliProjectName:
                 "started": True,
                 "launched": True,
                 "odoo_container": "odoo-demo",
+                "db_backup_present": False,
+                "db_restored": False,
                 "logs_tail": [],
                 "warnings": [],
                 "project_name": kwargs["project_name"] or "demo",
@@ -1645,3 +1647,79 @@ class TestPortsOfAStoppedOriginal:
         assert info["project"]["conflict"] is True
         assert info["ports_reserved"] is True
         assert info["suggested_ports"] == {"odoo_port": 8070, "vsc_port": 8889}
+
+
+class TestTheFinalPanelDoesNotClaimARestoreThatDidNotHappen:
+    """`started` only says the containers came up.
+
+    A dump that never made it in is the user's whole reason for unpacking,
+    and the green "Environment is ready" panel used to appear anyway, with
+    the warning already scrolled past above it. Same shape as #245 and as
+    the Traefik case of #143: a panel affirming a success that did not
+    happen.
+
+    The distinction needs `db_backup_present`: without it there is no way to
+    tell "this ZIP carried no database" from "the restore did not run".
+    """
+
+    def _run(self, project_dir, monkeypatch, **report_overrides):
+        from click.testing import CliRunner
+
+        from rocketdoo import unpack_environment
+        from rocketdoo.cli import main
+
+        _write_named_project(project_dir)
+        report = {
+            "ports": {"odoo_port": 8069, "vsc_port": 8888},
+            "ports_changed": False,
+            "project_name": "demo",
+            "project_renamed": False,
+            "renamed_from": None,
+            "ssh_configured": False,
+            "db_backup_present": True,
+            "db_restored": True,
+            "filestore_restored": True,
+            "started": True,
+            "launched": True,
+            "odoo_container": "odoo-demo",
+            "warnings": [],
+            "logs_tail": [],
+        }
+        report.update(report_overrides)
+        monkeypatch.setattr(unpack_environment, "unpack", lambda root, **kwargs: report)
+        monkeypatch.setattr(
+            unpack_environment,
+            "inspect",
+            lambda root: {
+                "meta": {"rkd_shared": True},
+                "has_meta": True,
+                "port_conflicts": {"odoo_port": False, "vsc_port": False},
+                "suggested_ports": {"odoo_port": 8069, "vsc_port": 8888},
+                "ports_reserved": False,
+                "uses_private_repos": False,
+                "ssh_keys": [],
+                "project": {"name": "demo", "suggested_name": "demo", "conflict": False, "reason": "", "renamable": True},
+                "mailpit_port_conflict": False,
+            },
+        )
+        return CliRunner().invoke(main, ["unpack", "--yes", "--no-ssh"])
+
+    def test_a_dump_that_did_not_restore_is_called_out(self, project_dir, monkeypatch):
+        result = self._run(project_dir, monkeypatch, db_restored=False)
+
+        output = " ".join(result.output.split())
+        assert "database was not restored" in output
+        assert "rkd unpack --yes" in output, "the warning has to say how to retry"
+
+    def test_a_zip_without_a_database_says_nothing_about_restoring(self, project_dir, monkeypatch):
+        """`--no-db` packs are normal; they must not raise a false alarm."""
+        result = self._run(project_dir, monkeypatch, db_backup_present=False, db_restored=False)
+
+        assert "database was not restored" not in " ".join(result.output.split())
+
+    def test_a_successful_restore_keeps_the_green_panel_alone(self, project_dir, monkeypatch):
+        result = self._run(project_dir, monkeypatch)
+
+        output = " ".join(result.output.split())
+        assert "Environment is ready" in output
+        assert "database was not restored" not in output
