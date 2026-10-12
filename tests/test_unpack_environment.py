@@ -726,7 +726,11 @@ class TestCoreUnpackInspect:
 
         assert info["has_meta"] is False
 
-    def test_has_meta_is_false_for_a_manifest_missing_the_rkd_shared_flag(self, project_dir):
+    def test_has_meta_is_false_for_a_manifest_missing_the_rkd_shared_flag(self, project_dir, monkeypatch):
+        # Without this the assertion below reads the real host: anyone with an
+        # Odoo already on 8069 -- the default this project hands out -- sees a
+        # red suite for a reason that has nothing to do with the code.
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
         _write_project(project_dir)
         (project_dir / "rkd-shared.json").write_text(json.dumps({"odoo_port": 9999}))
 
@@ -1206,6 +1210,7 @@ class TestInspectProject:
         assert {p: p.read_bytes() for p in project_dir.rglob("*") if p.is_file()} == before
 
     def test_the_old_keys_keep_their_meaning(self, project_dir, monkeypatch):
+        monkeypatch.setattr(core_unpack, "is_port_in_use", lambda port: False)
         _write_named_project(project_dir)
         self._inventory(monkeypatch, _inv())
 
