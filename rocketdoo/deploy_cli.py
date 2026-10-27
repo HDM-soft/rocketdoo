@@ -57,8 +57,22 @@ def deploy_init(ctx, force):
     Creates deploy.yaml with interactive wizard
     """
     from rocketdoo.core.deploy.config_manager import DeployConfigManager
+    from rocketdoo.core.project_info import project_exists
 
     project_path = Path.cwd()
+
+    # Both wizards write credentials under .rkd/. Run one directory too deep
+    # and they land somewhere the generated .gitignore does not cover and
+    # `rkd pack` used to ship (#246): refuse rather than scatter them.
+    if not project_exists(project_path):
+        console.print("\n[red]No Rocketdoo project in this directory.[/red]")
+        console.print(f"[dim]{project_path} has no Dockerfile and docker-compose.yaml next to each other.[/dim]")
+        console.print("[dim]Run this from the project root: what it writes under .rkd/ are credentials,[/dim]")
+        console.print("[dim]and a copy below the root is neither gitignored nor kept out of `rkd pack`.[/dim]\n")
+        # Non-zero, so `rkd deploy init && rkd deploy run` does not carry on
+        # as if a configuration had been written.
+        raise SystemExit(1)
+
     config_manager = DeployConfigManager(project_path)
 
     # Check if config already exists

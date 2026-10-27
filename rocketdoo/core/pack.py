@@ -75,6 +75,28 @@ def _is_under(name: str, path: str) -> bool:
     return fnmatch.fnmatch(lowered, target) or fnmatch.fnmatch(Path(lowered).name, target)
 
 
+def _secret_candidates(name: str) -> list[str]:
+    """The entry's own path, plus the tail starting at any `.rkd` component.
+
+    The exclusion is anchored at the project root, and that is deliberate:
+    matching the bare component `secrets` would drop an addon's own
+    `secrets/` directory. But `.rkd` is a name rkd reserves for itself, so
+    `addons/mi_modulo/.rkd/secrets/instance_prod.env` is rkd's credential
+    wherever it sits -- and `rkd instance init` run one directory too deep
+    writes exactly that, somewhere the generated .gitignore does not cover
+    either (#246).
+    """
+    parts = name.split("/")
+    tails = ["/".join(parts[i:]) for i, part in enumerate(parts) if part.lower() == ".rkd"]
+    return [name, *tails]
+
+
+def _matches_secret(name: str, secret_paths: Iterable[str]) -> bool:
+    """Whether this entry is one of the paths rkd declares secret."""
+    candidates = _secret_candidates(name)
+    return any(_is_under(candidate, path) for candidate in candidates for path in secret_paths)
+
+
 # The names pack writes under rkd_backups/. Public because core/unpack.py
 # reads back what this module writes, and the two drifting apart is its own
 # class of bug: the writer owns the format.
@@ -218,16 +240,20 @@ def _scan_zip_for_secrets(zip_path: Path) -> list[str]:
     Two questions, because neither covers the other. The path list answers
     "did something rkd itself calls a secret end up in here", which is how
     .rkd/secrets/ travelled while this function reported the archive clean
-    (#245): it only knew about SSH key filenames. The name heuristics answer
-    "is there a private key under some other name", which a path list cannot,
-    since the user picks those names.
+    (#245): it only knew about SSH key filenames.
+
+    The name heuristics answer a narrower question than it is tempting to
+    claim: not "is there a private key in here" but "is there one under a
+    name OpenSSH hands out". A key copied in as `notas.txt` passes, and so
+    does a hard link to one outside the project (#246). Reading the contents
+    would answer the real question; this does not.
     """
     secret_paths = _secret_paths()
     suspicious = []
     with zipfile.ZipFile(zip_path, "r") as zf:
         for name in zf.namelist():
             basename = Path(name).name
-            if any(_is_under(name, path) for path in secret_paths):
+            if _matches_secret(name, secret_paths):
                 suspicious.append(name)
                 continue
             if any(
@@ -248,13 +274,14 @@ def _create_zip(
     exclude_dirs: list[str],
     exclude_files: Iterable[Path] = (),
     exclude_paths: Iterable[str] = (),
-) -> int:
+) -> tuple[int, list[str]]:
     """Creates the ZIP archive of the full environment.
 
     Excludes: .ssh/, __pycache__, node_modules, any extra dirs provided, and
     the individual files in `exclude_files`. `rkd_backups/`, like every other
     project subdirectory, is picked up by the `rglob` walk below - it never
-    needed a dedicated branch. Returns the number of files included.
+    needed a dedicated branch. Returns the number of files included and the
+    symbolic links left out.
 
     `exclude_files` is matched on the path relative to the project, not on
     file identity the way the output archive is: these paths are enumerated
@@ -291,19 +318,56 @@ def _create_zip(
         except OSError:
             return False
 
+    entries = list(project_dir.rglob("*"))
+
+    # A hard link is not a link as far as the walk is concerned: no
+    # `is_symlink()`, its own name outside any excluded path, and the same
+    # bytes. `ln .rkd/secrets/instance_prod.env notas.txt` hands the password
+    # over exactly like the symbolic version did, so the secrets are also
+    # identified by what they are and not only by where they sit -- the same
+    # reason `is_the_archive()` compares by identity. An inode of 0, which
+    # some filesystems report, is left out: it would match everything.
+    secret_inodes = set()
+    for item in entries:
+        if not _matches_secret(item.relative_to(project_dir).as_posix(), excluded_paths):
+            continue
+        if item.is_symlink() or not item.is_file():
+            continue
+        stat = item.stat()
+        if stat.st_ino:
+            secret_inodes.add((stat.st_dev, stat.st_ino))
+
     file_count = 0
+    skipped_links: list[str] = []
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-        for item in project_dir.rglob("*"):
+        for item in entries:
             rel = item.relative_to(project_dir)
             if rel in excluded_rel or set(rel.parts) & excluded:
                 continue
-            if any(_is_under(rel.as_posix(), path) for path in excluded_paths):
+            if _matches_secret(rel.as_posix(), excluded_paths):
+                continue
+            if item.is_symlink():
+                # `zf.write()` follows the link and stores the target's bytes
+                # under the link's name, so `ln -s
+                # .rkd/secrets/instance_prod.env notas.txt` hands the password
+                # over as `notas.txt` -- past the exclusion, which sees the
+                # link's own path, and past the scanner, which only ever sees
+                # the names inside the archive. The target does not even have
+                # to be in the project: `ln -s ~/.ssh/id_rsa addons/clave`
+                # shipped a private key (#246).
+                #
+                # A linked directory was already dropped here, because the
+                # walk does not descend into one; now it is at least named.
+                skipped_links.append(rel.as_posix())
                 continue
             if item.is_file() and not is_the_archive(item):
+                stat = item.stat()
+                if (stat.st_dev, stat.st_ino) in secret_inodes:
+                    continue
                 zf.write(item, rel)
                 file_count += 1
 
-    return file_count
+    return file_count, skipped_links
 
 
 def _stale_backups(backup_dir: Path, keep: set[Path | None]) -> list[Path]:
@@ -473,7 +537,7 @@ def pack(
         report(f"{len(stale)} backup file(s) left out of the ZIP; unpack only restores the newest pair.")
 
     try:
-        file_count = _create_zip(
+        file_count, skipped_links = _create_zip(
             project_dir=root,
             zip_path=zip_path,
             exclude_dirs=[".ssh"],
@@ -492,6 +556,11 @@ def pack(
 
     meta_path.unlink(missing_ok=True)
 
+    if skipped_links:
+        message = f"{len(skipped_links)} symbolic link(s) left out of the ZIP; their target is not packaged."
+        report(message, "warn")
+        warnings.append(message)
+
     secrets_in_zip = _scan_zip_for_secrets(zip_path)
     if secrets_in_zip:
         message = "Files rkd treats as secrets were found inside the ZIP."
@@ -507,6 +576,7 @@ def pack(
         "ssh_sanitized": original_dockerfile is not None,
         "secrets_found_in_zip": bool(secrets_in_zip),
         "secrets_suspicious": list(secrets_in_zip),
+        "symlinks_skipped": skipped_links,
         "file_count": file_count,
         "stale_backups_skipped": len(stale),
         "warnings": warnings,

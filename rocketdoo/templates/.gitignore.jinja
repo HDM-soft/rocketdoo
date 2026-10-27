@@ -13,6 +13,8 @@ odoo_pg_pass
 .rkd/instance.yaml
 # Deploy targets: VPS host, user and the path to the SSH key
 .rkd/deploy.yaml
+# Let's Encrypt: account key and the issued certificates, written by Traefik
+traefik/certs/acme.json
 # Odoo config: contains admin_passwd in clear text.
 # `rkd init` regenerates it. To version it, commit a sanitized
 # copy as config/odoo.conf.example instead.
