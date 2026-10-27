@@ -191,13 +191,15 @@ class TestTheAdminUser:
         assert f"env.ref('base.user_admin').write({{'password': '{password}'}})" in script
         assert "env.cr.commit()" in script
 
-    def test_it_is_set_only_on_the_run_that_initialises(self, tmp_path, monkeypatch):
-        """Resetting it on every deploy would undo the operator's own change."""
+    def test_it_is_set_behind_its_own_guard(self, tmp_path, monkeypatch):
+        """Resetting it on every deploy would undo the operator's own change,
+        and hanging it off the install's guard would skip it for good when
+        the install succeeded and this step did not."""
         _, run = _deploy(tmp_path, monkeypatch)
         script = run.stdin_of("bash -s")
 
-        guard = script.index("to_regclass")
-        assert guard < script.index("odoo shell")
+        assert script.index(deployer_native._ADMIN_PASSWORD_MARK) < script.index("odoo shell")
+        assert f"set_param('{deployer_native._ADMIN_PASSWORD_MARK}', '1')" in script
         assert script.rstrip().endswith("fi")
 
     def test_it_is_not_the_master_password(self, tmp_path, monkeypatch):
@@ -243,6 +245,7 @@ class TestTheDatabase:
 
         assert "-E UTF8" in script
         assert "-T template0" in script
+        assert "--lc-collate=C" in script
 
     def test_the_install_cannot_race_the_service_the_package_started(self, tmp_path, monkeypatch):
         _, run = _deploy(tmp_path, monkeypatch)
@@ -259,8 +262,10 @@ class TestTheDatabase:
         _, run = _deploy(tmp_path, monkeypatch)
         script = run.stdin_of("bash -s")
 
-        # The stop lives inside the guard, not at the top of the script.
-        assert script.index("to_regclass") < script.index("systemctl stop odoo")
+        # The stop lives inside the install's guard, not at the top of the
+        # script: a redeploy that has nothing to install must not take a live
+        # instance down before the restart.
+        assert script.index("state = 'installed'") < script.index("systemctl stop odoo")
 
     def test_the_install_reports_where_it_failed(self, tmp_path, monkeypatch):
         """Its output would otherwise go to the server logfile the conf sets,
@@ -268,9 +273,13 @@ class TestTheDatabase:
         _, run = _deploy(tmp_path, monkeypatch)
 
         # The line itself, not the script: the `odoo shell` line carries the
-        # same flag, so looking anywhere in the script proves nothing.
+        # same flag, so looking anywhere in the script proves nothing. The
+        # value is empty, not /dev/stdout: that one makes Odoo print "ERROR:
+        # couldn't create the logfile directory" before logging to the same
+        # place anyway.
         install = next(line for line in run.stdin_of("bash -s").splitlines() if "-i base" in line)
-        assert "--logfile=/dev/stdout" in install
+        assert " --logfile= " in f"{install} "
+        assert "/dev/stdout" not in install
 
     def test_neither_half_runs_again_on_a_redeploy(self, tmp_path, monkeypatch):
         _, run = _deploy(tmp_path, monkeypatch)
@@ -279,7 +288,8 @@ class TestTheDatabase:
         # Guarded separately on purpose: a database created by an attempt that
         # died during the install must still get initialised next time.
         assert "FROM pg_database WHERE datname = 'odoo_prod'" in script
-        assert "to_regclass('public.ir_module_module')" in script
+        assert "FROM ir_module_module WHERE name = 'base' AND state = 'installed'" in script
+        assert f"FROM ir_config_parameter WHERE key = '{deployer_native._ADMIN_PASSWORD_MARK}'" in script
 
     def test_the_database_name_defaults_to_the_role_name(self, tmp_path, monkeypatch):
         _, run = _deploy(tmp_path, monkeypatch, db_user="odoo_prod")
@@ -428,7 +438,7 @@ class TestIdentifierValidation:
 _STUBS = {
     "sudo": '#!/bin/sh\nif [ "$1" = "-u" ]; then shift 2; fi\nexec "$@"\n',
     "systemctl": '#!/bin/sh\necho "systemctl $*" >> "$RKD_LOG"\n',
-    "createdb": '#!/bin/sh\necho "createdb $*" >> "$RKD_LOG"\n',
+    "createdb": ('#!/bin/sh\necho "createdb $*" >> "$RKD_LOG"\n[ -z "$RKD_CREATEDB_FAILS" ]\n'),
     # Fails for the first $RKD_CURL_FAILURES calls, so the retry loop is
     # exercised instead of asserted.
     "curl": (
@@ -449,7 +459,8 @@ _STUBS = {
         'echo "psql argc=$#" >> "$RKD_LOG"\n'
         'case "$*" in\n'
         '  *pg_database*) [ -n "$RKD_DB_EXISTS" ] && echo 1 ;;\n'
-        '  *to_regclass*) [ -n "$RKD_TABLE_EXISTS" ] && echo ir_module_module ;;\n'
+        '  *ir_module_module*) [ -n "$RKD_BASE_INSTALLED" ] && echo 1 ;;\n'
+        '  *ir_config_parameter*) [ -n "$RKD_ADMIN_MARK" ] && echo 1 ;;\n'
         "esac\n"
         "exit 0\n"
     ),
@@ -466,7 +477,7 @@ class TestTheRemoteScriptRuns:
     that no command swallows the script it is being read from.
     """
 
-    def _run_script(self, tmp_path, monkeypatch, *, db_exists=False, table_exists=False) -> tuple[int, list[str]]:
+    def _run_script(self, tmp_path, monkeypatch, **state) -> tuple[int, list[str]]:
         monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
         deployer = deployer_native.NativeInstanceDeployer("prod", _config(), tmp_path)
         sent = {}
@@ -485,8 +496,10 @@ class TestTheRemoteScriptRuns:
             **os.environ,
             "PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}",
             "RKD_LOG": str(log),
-            "RKD_DB_EXISTS": "1" if db_exists else "",
-            "RKD_TABLE_EXISTS": "1" if table_exists else "",
+            "RKD_DB_EXISTS": "1" if state.get("db_exists") else "",
+            "RKD_BASE_INSTALLED": "1" if state.get("base_installed") else "",
+            "RKD_ADMIN_MARK": "1" if state.get("admin_mark") else "",
+            "RKD_CREATEDB_FAILS": "1" if state.get("createdb_fails") else "",
         }
         result = subprocess.run(["bash", "-s"], input=sent["script"], env=env, text=True, capture_output=True)
         return result.returncode, log.read_text().splitlines() if log.exists() else []
@@ -499,7 +512,7 @@ class TestTheRemoteScriptRuns:
         assert any("-i base" in line for line in log)
 
     def test_an_initialised_database_is_left_alone(self, tmp_path, monkeypatch):
-        code, log = self._run_script(tmp_path, monkeypatch, db_exists=True, table_exists=True)
+        code, log = self._run_script(tmp_path, monkeypatch, db_exists=True, base_installed=True, admin_mark=True)
 
         assert code == 0
         assert not any(line.startswith(("createdb", "odoo", "systemctl")) for line in log)
@@ -510,6 +523,31 @@ class TestTheRemoteScriptRuns:
         assert code == 0
         assert not any(line.startswith("createdb") for line in log)
         assert any("-i base" in line for line in log)
+
+    def test_an_install_that_died_halfway_is_finished_next_time(self, tmp_path, monkeypatch):
+        """Odoo commits ir_module_module seconds into the install and
+        finishes minutes later. Measured: at that point `base` is still `to
+        install`, so a guard on the table alone calls a half-built database
+        done -- and leaves `admin` with the password `base` ships with."""
+        code, log = self._run_script(tmp_path, monkeypatch, db_exists=True, base_installed=False)
+
+        assert code == 0
+        assert any("-i base" in line for line in log)
+
+    def test_an_admin_password_that_failed_to_apply_is_retried(self, tmp_path, monkeypatch):
+        """The install can succeed and this step fail; without its own mark
+        the next run would skip it for good."""
+        code, log = self._run_script(tmp_path, monkeypatch, db_exists=True, base_installed=True)
+
+        assert code == 0
+        assert not any("-i base" in line for line in log)
+        assert any("odoo shell" in line for line in log)
+
+    def test_a_failed_createdb_stops_before_installing_into_nothing(self, tmp_path, monkeypatch):
+        code, log = self._run_script(tmp_path, monkeypatch, createdb_fails=True)
+
+        assert code != 0
+        assert not any("-i base" in line for line in log)
 
     def test_every_step_after_the_install_still_runs(self, tmp_path, monkeypatch):
         """bash feeds the script through the same stdin the commands inherit,
@@ -609,13 +647,20 @@ class TestTheRoleStatementAgainstPostgres:
             capture_output=True,
         )
         try:
+            # A real query, not pg_isready: the image answers that one from
+            # the temporary server it runs during initdb, and then takes it
+            # down again, so a test can connect to a server about to vanish.
             for _ in range(60):
-                ready = subprocess.run(["docker", "exec", name, "pg_isready", "-q"], capture_output=True)
+                ready = subprocess.run(
+                    ["docker", "exec", name, "psql", "-U", "postgres", "-tAc", "SELECT 1"],
+                    capture_output=True,
+                )
                 if ready.returncode == 0:
                     break
                 time.sleep(1)
             else:
-                pytest.fail("the PostgreSQL container never became ready")
+                logs = subprocess.run(["docker", "logs", "--tail", "30", name], capture_output=True, text=True)
+                pytest.fail(f"the PostgreSQL container never became ready:\n{logs.stdout}\n{logs.stderr}")
             yield name
         finally:
             subprocess.run(["docker", "rm", "-f", name], capture_output=True)
@@ -710,7 +755,7 @@ class TestTheSuccessPanel:
                 }
             }
         }
-        (tmp_path / ".rkd").mkdir()
+        (tmp_path / ".rkd").mkdir(exist_ok=True)
         (tmp_path / ".rkd" / "instance.yaml").write_text(yaml.safe_dump(config))
         monkeypatch.chdir(tmp_path)
 
@@ -743,6 +788,14 @@ class TestTheSuccessPanel:
         result = self._run(tmp_path, monkeypatch, dep_type="docker")
 
         assert "https://erp.example.com" in result.output.replace("\n", "")
+
+    def test_both_deployment_types_say_where_the_admin_password_is(self, tmp_path, monkeypatch):
+        """It is generated, not chosen, so the panel is where the operator
+        finds out it exists at all."""
+        for dep_type in ("native", "docker"):
+            result = self._run(tmp_path, monkeypatch, dep_type=dep_type)
+
+            assert "instance_prod_db.env" in result.output.replace("\n", ""), dep_type
 
     def test_a_failed_deploy_promises_nothing(self, tmp_path, monkeypatch):
         result = self._run(tmp_path, monkeypatch, dep_type="native", success=False)

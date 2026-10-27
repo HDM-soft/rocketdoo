@@ -16,18 +16,31 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
 
+from rocketdoo.core.traefik import NETWORK as TRAEFIK_NETWORK
+
 from .config_manager import (
     LOG_LEVEL_BY_ENV,
     MEMORY_BY_ENV,
     PG_PROFILES,
     WORKERS_BY_ENV,
+    invalid_identifiers,
 )
-from .secrets_store import ADMIN_PASSWD, PG_PASS, load, random_password, save
+from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
 
 console = Console()
 
 _TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates" / "instance"
+
+# Odoo's HTTP port inside the container, and how many two-second rounds
+# to give PostgreSQL and Odoo to answer.
+_HTTP_PORT = 8069
+_DB_READY_RETRIES = 60
+_HTTP_RETRIES = 45
+
+# Written once the admin user's password has been replaced, so a step
+# that failed is retried instead of skipped for good.
+_ADMIN_PASSWORD_MARK = "rkd.admin_password_set"
 
 
 class DockerInstanceDeployer:
@@ -57,6 +70,9 @@ class DockerInstanceDeployer:
         self.remote_path = env_config.get("remote_path", f"/opt/odoo-{env}")
         self.auth = resolve_auth(vps, env, project_path)
 
+        self.db_user = env_config.get("db_user") or f"odoo_{env}"
+        self.db_name = env_config.get("db_name") or self.db_user
+
         self.pg = PG_PROFILES[env_config.get("pg_profile", "medium")]
         self.project_name = self._detect_project_name()
         self.slug = self.project_name.replace("-", "_").replace(" ", "_")
@@ -67,37 +83,61 @@ class DockerInstanceDeployer:
         """Run full deployment. Returns True on success."""
         console.print(f"\n[bold cyan]Deploying {self.env.upper()} to {self.host}[/bold cyan]\n")
 
+        invalid = invalid_identifiers(self.db_user, self.db_name)
+        if invalid:
+            console.print(f"[red]✗ Not a valid PostgreSQL identifier: {', '.join(invalid)}[/red]")
+            console.print(
+                "[dim]db_user and db_name may hold up to 63 letters, digits and underscores, "
+                "and cannot start with a digit.[/dim]"
+            )
+            return False
+
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
 
-            console.print("[dim]Step 1/5 — Rendering configuration files...[/dim]")
+            console.print("[dim]Step 1/7 — Rendering configuration files...[/dim]")
             self._render_templates(tmp_path, allow_remote_lookup=not dry_run)
             console.print("[green]✓[/green] Configuration files rendered")
 
             if dry_run:
                 console.print("\n[yellow]DRY-RUN: Skipping transfer and build.[/yellow]")
                 self._show_generated_files(tmp_path)
+                console.print(
+                    f"[dim]A real run would also create the database [bold]{self.db_name}[/bold], "
+                    "install base in it and set the admin password.[/dim]\n"
+                )
                 return True
 
-            console.print("[dim]Step 2/5 — Preparing remote directory...[/dim]")
+            console.print("[dim]Step 2/7 — Preparing remote directory...[/dim]")
             if not self._prepare_remote():
                 return False
             console.print("[green]✓[/green] Remote directory ready")
 
-            console.print("[dim]Step 3/5 — Transferring files...[/dim]")
+            console.print("[dim]Step 3/7 — Transferring files...[/dim]")
             if not self._transfer(tmp_path):
                 return False
             console.print("[green]✓[/green] Files transferred")
 
-            console.print("[dim]Step 4/5 — Building Docker image (this may take a while)...[/dim]")
+            console.print("[dim]Step 4/7 — Building Docker image (this may take a while)...[/dim]")
             if not self._build():
                 return False
             console.print("[green]✓[/green] Image built")
 
-            console.print("[dim]Step 5/5 — Starting services...[/dim]")
+            console.print(f"[dim]Step 5/7 — Ensuring database {self.db_name}...[/dim]")
+            if not self._ensure_database():
+                return False
+            console.print("[green]✓[/green] Database ready")
+
+            console.print("[dim]Step 6/7 — Starting services...[/dim]")
             if not self._start():
                 return False
             console.print("[green]✓[/green] Services started")
+
+            console.print("[dim]Step 7/7 — Verifying Odoo answers...[/dim]")
+            if not self._verify_odoo_answers():
+                console.print("[red]✗ Odoo did not answer after the deploy[/red]")
+                return False
+            console.print("[green]✓[/green] Odoo answers")
 
         return True
 
@@ -165,7 +205,6 @@ class DockerInstanceDeployer:
 
         creds = self._resolve_secrets(allow_remote_lookup=allow_remote_lookup)
 
-        db_user = self.cfg.get("db_user") or f"odoo_{self.env}"
         use_enterprise = self.cfg.get("use_enterprise", False)
         use_gitman = self.cfg.get("use_gitman", False)
         gitman_config = self.cfg.get("gitman_config", "gitman.yml")
@@ -178,7 +217,15 @@ class DockerInstanceDeployer:
             "odoo_tag": self.cfg.get("odoo_tag", self.cfg.get("odoo_version", "17.0")),
             "domain": self.cfg.get("domain", ""),
             "traefik_email": self.cfg.get("traefik_email", ""),
-            "db_user": db_user,
+            "db_user": self.db_user,
+            "db_name": self.db_name,
+            # The conf used to say `db_password = False`, and the image's
+            # entrypoint only forwards --db_password when the conf does not
+            # define it: the secret the compose mounts never reached Odoo
+            # (#250). Declared here rather than left out so the password
+            # does not become a command-line argument on the VPS, visible
+            # in `ps` to every user on the host (#142).
+            "db_password": creds["pg_pass"],
             "db_version": str(self.cfg.get("db_version", "16")),
             "use_enterprise": use_enterprise,
             "use_gitman": use_gitman,
@@ -227,9 +274,18 @@ class DockerInstanceDeployer:
 
     # ─── SSH / transfer helpers ───────────────────────────────────────────────
 
-    def _ssh(self, command: str, agent_forward: bool = False, timeout: int = 600) -> bool:
+    def _ssh(self, command: str, agent_forward: bool = False, timeout: int = 600, input: str | None = None) -> bool:
         cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command, agent_forward=agent_forward)
-        return subprocess.run(cmd, timeout=timeout, env=env).returncode == 0
+        try:
+            return subprocess.run(cmd, timeout=timeout, env=env, input=input, text=True).returncode == 0
+        except subprocess.TimeoutExpired:
+            # A build or a module install can legitimately take half an hour;
+            # what must not happen is the deploy ending in a traceback that
+            # says nothing about the remote process, which is still running.
+            console.print(
+                f"[red]Timed out after {timeout}s waiting for the VPS. The remote command may still be running.[/red]"
+            )
+            return False
 
     def _rsync(self, local: str, remote: str, extra_opts: list[str] | None = None) -> bool:
         cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, local, remote, extra_opts)
@@ -243,7 +299,16 @@ class DockerInstanceDeployer:
             f"{self.remote_path}/extra-addons",
             f"{self.remote_path}/{self.env}/config",
         ]
-        return self._ssh(f"mkdir -p {' '.join(dirs)}")
+        if not self._ssh(f"mkdir -p {' '.join(dirs)}"):
+            return False
+
+        # The compose declares this network as external, so Compose refuses to
+        # create it: on a VPS that has never run Traefik, every step from the
+        # database onwards fails with "network traefik-public declared as
+        # external, but could not be found".
+        return self._ssh(
+            f"docker network inspect {TRAEFIK_NETWORK} >/dev/null 2>&1 || docker network create {TRAEFIK_NETWORK}"
+        )
 
     def _transfer(self, tmp: Path) -> bool:
         # Dockerfile.{env}
@@ -257,6 +322,11 @@ class DockerInstanceDeployer:
         if not self._rsync(f"{env_dir}/", f"{self.remote_path}/{self.env}/"):
             console.print(f"[red]✗ Failed to transfer {self.env}/ config[/red]")
             return False
+
+        # The PostgreSQL password arrives with rsync's default permissions,
+        # readable by every user on the VPS. Docker reads it as root to mount
+        # the secret, so restricting it costs nothing.
+        self._ssh(f"chmod 600 {self.remote_path}/{self.env}/odoo_pg_pass")
 
         # gitman config (if present in tmp)
         gitman_config = self.cfg.get("gitman_config", "")
@@ -287,6 +357,139 @@ class DockerInstanceDeployer:
     def _start(self) -> bool:
         start_cmd = f"cd {self.remote_path}/{self.env} && docker compose up -d"
         return self._ssh(start_cmd)
+
+    def _resolve_admin_login_password(self) -> str:
+        """
+        Return the password of Odoo's `admin` user, generating it once.
+
+        Not the master password: this one is the login. Installing `base`
+        leaves `admin` with the literal "admin" from
+        `base/data/res_users_data.xml`, and the only code that replaces it is
+        the web database manager, which `list_db = False` disables. Creating
+        the database without setting this would publish an Odoo behind the
+        instance's own domain with credentials that are in Odoo's source.
+        """
+        stored = load(self.project_path, self.env).get(ADMIN_LOGIN_PASSWD)
+        if stored:
+            return stored
+
+        generated = random_password()
+        path = save(self.project_path, self.env, {ADMIN_LOGIN_PASSWD: generated})
+        console.print(f"[green]✔[/green] Generated the password of the admin user, stored in {path}")
+        # It is applied by the database step, which only touches a database
+        # whose admin password rkd never set. Saying so here is the
+        # difference between a stored credential and a stored guess: the
+        # secret file is gitignored, so a deploy from another clone lands
+        # exactly in that case.
+        console.print("[dim]  Applied only to a database rkd initialises; an existing one keeps its own.[/dim]")
+        return generated
+
+    def _ensure_database(self) -> bool:
+        """
+        Create the database Odoo will serve, install `base`, and set the
+        password of its `admin` user.
+
+        The compose creates the *role* by construction (POSTGRES_USER), but
+        nothing ever created the database, and `list_db = False` means there
+        is no web database manager to make one: the deploy finished with Odoo
+        running and nothing to serve (#250). Both halves are guarded
+        separately, so a redeploy neither recreates the database nor
+        reinstalls base, and a database left empty by an interrupted first
+        attempt gets initialised on the next run.
+
+        The database is created with Odoo's own parameters rather than the
+        cluster's defaults, for the same reason as the native path: the image
+        initialises its cluster from the host's locale, and `template1` is
+        mutable.
+
+        `exec -T` and `run -T` keep Docker from allocating a TTY, which would
+        wrap psql's output in carriage returns and make the emptiness checks
+        below answer wrongly.
+        """
+        return self._ssh(
+            "bash -s",
+            timeout=1800,
+            input=(
+                # The braces are load-bearing: bash reads a compound command
+                # whole before running any of it, and `docker compose` reads
+                # the stdin it inherits -- which here is the script itself.
+                # Without them `up -d db` swallows everything below it and the
+                # step reports success having done nothing. Verified.
+                "{\n"
+                "set -e\n"
+                f'cd "{self.remote_path}/{self.env}"\n'
+                "docker compose up -d db\n"
+                f"for _ in $(seq 1 {_DB_READY_RETRIES}); do\n"
+                f'  if docker compose exec -T db pg_isready -U "{self.db_user}" -q; then break; fi\n'
+                "  sleep 2\n"
+                "done\n"
+                # -d postgres, the database the compose asks the image to
+                # create: without it psql defaults to one named after the
+                # role, which is the database being looked for.
+                f"if ! docker compose exec -T db psql -U {self.db_user} -d postgres"
+                f" -tAc \"SELECT 1 FROM pg_database WHERE datname = '{self.db_name}'\" | grep -q 1; then\n"
+                f"  docker compose exec -T db createdb -U {self.db_user}"
+                f' -E UTF8 -T template0 --lc-collate=C -O "{self.db_user}" "{self.db_name}"\n'
+                "fi\n"
+                # `base` installed, not merely the table existing: Odoo
+                # commits ir_module_module seconds into the install and
+                # finishes minutes later, so an interrupted first attempt
+                # would otherwise look done forever. psql's own error on a
+                # database without the table is stderr, and an empty answer
+                # here means "install it" either way.
+                f'if [ -z "$(docker compose exec -T db psql -U {self.db_user} -d "{self.db_name}" -tAc'
+                " \"SELECT 1 FROM ir_module_module WHERE name = 'base' AND state = 'installed'\" 2>/dev/null)\" ]; then\n"
+                f'  docker compose run --rm -T -l traefik.enable=false web odoo -d "{self.db_name}" -i base'
+                " --workers=0 --max-cron-threads=0 --stop-after-init --logfile= < /dev/null\n"
+                "fi\n"
+                # Its own guard, and a mark of its own: an install that
+                # succeeded while this step failed must be retried, or the
+                # admin user keeps the password `base` ships with.
+                f'if [ -z "$(docker compose exec -T db psql -U {self.db_user} -d "{self.db_name}" -tAc'
+                f' "SELECT 1 FROM ir_config_parameter WHERE key = \'{_ADMIN_PASSWORD_MARK}\'" 2>/dev/null)" ]; then\n'
+                f'  docker compose run --rm -T -l traefik.enable=false web odoo shell -d "{self.db_name}"'
+                " --logfile= <<'RKD_PY'\n"
+                f"env.ref('base.user_admin').write({{'password': '{self._resolve_admin_login_password()}'}})\n"
+                f"env['ir.config_parameter'].sudo().set_param('{_ADMIN_PASSWORD_MARK}', '1')\n"
+                "env.cr.commit()\n"
+                "RKD_PY\n"
+                "fi\n"
+                "}\n"
+            ),
+        )
+
+    def _verify_odoo_answers(self) -> bool:
+        """
+        Confirm the deploy delivered something that works.
+
+        `docker compose up -d` returns once the containers are created, which
+        it does just as happily for an Odoo that exits a second later against
+        a database it cannot authenticate against -- the failure #250 is
+        about. Asked from inside the container, the check does not depend on
+        Traefik, DNS or a certificate being ready.
+        """
+        return self._ssh(
+            "bash -s",
+            timeout=300,
+            input=(
+                # Braced for the same reason as the step above, and here it
+                # decides the verdict: `docker compose logs` would otherwise
+                # eat the `exit 1` below it and the deploy would call a
+                # silent Odoo a success.
+                "{\n"
+                f'cd "{self.remote_path}/{self.env}"\n'
+                f"for _ in $(seq 1 {_HTTP_RETRIES}); do\n"
+                f"  if docker compose exec -T web curl -sf -o /dev/null http://127.0.0.1:{_HTTP_PORT}/web/login; then\n"
+                "    exit 0\n"
+                "  fi\n"
+                "  sleep 2\n"
+                "done\n"
+                "echo 'Odoo did not answer; last lines of the web container log:' >&2\n"
+                "docker compose logs --tail 30 web >&2 || true\n"
+                "exit 1\n"
+                "}\n"
+            ),
+        )
 
     # ─── utils ───────────────────────────────────────────────────────────────
 

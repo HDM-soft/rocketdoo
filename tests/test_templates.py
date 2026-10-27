@@ -50,6 +50,8 @@ INSTANCE_CONTEXT = {
     "traefik_email": "ops@example.com",
     "odoo_tag": "17.0",
     "db_user": "odoo",
+    "db_name": "demo_stage",
+    "db_password": "s3cr3t-pg",
     "db_version": "15",
     "admin_passwd": "s3cr3t-admin",
     "workers": 2,
@@ -224,6 +226,32 @@ class TestInstanceTemplates:
         """list_db must stay off on a public instance."""
         conf = render("instance/odoo.conf.jinja", **INSTANCE_CONTEXT)
         assert "list_db = False" in conf
+
+    def test_odoo_conf_carries_the_database_password(self):
+        """The image's entrypoint only injects --db_password when the conf
+        does not define it, and the conf used to define it as False: the
+        secret the compose mounts never reached Odoo (#250). Declaring it
+        also keeps it out of the container's argv, which `ps` on the host
+        shows to everyone."""
+        conf = render("instance/odoo.conf.jinja", **INSTANCE_CONTEXT)
+
+        assert "db_password = s3cr3t-pg" in conf
+        assert "db_password = False" not in conf
+
+    def test_odoo_conf_names_the_database_to_serve(self):
+        """With list_db = False there is no database manager to pick one."""
+        conf = render("instance/odoo.conf.jinja", **INSTANCE_CONTEXT)
+
+        assert "db_name = demo_stage" in conf
+
+    def test_only_postgres_is_handed_the_password_file(self, compose):
+        """Compose mounts a `file:` secret with the host's uid and mode, and
+        the odoo image reads it as uid 100: a restricted odoo_pg_pass made
+        the entrypoint die with Permission denied. postgres reads it as root
+        before dropping privileges, and the conf already carries the
+        password for Odoo (#250)."""
+        assert "postgresql_password" not in yaml.dump(compose["services"]["web"])
+        assert "postgresql_password" in yaml.dump(compose["services"]["db"])
 
     @pytest.mark.parametrize(("env", "workers"), [("stage", 2), ("prod", 4)])
     def test_worker_count_follows_the_environment(self, env, workers):
