@@ -7,7 +7,8 @@ admin_passwd = s3cr3t-admin
 db_host = db
 db_port = 5432
 db_user = odoo
-db_password = False
+db_password = s3cr3t-pg
+db_name = demo_stage
 db_maxconn = 64
 
 log_level = info

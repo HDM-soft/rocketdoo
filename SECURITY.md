@@ -47,8 +47,8 @@ todo esto. CORS es una política que **solo respetan los navegadores**; un scrip
 | Password de VPS (deploy de instancia) | `.rkd/secrets/instance_{env}.env` | 0600, gitignored, **excluido de `rkd pack`** |
 | Password de VPS (deploy de módulos) | `.rkd/secrets/vps_{target}.env` | 0600, gitignored, **excluido de `rkd pack`** |
 | `odoo_pg_pass` / `admin_passwd` runtime (instancia) | `.rkd/secrets/instance_{env}_db.env` | 0600, gitignored, **excluido de `rkd pack`** |
-| Password del rol PostgreSQL de la instancia (deploy nativo) | `.rkd/secrets/instance_{env}_db.env` en local; `/etc/odoo/odoo.conf` en el VPS | 0600 en local; en el VPS `odoo:odoo` 640, escrito por `stdin` y nunca como argumento (#248) |
-| Password del usuario `admin` de la instancia (deploy nativo) | `.rkd/secrets/instance_{env}_db.env`, y hasheada en la base | 0600 en local; se fija sólo al crear la base, viaja por `stdin` y se anuncia una vez en el panel (#248) |
+| Password del rol PostgreSQL de la instancia | `.rkd/secrets/instance_{env}_db.env` en local; en el VPS `/etc/odoo/odoo.conf` (nativo) o `{env}/odoo_pg_pass` + `{env}/config/odoo.conf` (Docker) | 0600 en local y 0600 el `odoo_pg_pass` del VPS. El conf nativo queda `odoo:` 640; **el del camino Docker queda 644** y lleva este password y el `admin_passwd` — ver riesgos residuales (#248, #250) |
+| Password del usuario `admin` de la instancia (nativo y Docker) | `.rkd/secrets/instance_{env}_db.env`, y hasheada en la base | 0600 en local; se fija sólo al crear la base, viaja por `stdin` y nunca como argumento (#248, #250) |
 | `admin_passwd` (proyecto local) | `config/odoo.conf`, en claro | gitignored, sin permisos restringidos explícitos; **viaja en el ZIP de `rkd pack`** (ver abajo) |
 | `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos, **excluido de `rkd pack`** |
 | Targets de deploy (host, usuario, ruta de la clave SSH) | `.rkd/deploy.yaml`, en claro | gitignored y excluido de `rkd pack` desde 3.9.2 |
@@ -160,6 +160,13 @@ Riesgos residuales aceptados, documentados en lugar de prometidos como resueltos
 - **Sin cifrado en tránsito.** `rkd gui` habla HTTP plano en `127.0.0.1`; no hay TLS. Es
   aceptable en loopback, pero **`rkd gui --host 0.0.0.0`** expone esto a la red y convierte al
   token en la única barrera real, viajando en claro. No es la configuración recomendada.
+- **El `odoo.conf` de una instancia dockerizada queda legible para todo el VPS.** Lleva el
+  `admin_passwd` y, desde #250, el password del rol PostgreSQL, con los 644 que deja `rsync`. No se
+  restringe porque el contenedor lo monta y lo lee como uid 100: un `chmod 600` impide el arranque.
+  Declararlo ahí mantiene el secreto fuera del `argv` del proceso, pero es un **canje y no una
+  reducción**: la misma audiencia —cualquier usuario del VPS— lo alcanza con `cat`, y el archivo
+  persiste con los contenedores apagados, cosa que el `argv` no hace. Cerrarlo de verdad pide que el
+  deploy maneje el dueño del archivo, que hoy no hace.
 - **Quien puede leer el filesystem o el entorno del proceso ya tiene las credenciales.**
   `config/odoo.conf` y `.rkd/instance.yaml` guardan `admin_passwd` en claro, sin permisos
   restringidos explícitos (a diferencia de `.rkd/secrets/`, que sí usa 0600). El token de la GUI

@@ -18,14 +18,11 @@ services:
       HOST: db
       PORT: 5432
       USER: odoo
-      PASSWORD_FILE: /run/secrets/postgresql_password
     volumes:
       - demo-stage-data:/var/lib/odoo
       - ../extra-addons:/mnt/extra-addons
 
       - ./config/odoo.conf:/etc/odoo/odoo.conf
-    secrets:
-      - postgresql_password
     networks:
       - traefik-public
       - stage-internal

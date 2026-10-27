@@ -3,6 +3,7 @@ RocketDoo Instance - Configuration manager
 Manages .rkd/instance.yaml for stage/prod deployments
 """
 
+import re
 import secrets
 import string
 from pathlib import Path
@@ -72,6 +73,18 @@ MEMORY_BY_ENV = {
 def _random_password(length: int = 24) -> str:
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+# Role and database names reach psql inside an SQL statement and a remote
+# shell command, in both deployers. Restricting them to a plain identifier is
+# what makes both safe, instead of a quoting rule per destination. `fullmatch`
+# rather than `$`, which also matches before a trailing newline (#248).
+DB_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
+
+
+def invalid_identifiers(*names: str) -> list[str]:
+    """The given names that PostgreSQL could not take as a plain identifier."""
+    return [name for name in names if not DB_IDENTIFIER.fullmatch(name)]
 
 
 class InstanceConfigManager:
@@ -172,8 +185,16 @@ class InstanceConfigManager:
         domain = Prompt.ask("Domain (e.g. erp.mycompany.com)")
         traefik_email = Prompt.ask("Email for Let's Encrypt")
         db_version = Prompt.ask("PostgreSQL version", default="16")
-        db_user = Prompt.ask("DB user", default=f"odoo_{env}")
-        db_name = Prompt.ask("Database name", default=db_user)
+        while True:
+            db_user = Prompt.ask("DB user", default=f"odoo_{env}")
+            db_name = Prompt.ask("Database name", default=db_user)
+            invalid = invalid_identifiers(db_user, db_name)
+            if not invalid:
+                break
+            # Checked here as well as at deploy time: otherwise a name
+            # PostgreSQL cannot take is only reported minutes into a deploy.
+            console.print(f"[red]Not a valid PostgreSQL identifier: {', '.join(invalid)}[/red]")
+            console.print("[dim]Up to 63 letters, digits and underscores, and cannot start with a digit.[/dim]")
         generated_passwd = _random_password()
         admin_passwd = Prompt.ask("Odoo master password", password=True, show_default=False, default=generated_passwd)
         if admin_passwd == generated_passwd:

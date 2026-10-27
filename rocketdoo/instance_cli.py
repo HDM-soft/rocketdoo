@@ -207,7 +207,8 @@ def instance_deploy(env, dry_run, yes):
             body = (
                 f"[bold green]Deployment successful![/bold green]\n\n"
                 f"[dim]Environment:[/dim] {env}\n"
-                f"[dim]URL        :[/dim] [cyan underline]https://{domain}[/cyan underline]\n\n"
+                f"[dim]URL        :[/dim] [cyan underline]https://{domain}[/cyan underline]\n"
+                f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env\n\n"
                 "[dim]It may take a few minutes for Let's Encrypt to issue the certificate.[/dim]"
             )
         console.print(Panel(body, border_style="green", box=box.DOUBLE))

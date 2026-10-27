@@ -9,18 +9,18 @@ Install flow:
   4. Create the PostgreSQL role Odoo authenticates as
   5. Configure /etc/odoo/odoo.conf
   6. rsync extra-addons to remote addons path
-  7. Create and initialise the database Odoo serves
+  7. Create and initialise the database Odoo serves, and set the admin password
   8. Enable + start odoo systemd service
+  9. Verify Odoo answers
 """
 
-import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 from rich.console import Console
 
-from .config_manager import LOG_LEVEL_BY_ENV, MEMORY_BY_ENV, WORKERS_BY_ENV
+from .config_manager import LOG_LEVEL_BY_ENV, MEMORY_BY_ENV, WORKERS_BY_ENV, invalid_identifiers
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
 
@@ -30,17 +30,14 @@ console = Console()
 _NIGHTLY_KEY_URL = "https://nightly.odoo.com/odoo.key"
 _NIGHTLY_DEB_URL = "https://nightly.odoo.com/{version}/nightly/deb/"
 
-# The role and database names come from instance.yaml and end up inside an SQL
-# statement and a remote shell command. Restricting them to a plain identifier
-# is what makes both safe, instead of a quoting rule per destination.
-# `fullmatch`, not `$`, which also matches before a trailing newline: a
-# name ending in one would split the remote script into two commands.
-_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
-
 # Odoo's default HTTP port, which neither conf sets explicitly, and how
 # many two-second rounds to give it to answer after a restart.
 _HTTP_PORT = 8069
 _HTTP_RETRIES = 45
+
+# Written once the admin user's password has been replaced, so a step
+# that failed is retried instead of skipped for good.
+_ADMIN_PASSWORD_MARK = "rkd.admin_password_set"
 
 
 class NativeInstanceDeployer:
@@ -78,7 +75,7 @@ class NativeInstanceDeployer:
         """Run full native deployment. Returns True on success."""
         console.print(f"\n[bold cyan]Native deploy {self.env.upper()} → {self.host}[/bold cyan]\n")
 
-        invalid = [name for name in (self.db_user, self.db_name) if not _IDENTIFIER.fullmatch(name)]
+        invalid = invalid_identifiers(self.db_user, self.db_name)
         if invalid:
             console.print(f"[red]✗ Not a valid PostgreSQL identifier: {', '.join(invalid)}[/red]")
             console.print(
@@ -284,6 +281,12 @@ class NativeInstanceDeployer:
         generated = random_password()
         path = save(self.project_path, self.env, {ADMIN_LOGIN_PASSWD: generated})
         console.print(f"[green]✔[/green] Generated the password of the admin user, stored in {path}")
+        # It is applied by the database step, which only touches a database
+        # whose admin password rkd never set. Saying so here is the
+        # difference between a stored credential and a stored guess: the
+        # secret file is gitignored, so a deploy from another clone lands
+        # exactly in that case.
+        console.print("[dim]  Applied only to a database rkd initialises; an existing one keeps its own.[/dim]")
         return generated
 
     def _ensure_database(self) -> bool:
@@ -330,14 +333,26 @@ class NativeInstanceDeployer:
             " | grep -q 1; then\n"
             f'  sudo -u postgres createdb -E UTF8 -T template0 --lc-collate=C -O "{self.db_user}" "{self.db_name}"\n'
             "fi\n"
-            f'if [ -z "$(sudo -u postgres psql -d "{self.db_name}"'
-            ' -tAc "SELECT to_regclass(\'public.ir_module_module\')")" ]; then\n'
+            # `base` installed, not merely the table existing: Odoo commits
+            # ir_module_module seconds into the install and finishes minutes
+            # later, so an interrupted first attempt would otherwise look done
+            # forever. psql's own error on a database without the table is
+            # stderr, and an empty answer here means "install it" either way.
+            f'if [ -z "$(sudo -u postgres psql -d "{self.db_name}" -tAc'
+            " \"SELECT 1 FROM ir_module_module WHERE name = 'base' AND state = 'installed'\" 2>/dev/null)\" ]; then\n"
             f"  sudo systemctl stop {self.service_name}\n"
             f'  sudo -u odoo odoo -c {self.odoo_conf_path} -d "{self.db_name}" -i base'
-            " --workers=0 --max-cron-threads=0 --stop-after-init --logfile=/dev/stdout < /dev/null\n"
+            " --workers=0 --max-cron-threads=0 --stop-after-init --logfile= < /dev/null\n"
+            "fi\n"
+            # Its own guard, and a mark of its own: an install that succeeded
+            # while this step failed must be retried, or the admin user keeps
+            # the password `base` ships with.
+            f'if [ -z "$(sudo -u postgres psql -d "{self.db_name}" -tAc'
+            f' "SELECT 1 FROM ir_config_parameter WHERE key = \'{_ADMIN_PASSWORD_MARK}\'" 2>/dev/null)" ]; then\n'
             f'  sudo -u odoo odoo shell -c {self.odoo_conf_path} -d "{self.db_name}"'
-            " --logfile=/dev/stdout <<'RKD_PY'\n"
+            " --logfile= <<'RKD_PY'\n"
             f"env.ref('base.user_admin').write({{'password': '{self._resolve_admin_login_password()}'}})\n"
+            f"env['ir.config_parameter'].sudo().set_param('{_ADMIN_PASSWORD_MARK}', '1')\n"
             "env.cr.commit()\n"
             "RKD_PY\n"
             "fi\n"
