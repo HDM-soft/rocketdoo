@@ -52,6 +52,7 @@ todo esto. CORS es una política que **solo respetan los navegadores**; un scrip
 | `admin_passwd` (proyecto local) | `config/odoo.conf`, en claro | gitignored, sin permisos restringidos explícitos; **viaja en el ZIP de `rkd pack`** (ver abajo) |
 | `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos, **excluido de `rkd pack`** |
 | Targets de deploy (host, usuario, ruta de la clave SSH) | `.rkd/deploy.yaml`, en claro | gitignored y excluido de `rkd pack` desde 3.9.2 |
+| Clave de cuenta y certificados de Let's Encrypt | `traefik/certs/acme.json`, que escribe Traefik | 0600 al crearlo; gitignored y excluido de `rkd pack` desde 3.9.2 (#246) |
 | Clave SSH privada (build de imagen) | copiada a `.ssh/<clave>` dentro del contexto de build | gitignored (`.ssh/` en `SENSITIVE_ENTRIES`) |
 | `SSHPASS` (autenticación por password a un VPS) | variable de entorno del subproceso `sshpass`, nunca en disco | vive solo en memoria del proceso hijo (desde 3.2.1) |
 | Token de sesión de la GUI | memoria del proceso `rkd gui` (`app.state.rkd_token`) | efímero, no se persiste en disco |
@@ -85,11 +86,25 @@ empaquetar.
 `rkd instance init` o `rkd deploy init`, esas credenciales salieron de tu máquina y hay que
 rotarlas: un archivo enviado no se puede desenviar.
 
-**Límites conocidos de la exclusión.** Se compara la ruta relativa dentro del proyecto, sin
-distinguir mayúsculas y aceptando patrones de gitignore. Pero sigue sin cubrir dos casos, que
-tienen su propia issue: un **symlink** dentro del proyecto que apunte a un secreto (`zipfile`
-sigue el enlace y guarda el contenido bajo el nombre del enlace), y un `.rkd/` **anidado** más
-abajo del árbol, que `rkd instance init` puede crear si se lo corre desde un subdirectorio.
+**Los dos caminos laterales, cerrados en #246 (3.9.2).** La exclusión compara la ruta relativa
+dentro del proyecto, sin distinguir mayúsculas y aceptando patrones de gitignore, y había dos
+formas de llegar al mismo archivo por otro lado. Un **enlace simbólico** a un secreto: `zipfile`
+lo sigue y guarda el contenido bajo el nombre del enlace, así que ni la exclusión ni el
+verificador lo veían; ahora **ningún enlace simbólico entra al ZIP** y el panel los nombra. Y un
+`.rkd/` **anidado** más abajo del árbol, que los wizards podían crear corridos desde un
+subdirectorio; ahora la exclusión y el verificador reconocen un `.rkd/` a cualquier profundidad,
+y los wizards —CLI y GUI— se niegan a correr fuera de la raíz del proyecto. Un **hard link** a un
+secreto del propio proyecto tampoco viaja: los secretos se identifican además por inodo.
+
+**Si compartiste un ZIP hecho con 3.9.1 o anterior desde un proyecto con enlaces o con un `.rkd/`
+anidado**, revisá qué contenía: lo mismo que arriba, un archivo enviado no se puede desenviar.
+
+**Lo que esta defensa sigue sin cubrir.** Un **hard link a un archivo de afuera del proyecto**
+(`ln ~/.ssh/id_rsa addons/clave`) es, para el sistema de archivos, un archivo más del proyecto:
+no se distingue de haberlo copiado a mano, y ni la exclusión ni el verificador lo detectan salvo
+que el nombre dispare las heurísticas de clave privada. Copiar un secreto al proyecto, con
+cualquier nombre, tiene exactamente el mismo efecto: **lo que el ZIP garantiza es que rkd no
+filtra lo que rkd mismo escribió**, no que el proyecto no contenga secretos que alguien puso ahí.
 
 ## Las tres defensas y qué cubre cada una
 

@@ -126,6 +126,14 @@ def pack_environment(no_db, output, db_name, yes):
         console.print()
         return
 
+    if report["symlinks_skipped"]:
+        console.print()
+        console.print("[yellow]Symbolic links are not packaged, so these were left out:[/yellow]")
+        for name in report["symlinks_skipped"]:
+            console.print(f"  [yellow]• {name}[/yellow]")
+        console.print("[dim]A link carries its target's content under the link's name, which is a way[/dim]")
+        console.print("[dim]out for anything it points at. Copy what the receiver needs instead.[/dim]")
+
     if report["secrets_found_in_zip"]:
         console.print()
         console.print("[bold red]⚠️  SECURITY WARNING:[/bold red]")

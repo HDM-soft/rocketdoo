@@ -71,6 +71,14 @@ async def deploy_init(body: DeployInitRequest):
     """Create or overwrite .rkd/deploy.yaml with the provided target config."""
     import yaml
 
+    from rocketdoo.core.project_info import project_exists
+
+    # Same guard as `rkd deploy init` (#246). Here it matters more: the CLI
+    # needs a `cd` too far, while the GUI reaches any directory through
+    # /api/workspace/navigate and this endpoint is a button.
+    if not project_exists(Path.cwd()):
+        return {"ok": False, "error": f"No Rocketdoo project in {Path.cwd()}. Open a project before configuring a deploy."}
+
     p = _deploy_yaml_path()
     if p.exists() and not body.force:
         return {"ok": False, "error": "deploy.yaml already exists. Use force=true to overwrite."}

@@ -418,6 +418,74 @@ class TestOdooUpdateWebSocket:
             assert ws.receive_text() == "\x00exit:1"
 
 
+class TestThePackEndpointReportsWhatWasLeftOut:
+    def test_skipped_links_are_news_not_an_error(self, client, project_dir, monkeypatch):
+        """The SPA renders a non-empty stderr as a red error toast, and a pack
+        that left a link out succeeded (#246)."""
+        from rocketdoo.gui.api import pack_ops
+
+        report = {
+            "zip": str(project_dir / "demo.zip"),
+            "secrets_found_in_zip": False,
+            "secrets_suspicious": [],
+            "symlinks_skipped": ["addons/enlace.txt"],
+        }
+        monkeypatch.setattr(pack_ops.core_pack, "pack", lambda *a, **k: report)
+
+        body = client.post("/api/pack/pack", json={"include_db": False}).json()
+
+        assert body["ok"] is True
+        assert "addons/enlace.txt" in body["stdout"]
+        assert body["stderr"] == ""
+
+    def test_a_secret_inside_the_zip_is_still_an_error(self, client, project_dir, monkeypatch):
+        from rocketdoo.gui.api import pack_ops
+
+        report = {
+            "zip": str(project_dir / "demo.zip"),
+            "secrets_found_in_zip": True,
+            "secrets_suspicious": [".rkd/secrets/instance_prod.env"],
+            "symlinks_skipped": [],
+        }
+        monkeypatch.setattr(pack_ops.core_pack, "pack", lambda *a, **k: report)
+
+        body = client.post("/api/pack/pack", json={"include_db": False}).json()
+
+        assert ".rkd/secrets/instance_prod.env" in body["stderr"]
+
+
+class TestTheGuiDoesNotWriteCredentialsOutsideAProject:
+    """The CLI wizards need a `cd` too far to land outside a project; the GUI
+    gets there with a button -- /api/workspace/navigate accepts any directory
+    and the Deploy view has no "is this a project" gate (#246).
+    """
+
+    def test_instances_init_refuses(self, client, project_dir):
+        payload = {"environments": {"stage": {"host": "vps.example.com"}}}
+
+        body = client.post("/api/instances/init", json=payload).json()
+
+        assert body["ok"] is False
+        assert "No Rocketdoo project" in body["error"]
+        assert not (project_dir / ".rkd").exists(), "a generated admin_passwd was left outside a project"
+
+    def test_deploy_init_refuses(self, client, project_dir):
+        payload = {
+            "targets": {
+                "production": {
+                    "type": "vps",
+                    "connection": {"host": "h", "user": "u", "ssh_key": "~/.ssh/id_rsa"},
+                }
+            }
+        }
+
+        body = client.post("/api/deploy/init", json=payload).json()
+
+        assert body["ok"] is False
+        assert "No Rocketdoo project" in body["error"]
+        assert not (project_dir / ".rkd").exists()
+
+
 class TestInstancesRoundTrip:
     """The GUI must be able to save a config its own reader and the deployers accept.
 
@@ -426,6 +494,14 @@ class TestInstancesRoundTrip:
     and the listing endpoint did not descend into `environments`, so it showed
     a phantom instance literally named "environments".
     """
+
+    @pytest.fixture(autouse=True)
+    def _inside_a_project(self, project_dir):
+        """What this endpoint writes are credentials, and it generates an
+        admin_passwd when the form brings none, so it refuses outside a
+        project root (#246)."""
+        (project_dir / "Dockerfile").write_text("FROM odoo:18.0\n")
+        (project_dir / "docker-compose.yaml").write_text("services: {}\n")
 
     PAYLOAD = {
         "environments": {

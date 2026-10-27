@@ -11,7 +11,9 @@ to core/pack.py is #143.
 """
 
 import json
+import os
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -1054,3 +1056,289 @@ class TestSecretsDoNotTravelInTheZip:
         with zipfile.ZipFile(output) as zf:
             names = zf.namelist()
         assert not [n for n in names if n.lower().startswith(".rkd/secrets")], names
+
+
+class TestSymbolicLinksDoNotCarrySecretsOut:
+    """`zf.write()` follows a link and stores the target's bytes under the
+    link's name, so the exclusion -- which sees the link's own path -- and the
+    scanner -- which only sees names inside the archive -- both miss it (#246).
+
+    The target does not even have to be inside the project.
+    """
+
+    def test_a_link_to_a_secret_does_not_travel(self, packable_project):
+        secrets = packable_project / ".rkd" / "secrets"
+        secrets.mkdir(parents=True, exist_ok=True)
+        (secrets / "instance_prod.env").write_text("INSTANCE_PROD_PASSWORD=elPasswordDelVps\n")
+        (packable_project / "notas.txt").symlink_to(secrets / "instance_prod.env")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "notas.txt" not in zf.namelist()
+            assert not any("elPasswordDelVps" in zf.read(n).decode("utf-8", "replace") for n in zf.namelist())
+        assert "notas.txt" in report["symlinks_skipped"]
+
+    def test_a_link_pointing_outside_the_project_does_not_travel(self, packable_project, tmp_path):
+        outside = tmp_path / "fuera"
+        outside.mkdir()
+        (outside / "id_rsa").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\n")
+        (packable_project / "addons" / "clave_build").symlink_to(outside / "id_rsa")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "addons/clave_build" not in zf.namelist()
+        assert "addons/clave_build" in report["symlinks_skipped"]
+
+    def test_a_linked_directory_is_named_instead_of_vanishing(self, packable_project, tmp_path):
+        """The walk never descended into one, so it was already left out --
+        silently, which is its own problem for whoever unpacks it."""
+        elsewhere = tmp_path / "otro_repo" / "mi_addon"
+        elsewhere.mkdir(parents=True)
+        (elsewhere / "__manifest__.py").write_text("{'name': 'mi_addon'}\n")
+        (packable_project / "addons" / "mi_addon").symlink_to(elsewhere, target_is_directory=True)
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert not [n for n in zf.namelist() if n.startswith("addons/mi_addon")]
+        assert "addons/mi_addon" in report["symlinks_skipped"]
+
+    def test_the_files_beside_a_link_still_travel(self, packable_project):
+        (packable_project / "addons" / "real.txt").write_text("contenido\n")
+        (packable_project / "addons" / "enlace.txt").symlink_to(packable_project / "addons" / "real.txt")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert "addons/real.txt" in names
+        assert "addons/enlace.txt" not in names
+        assert report["symlinks_skipped"] == ["addons/enlace.txt"]
+
+    def test_the_panel_names_what_was_left_out(self, packable_project):
+        """A ZIP quietly missing a file is the complaint behind #245 read
+        from the other side: the receiver finds out when it does not run."""
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        (packable_project / "addons" / "real.txt").write_text("contenido\n")
+        (packable_project / "addons" / "enlace.txt").symlink_to(packable_project / "addons" / "real.txt")
+
+        result = CliRunner().invoke(main, ["pack", "--no-db"])
+
+        assert "addons/enlace.txt" in result.output.replace("\n", "")
+
+    def test_a_project_without_links_reports_none(self, packable_project):
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        assert report["symlinks_skipped"] == []
+
+
+class TestANestedRkdIsStillRkds:
+    """The exclusion is anchored at the project root so an addon's own
+    `secrets/` keeps travelling. But `.rkd` is a name rkd reserves, and
+    `rkd instance init` run one directory too deep writes its credentials
+    there -- where the generated .gitignore does not cover them either (#246).
+    """
+
+    def _nested_secret(self, project_dir):
+        nested = project_dir / "addons" / "mi_modulo" / ".rkd" / "secrets"
+        nested.mkdir(parents=True)
+        (nested / "instance_prod.env").write_text("INSTANCE_PROD_PASSWORD=elPasswordDelVps\n")
+        return nested
+
+    def test_a_nested_secret_does_not_travel(self, packable_project):
+        self._nested_secret(packable_project)
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert not [n for n in names if ".rkd/secrets" in n], names
+
+    def test_a_nested_instance_yaml_does_not_travel(self, packable_project):
+        nested = packable_project / "addons" / "mi_modulo" / ".rkd"
+        nested.mkdir(parents=True)
+        (nested / "instance.yaml").write_text("prod:\n  vps:\n    host: 10.0.0.1\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "addons/mi_modulo/.rkd/instance.yaml" not in zf.namelist()
+
+    def test_an_addons_own_secrets_directory_still_travels(self, packable_project):
+        """The anchoring exists for this: `secrets` is a plausible name for a
+        directory of an addon, `.rkd` is not."""
+        own = packable_project / "addons" / "mi_modulo" / "secrets"
+        own.mkdir(parents=True)
+        (own / "config.xml").write_text("<odoo/>\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "addons/mi_modulo/secrets/config.xml" in zf.namelist()
+
+    def test_the_scanner_flags_a_nested_secret_that_got_in(self, tmp_path):
+        """The exclusion and the scanner answer the same question twice, on
+        purpose: an archive built elsewhere still gets looked at."""
+        zip_path = tmp_path / "ajeno.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("addons/mi_modulo/.rkd/secrets/instance_prod.env", "PASSWORD=x\n")
+
+        assert core_pack._scan_zip_for_secrets(zip_path) == ["addons/mi_modulo/.rkd/secrets/instance_prod.env"]
+
+
+class TestTheWizardsDoNotScatterCredentials:
+    """Where the nested `.rkd/` of the class above comes from: both wizards
+    wrote to `Path.cwd()` without checking it was the project root, so a `cd`
+    too far left credentials in a directory the generated .gitignore does not
+    cover and `rkd pack` shipped (#246).
+    """
+
+    @pytest.mark.parametrize("command", [["instance", "init"], ["deploy", "init"]])
+    def test_a_wizard_refuses_outside_a_project(self, tmp_path, monkeypatch, command):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(main, command)
+
+        assert "No Rocketdoo project" in result.output
+        assert not (tmp_path / ".rkd").exists(), "the wizard wrote credentials outside a project"
+        # Non-zero, or `rkd deploy init && rkd deploy run -t prod` carries on
+        # as though a configuration had been written.
+        assert result.exit_code != 0
+
+    @pytest.mark.parametrize("command", [["instance", "init"], ["deploy", "init"]])
+    def test_a_wizard_runs_in_the_project_root(self, packable_project, command):
+        """The guard must not stand in the way of the normal case."""
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        result = CliRunner().invoke(main, command)
+
+        assert "No Rocketdoo project" not in result.output
+
+
+class TestHardLinksAreNotADoorEither:
+    """A hard link is not a link as far as the walk is concerned: its own
+    name, no `is_symlink()`, the same bytes. Excluding by path alone let it
+    through the same way the symbolic version did (#246).
+    """
+
+    def test_a_hard_link_to_a_secret_does_not_travel(self, packable_project):
+        secrets = packable_project / ".rkd" / "secrets"
+        secrets.mkdir(parents=True, exist_ok=True)
+        secret = secrets / "instance_prod.env"
+        secret.write_text("INSTANCE_PROD_PASSWORD=elPasswordDelVps\n")
+        os.link(secret, packable_project / "notas.txt")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+            assert "notas.txt" not in names
+            assert not any("elPasswordDelVps" in zf.read(n).decode("utf-8", "replace") for n in names)
+
+    def test_two_names_for_the_same_ordinary_file_both_travel(self, packable_project):
+        """Only the secrets are identified by inode; a project that hard-links
+        its own files must not lose them."""
+        first = packable_project / "addons" / "real.txt"
+        first.write_text("contenido\n")
+        os.link(first, packable_project / "addons" / "copia.txt")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert "addons/real.txt" in names
+        assert "addons/copia.txt" in names
+
+    def test_a_filesystem_that_reports_no_inode_does_not_empty_the_zip(self, packable_project, monkeypatch):
+        """Identifying secrets by inode cuts both ways: where the project's
+        files report 0, a set built without that guard matches every one of
+        them and the ZIP silently loses the project.
+
+        The archive keeps its real inode here on purpose: `is_the_archive()`
+        compares by identity too (#223), so a filesystem that reports 0 for
+        absolutely everything defeats that check as well. That is older than
+        this change and not what this test is about.
+        """
+        secrets = packable_project / ".rkd" / "secrets"
+        secrets.mkdir(parents=True, exist_ok=True)
+        (secrets / "instance_prod.env").write_text("INSTANCE_PROD_PASSWORD=x\n")
+        real_stat = Path.stat
+        output = packable_project / "compartido.zip"
+
+        def without_inode(self, *args, **kwargs):
+            st = real_stat(self, *args, **kwargs)
+            if self == output:
+                return st
+            return os.stat_result((st.st_mode, 0, st.st_dev, st.st_nlink, st.st_uid, st.st_gid, st.st_size, 0, 0, 0))
+
+        monkeypatch.setattr(Path, "stat", without_inode)
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+        assert "docker-compose.yaml" in names
+        assert not [n for n in names if n.startswith(".rkd/secrets")]
+
+
+class TestTheLetsEncryptKeyStaysHome:
+    """`rkd traefik on --mode production` creates traefik/certs/acme.json with
+    chmod 600 and Traefik writes the ACME account key and the issued
+    certificates into it. It was in neither list, so `git add .` committed it
+    and `rkd pack` shipped it with the archive reported clean (#246).
+    """
+
+    def test_it_does_not_travel(self, packable_project):
+        certs = packable_project / "traefik" / "certs"
+        certs.mkdir(parents=True)
+        (certs / "acme.json").write_text('{"letsencrypt": {"Account": {"PrivateKey": "laClavePrivada"}}}')
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            names = zf.namelist()
+            assert "traefik/certs/acme.json" not in names
+            assert not any("laClavePrivada" in zf.read(n).decode("utf-8", "replace") for n in names)
+
+    def test_the_rest_of_the_traefik_config_still_travels(self, packable_project):
+        """Only the key is a secret: the compose and the static config are
+        what the receiver edits for their own domain."""
+        traefik = packable_project / "traefik"
+        traefik.mkdir()
+        (traefik / "traefik.yml").write_text("entryPoints:\n  web:\n    address: ':80'\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "traefik/traefik.yml" in zf.namelist()
+
+    def test_the_scanner_flags_one_that_got_in(self, tmp_path):
+        zip_path = tmp_path / "ajeno.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("traefik/certs/acme.json", "{}")
+
+        assert core_pack._scan_zip_for_secrets(zip_path) == ["traefik/certs/acme.json"]

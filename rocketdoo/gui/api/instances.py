@@ -89,6 +89,14 @@ async def init_instances(body: InstanceInitRequest):
     try:
         from rocketdoo.core.instance.config_manager import InstanceConfigManager
         from rocketdoo.core.instance.secrets_store import random_password
+        from rocketdoo.core.project_info import project_exists
+
+        # Same guard as `rkd instance init` (#246), and this endpoint writes
+        # more than a config: without an admin_passwd in the form it
+        # generates one, so an empty directory ended up holding a credential
+        # that no .gitignore covers.
+        if not project_exists(Path.cwd()):
+            return {"ok": False, "error": f"No Rocketdoo project in {Path.cwd()}. Open a project first."}
 
         raw = {}
         for env, cfg in body.environments.items():
