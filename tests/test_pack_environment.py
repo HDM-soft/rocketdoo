@@ -1342,3 +1342,84 @@ class TestTheLetsEncryptKeyStaysHome:
             zf.writestr("traefik/certs/acme.json", "{}")
 
         assert core_pack._scan_zip_for_secrets(zip_path) == ["traefik/certs/acme.json"]
+
+
+class TestWhatThePanelSaysItLeftBehind:
+    """The ZIP is smaller than the project and the panel explained only part
+    of why: the older backups had a line, the secrets did not, so a pack that
+    correctly kept the sender's VPS credentials out read exactly like one from
+    a project that never had any (#249).
+    """
+
+    def test_the_report_names_the_secrets_it_kept_out(self, packable_project):
+        secrets = packable_project / ".rkd" / "secrets"
+        secrets.mkdir(parents=True, exist_ok=True)
+        (secrets / "instance_prod.env").write_text("INSTANCE_PROD_PASSWORD=x\n")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        assert ".rkd/secrets/instance_prod.env" in report["secrets_excluded"]
+
+    def test_a_project_with_no_secrets_reports_none(self, packable_project):
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        assert report["secrets_excluded"] == []
+
+    def test_the_panel_shows_it(self, packable_project):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        secrets = packable_project / ".rkd" / "secrets"
+        secrets.mkdir(parents=True, exist_ok=True)
+        (secrets / "instance_prod.env").write_text("INSTANCE_PROD_PASSWORD=x\n")
+
+        result = CliRunner().invoke(main, ["pack", "--no-db"])
+
+        assert "Deployment secrets" in result.output
+        assert "kept out" in result.output
+
+
+class TestTheSendersBackupHistoryStaysHome:
+    """`rkd deploy run` keeps up to three copies of the local addons under
+    `.rkd/deploy_backups/`, plus whatever modules were deleted since. The
+    receiver downloaded all of it and could not restore from any of it (#249).
+    """
+
+    def test_deploy_backups_do_not_travel(self, packable_project):
+        backups = packable_project / ".rkd" / "deploy_backups" / "20260101_120000" / "mi_modulo"
+        backups.mkdir(parents=True)
+        (backups / "__manifest__.py").write_text("{'name': 'mi_modulo'}\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert not [n for n in zf.namelist() if "deploy_backups" in n]
+
+    def test_they_are_not_reported_as_secrets(self, packable_project):
+        """Nothing was withheld from the receiver: they are the sender's own
+        copies of code the ZIP already carries."""
+        backups = packable_project / ".rkd" / "deploy_backups"
+        backups.mkdir(parents=True)
+        (backups / "algo.txt").write_text("x\n")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        assert report["secrets_excluded"] == []
+
+    def test_the_rest_of_rkd_still_travels(self, packable_project):
+        """`.rkd/` is not excluded wholesale: traefik.yaml is config, not a
+        credential, and the receiver reads it."""
+        (packable_project / ".rkd").mkdir(exist_ok=True)
+        (packable_project / ".rkd" / "traefik.yaml").write_text("mode: local\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert ".rkd/traefik.yaml" in zf.namelist()

@@ -81,11 +81,22 @@ def _port_match(line: str) -> re.Match | None:
     return None
 
 
-def _rewrite_port(line: str, ports: dict[int, int]) -> str:
-    """Swap the host side of a port line; the container side and the rest stay as written."""
+def _rewrite_port(line: str, ports: dict[int, int], done: set[int]) -> str:
+    """Swap the host side of a port line; the container side and the rest stay as written.
+
+    Only the first line per container port, which is the one `_block_ports`
+    reads. Rewriting every match while reading only the first meant a
+    hand-edited block with two mappings for 1025 got both host sides set to
+    the same chosen port: Compose deduplicates those rather than refusing
+    them (measured), so the second mapping the user wrote disappeared without
+    a word (#249).
+    """
     match = _port_match(line)
     if not match or int(match["target"]) not in ports:
         return line
+    if int(match["target"]) in done:
+        return line
+    done.add(int(match["target"]))
     newline = "\n" if line.endswith("\n") else ""
     return f"{match['head']}{ports[int(match['target'])]}{match['tail']}{newline}"
 
@@ -140,14 +151,19 @@ def _own_published_ports(project_root: Path) -> set[int]:
     return own
 
 
-def _choose_ports(current: dict[int, int], project_root: Path) -> tuple[dict[int, int], bool]:
+def _choose_ports(current: dict[int, int], project_root: Path) -> tuple[dict[int, int], dict[int, int]]:
     """Keep each declared host port when free, otherwise move to the next free one.
 
     Free means nothing listens on it and no sibling project declares it, so a
     stopped sibling with Mailpit enabled is avoided too.
+
+    Returns the chosen ports and, for the ones that had to move, the host port
+    the compose declared before. A single flag made the caller say "the
+    default Mailpit ports were taken" when one of two moved, and when the one
+    that moved was never the default to begin with (#249).
     """
     if not current:
-        return {}, False
+        return {}, {}
     declared = collect_declared_ports(exclude_dir=project_root, base=project_root)
     # `exclude_dir` poda este proyecto del barrido, asi que sus propios puertos
     # publicados -- el de Odoo, el del debugger -- quedaban invisibles y Mailpit
@@ -155,8 +171,9 @@ def _choose_ports(current: dict[int, int], project_root: Path) -> tuple[dict[int
     # elegia 8026 y el `rkd up` siguiente fallaba, despues de informar exito.
     declared.update(dict.fromkeys(_own_published_ports(project_root), "this project"))
     chosen: dict[int, int] = {}
-    moved = False
+    moved: dict[int, int] = {}
     for target, host in sorted(current.items()):
+        declared_host = host
         if host in declared or is_port_in_use(host):
             try:
                 host = find_available_port(host + 1, declared=declared)
@@ -165,7 +182,7 @@ def _choose_ports(current: dict[int, int], project_root: Path) -> tuple[dict[int
                     f"No free host port for Mailpit (container port {target}).",
                     "Free a port or edit the ports of the rkd:mailpit block in docker-compose.yaml.",
                 ) from exc
-            moved = True
+            moved[target] = declared_host
         declared[host] = "mailpit"
         chosen[target] = host
     return chosen, moved
@@ -180,6 +197,7 @@ def _toggle_compose(content: str, enable: bool, ports: dict[int, int] | None = N
     lines = content.splitlines(keepends=True)
     out = []
     in_block = False
+    rewritten: set[int] = set()
 
     for line in lines:
         rline = line.rstrip("\n")
@@ -204,7 +222,7 @@ def _toggle_compose(content: str, enable: bool, ports: dict[int, int] | None = N
             # Remove the leading '#' to uncomment
             if rest.startswith("#"):
                 uncommented = indent + rest[1:] + "\n"
-                out.append(_rewrite_port(uncommented, ports) if ports else uncommented)
+                out.append(_rewrite_port(uncommented, ports, rewritten) if ports else uncommented)
             else:
                 out.append(line)
         else:
@@ -416,6 +434,7 @@ def enable(
             "restarted": False,
             **_ports_report(_block_ports(content)),
             "ports_moved": False,
+            "ports_changed": {},
             **_apply_mail_server(enable=True, db=db, compose_data=read_docker_compose(root)),
         }
 
@@ -450,7 +469,8 @@ def enable(
         "started": started,
         "restarted": restarted,
         **_ports_report(chosen),
-        "ports_moved": ports_moved,
+        "ports_moved": bool(ports_moved),
+        "ports_changed": {_PORT_KEY[target]: previous for target, previous in ports_moved.items()},
         **mail_server_report,
     }
 

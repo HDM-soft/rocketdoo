@@ -269,8 +269,8 @@ def _resolve_project_name(root: Path, current: str | None, meta: dict, inventory
 
 
 def _rename_project_in_compose(project_dir: Path, old: str, new: str) -> bool:
-    """Rewrites the Compose identity (project name, image, container names and
-    named volumes) in place as text, line by line. PyYAML would drop the
+    """Rewrites the Compose identity (project name, built image and container
+    names) in place as text, line by line. PyYAML would drop the
     `# rkd:mailpit` markers, and every line that is not identity must stay
     byte for byte the same.
 
@@ -281,6 +281,23 @@ def _rename_project_in_compose(project_dir: Path, old: str, new: str) -> bool:
     other copy's containers as this project's, recreates them and mounts its
     volumes. Measured, not inferred. `unpack()` refuses the same case one
     level up; this guard is here so no future caller can reach past it.
+
+    Volume and network names are deliberately left alone (#249). Compose
+    already prefixes a named volume with the project -- `demo_demo-db-data`
+    against `demo-2_demo-db-data`, measured -- so renaming the keys bought no
+    isolation at all, while breaking the two shapes that cannot take it: a
+    volume or network declared `external: true`, whose name refers to
+    something that exists outside this file, and the long syntax, where the
+    key was rewritten and the `source:` next to it was not.
+
+    `image:` is renamed only when exactly one service declares that image and
+    that service builds it, which is the shape rkd emits. Two services naming
+    the same image is a project called like a public one -- `postgres` -- and
+    there the database's `image: postgres` must not be touched; renaming
+    neither leaves the two copies sharing a tag, which costs a rebuild and
+    destroys nothing. The question is asked of the parsed YAML rather than of
+    the surrounding lines: whether a service builds has nothing to do with
+    whether `build:` is written above or below `image:`.
     """
     compose_path = _compose_file(project_dir)
     if compose_path is None:
@@ -292,15 +309,25 @@ def _rename_project_in_compose(project_dir: Path, old: str, new: str) -> bool:
     value_line = re.compile(r"^(\s*#?\s*(?:-\s+)?(?:name|image):[ \t]*)(\S+)([ \t]*\r?\n?)$")
     body_prefix = re.compile(r"^\s*#?\s*(?:-\s+)?")
 
+    services = (read_docker_compose(project_dir) or {}).get("services")
+    naming_old = [
+        name
+        for name, service in (services if isinstance(services, dict) else {}).items()
+        if isinstance(service, dict) and service.get("image") == old
+    ]
+    # A compose PyYAML cannot read leaves this False: the image keeps the old
+    # tag, which costs a rebuild, while the identity that matters is renamed.
+    rename_image = len(naming_old) == 1 and "build" in services[naming_old[0]]
+
     original = compose_path.read_bytes().decode()
     lines = []
     for line in original.splitlines(keepends=True):
         body = body_prefix.sub("", line)
-        if body.startswith(("name:", "image:")):
+        if body.startswith("name:") or (body.startswith("image:") and rename_image):
             match = value_line.match(line)
             if match and match.group(2) == old:
                 line = f"{match.group(1)}{new}{match.group(3)}"
-        elif body.startswith("container_name:") or body.startswith(f"{old}-"):
+        elif body.startswith("container_name:"):
             line = token.sub(new, line)
         lines.append(line)
 

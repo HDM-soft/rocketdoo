@@ -154,3 +154,78 @@ class TestFindAvailablePort:
         monkeypatch.setattr(pv, "is_port_in_use", lambda p: True)
         with pytest.raises(RuntimeError, match="No available ports"):
             pv.find_available_port(8069, 8072, declared={})
+
+
+def _boom(*_args, **_kwargs):
+    raise OSError("netstat no esta")
+
+
+class TestThePortCheckStaysSilent:
+    """`core/mailpit.py` reaches this function, and a module of core/ printing
+    is what the contract of #143 forbids. The guard is per module, so a
+    `print()` one call away from a pure module passed it (#249).
+    """
+
+    def test_a_failing_os_check_prints_nothing(self, monkeypatch, capsys):
+        monkeypatch.setattr(pv, "_check_port_unix", _boom)
+        monkeypatch.setattr(pv, "_check_port_windows", _boom)
+
+        # A port nothing listens on, so the socket probe passes it through to
+        # the OS check that is about to fail.
+        assert pv.is_port_in_use(59117) is True
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+
+class TestTheProbeNeverWaitsForever:
+    """A connect() to a filtered port is not refused, it is dropped, and the
+    socket then waits out the system timeout -- 145 seconds measured on this
+    machine, with the whole unpack suite behind it. A firewall that DROPs is
+    the normal setup on a VPS, so without a timeout `rkd init` hangs for
+    minutes without saying why (#249).
+    """
+
+    class _Socket:
+        """Stands in for a socket whose connect never completes."""
+
+        def __init__(self, recorder, result=111):
+            self.recorder = recorder
+            self.result = result
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def settimeout(self, value):
+            self.recorder.append(value)
+
+        def connect_ex(self, _address):
+            if not self.recorder:
+                raise AssertionError("connect_ex was called before any timeout was set")
+            return self.result
+
+    def test_a_dropped_connection_still_asks_the_operating_system(self, monkeypatch):
+        """A filtered port answers the probe with EAGAIN, not with a refusal,
+        and that is not an answer about the port: the OS check decides."""
+        recorded = []
+        consulted = []
+        monkeypatch.setattr(pv.socket, "socket", lambda *_a, **_k: self._Socket(recorded, result=11))
+        monkeypatch.setattr(pv, "_check_port_unix", lambda port: consulted.append(port) or True)
+
+        assert pv.is_port_in_use(8069) is True
+        assert consulted == [8069]
+
+    def test_the_probe_sets_a_timeout_before_connecting(self, monkeypatch):
+        recorded = []
+        monkeypatch.setattr(pv.socket, "socket", lambda *_a, **_k: self._Socket(recorded))
+        monkeypatch.setattr(pv, "_check_port_unix", lambda _port: False)
+        monkeypatch.setattr(pv, "_check_port_windows", lambda _port: False)
+
+        assert pv.is_port_in_use(8069) is False
+
+        assert recorded, "no timeout was set"
+        assert 0 < recorded[0] <= 1, f"a {recorded[0]}s wait is not a probe"

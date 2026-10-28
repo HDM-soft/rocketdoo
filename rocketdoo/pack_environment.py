@@ -156,6 +156,13 @@ def pack_environment(no_db, output, db_name, yes):
     stale_skipped = report.get("stale_backups_skipped") or 0
     stale_line = f" [dim](+{stale_skipped} older backup file(s) left out)[/dim]" if stale_skipped else ""
 
+    # The same reasoning for the secrets: a ZIP that correctly kept the
+    # sender's VPS credentials out looked exactly like one that never had any
+    # (#249). The panel named what it found inside and nothing of what it
+    # deliberately left behind.
+    secrets_out = len(report.get("secrets_excluded") or ())
+    secrets_line = f"{secrets_out} file(s) kept out ✓" if secrets_out else "none found"
+
     console.print()
     console.print(
         Panel(
@@ -164,6 +171,7 @@ def pack_environment(no_db, output, db_name, yes):
             f"[bold]📦 Files included:[/bold] {report['file_count']}{stale_line}\n"
             f"[bold]💾 Size:[/bold] {zip_size_mb:.1f} MB\n"
             f"[bold]🔐 SSH Keys:[/bold] {'excluded ✓' if report['ssh_sanitized'] else 'not applicable'}\n"
+            f"[bold]🔑 Deployment secrets:[/bold] {secrets_line}\n"
             f"[bold]💿 DB Backup:[/bold] {db_line}\n\n"
             f"[dim]Share the ZIP with the other developer.\n"
             f"The recipient should run: [cyan]rkd unpack[/cyan][/dim]",

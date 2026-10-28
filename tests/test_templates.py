@@ -99,15 +99,55 @@ def _context_for(rel_path: str) -> dict:
 
 
 def assert_snapshot(name: str, content: str):
-    """Compare against the stored render, or record it the first time."""
+    """Compare against the stored render, recording it only when asked.
+
+    A missing snapshot used to be recorded on the spot and the test skipped,
+    which is not a failure: add a template, forget to commit its snapshot,
+    and CI stays green over a file nothing compares. A test that cannot fail
+    when its own baseline is gone is not a test (#249).
+    """
     SNAPSHOT_DIR.mkdir(exist_ok=True)
     snapshot = SNAPSHOT_DIR / name
-    if os.environ.get("UPDATE_SNAPSHOTS") or not snapshot.exists():
+    if os.environ.get("UPDATE_SNAPSHOTS"):
         snapshot.write_text(content)
-        if not os.environ.get("UPDATE_SNAPSHOTS"):
-            pytest.skip(f"recorded new snapshot {name}")
         return
+    assert snapshot.exists(), f"no snapshot for {name}. Record it with: UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py"
     assert content == snapshot.read_text(), f"{name} changed. If intended: UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py"
+
+
+class TestTheSnapshotHelperItself:
+    """It used to record a missing snapshot and skip, so a template added
+    without committing its baseline left CI green over a file nothing
+    compared (#249)."""
+
+    def test_a_missing_snapshot_fails_instead_of_skipping(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("UPDATE_SNAPSHOTS", raising=False)
+        # Pointed at a directory of its own: the behaviour under test is one
+        # that writes the snapshot it did not find, and the repository's
+        # snapshots are not the place to find that out.
+        monkeypatch.setattr("tests.test_templates.SNAPSHOT_DIR", tmp_path)
+
+        # Not `pytest.raises`: a `pytest.skip()` inside the helper raises
+        # `Skipped`, which would carry this test away with it and leave the
+        # suite green -- the very outcome being tested against.
+        try:
+            assert_snapshot("no_existe_este_snapshot.txt", "lo que sea")
+        except AssertionError as exc:
+            assert "no snapshot for" in str(exc)
+        except BaseException as exc:  # noqa: BLE001 -- Skipped is one of these
+            raise AssertionError(f"a missing snapshot must fail, not raise {type(exc).__name__}") from None
+        else:
+            raise AssertionError("a missing snapshot was accepted silently")
+
+        assert not (tmp_path / "no_existe_este_snapshot.txt").exists()
+
+    def test_recording_still_works_when_asked(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("UPDATE_SNAPSHOTS", "1")
+        monkeypatch.setattr("tests.test_templates.SNAPSHOT_DIR", tmp_path)
+
+        assert_snapshot("nuevo.txt", "contenido")
+
+        assert (tmp_path / "nuevo.txt").read_text() == "contenido"
 
 
 class TestAllTemplates:

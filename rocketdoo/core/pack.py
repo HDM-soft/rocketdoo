@@ -49,6 +49,12 @@ _ALWAYS_EXCLUDE = {".ssh", "__pycache__", "node_modules", ".mypy_cache"}
 # .rkd/secrets/ travelled while the panel reported the archive clean (#245).
 _SHAREABLE_SECRETS = {"odoo_pg_pass", "config/odoo.conf"}
 
+# Not secret, but no use to anyone else: `rkd deploy run` keeps up to three
+# copies of the local addons here, plus the modules that were deleted since.
+# The receiver downloads the sender's backup history and cannot restore from
+# it (#249).
+_LOCAL_STATE = (".rkd/deploy_backups",)
+
 
 def _secret_paths() -> list[str]:
     """Project-relative paths that must not leave the machine inside the ZIP."""
@@ -274,14 +280,17 @@ def _create_zip(
     exclude_dirs: list[str],
     exclude_files: Iterable[Path] = (),
     exclude_paths: Iterable[str] = (),
-) -> tuple[int, list[str]]:
+    exclude_state: Iterable[str] = (),
+) -> tuple[int, list[str], list[str]]:
     """Creates the ZIP archive of the full environment.
 
     Excludes: .ssh/, __pycache__, node_modules, any extra dirs provided, and
     the individual files in `exclude_files`. `rkd_backups/`, like every other
     project subdirectory, is picked up by the `rglob` walk below - it never
-    needed a dedicated branch. Returns the number of files included and the
-    symbolic links left out.
+    needed a dedicated branch. Returns the number of files included, the
+    symbolic links left out, and the entries kept out for being secret --
+    which the caller reports, while `exclude_state` is dropped in silence:
+    the receiver loses nothing they could have used.
 
     `exclude_files` is matched on the path relative to the project, not on
     file identity the way the output archive is: these paths are enumerated
@@ -294,6 +303,7 @@ def _create_zip(
     # would drop any directory of that name anywhere in the project, including
     # one belonging to an addon.
     excluded_paths = tuple(exclude_paths)
+    state_paths = tuple(exclude_state)
 
     def is_the_archive(item: Path) -> bool:
         """Whether this entry is the archive being written, under any name.
@@ -339,12 +349,17 @@ def _create_zip(
 
     file_count = 0
     skipped_links: list[str] = []
+    excluded_secrets: list[str] = []
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         for item in entries:
             rel = item.relative_to(project_dir)
             if rel in excluded_rel or set(rel.parts) & excluded:
                 continue
             if _matches_secret(rel.as_posix(), excluded_paths):
+                if item.is_file():
+                    excluded_secrets.append(rel.as_posix())
+                continue
+            if _matches_secret(rel.as_posix(), state_paths):
                 continue
             if item.is_symlink():
                 # `zf.write()` follows the link and stores the target's bytes
@@ -367,7 +382,7 @@ def _create_zip(
                 zf.write(item, rel)
                 file_count += 1
 
-    return file_count, skipped_links
+    return file_count, skipped_links, excluded_secrets
 
 
 def _stale_backups(backup_dir: Path, keep: set[Path | None]) -> list[Path]:
@@ -537,12 +552,13 @@ def pack(
         report(f"{len(stale)} backup file(s) left out of the ZIP; unpack only restores the newest pair.")
 
     try:
-        file_count, skipped_links = _create_zip(
+        file_count, skipped_links, excluded_secrets = _create_zip(
             project_dir=root,
             zip_path=zip_path,
             exclude_dirs=[".ssh"],
             exclude_files=stale,
             exclude_paths=_secret_paths(),
+            exclude_state=_LOCAL_STATE,
         )
     except Exception as exc:
         if original_dockerfile is not None:
@@ -555,6 +571,12 @@ def pack(
         report("Original Dockerfile restored.", "ok")
 
     meta_path.unlink(missing_ok=True)
+
+    if excluded_secrets:
+        # Said out loud, like the older backups are (#249): the panel used to
+        # report only what it found inside, so a ZIP that correctly kept the
+        # sender's VPS credentials out looked exactly like one that had none.
+        report(f"{len(excluded_secrets)} file(s) rkd treats as secret stayed out of the ZIP.", "ok")
 
     if skipped_links:
         message = f"{len(skipped_links)} symbolic link(s) left out of the ZIP; their target is not packaged."
@@ -577,6 +599,7 @@ def pack(
         "secrets_found_in_zip": bool(secrets_in_zip),
         "secrets_suspicious": list(secrets_in_zip),
         "symlinks_skipped": skipped_links,
+        "secrets_excluded": excluded_secrets,
         "file_count": file_count,
         "stale_backups_skipped": len(stale),
         "warnings": warnings,
