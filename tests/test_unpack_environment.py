@@ -525,11 +525,6 @@ class TestRenameProjectInCompose:
         ("container_name: odoo-demo\n", "container_name: odoo-demo-2\n"),
         ("container_name: db-demo\n", "container_name: db-demo-2\n"),
         ("container_name: demo-mailpit\n", "container_name: demo-2-mailpit\n"),
-        ("      - demo-web-data:/var/lib/odoo\n", "      - demo-2-web-data:/var/lib/odoo\n"),
-        ("      - demo-db-data:/var/lib/postgresql", "      - demo-2-db-data:/var/lib/postgresql"),
-        ("  demo-web-data:\n", "  demo-2-web-data:\n"),
-        ("  demo-db-data:\n", "  demo-2-db-data:\n"),
-        ("  #demo-mailpit-data:\n", "  #demo-2-mailpit-data:\n"),
     ]
 
     def _write(self, project_dir, text=COMPOSE_TEMPLATE):
@@ -603,21 +598,118 @@ class TestRenameProjectInCompose:
 
     def test_a_similarly_named_token_is_untouched(self, project_dir):
         """Mutation: a bare substring match (no token boundary) renames
-        `demos`, `mydemo` and `demo_x`, which belong to something else.
+        `mydemo` and `demo.demos`, which belong to something else.
         """
+        text = COMPOSE_TEMPLATE.replace("    container_name: db-demo\n", "    container_name: db-demo-mydemo_demo.demos\n")
+        path = self._write(project_dir, text)
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        assert "    container_name: db-demo-2-mydemo_demo.demos\n" in path.read_text()
+
+    def test_volume_names_are_left_alone(self, project_dir):
+        """Compose prefixes a named volume with the project, so `demo` and
+        `demo-2` get `demo_demo-db-data` and `demo-2_demo-db-data` from the
+        same key (measured). Renaming the key bought nothing and broke the
+        shapes that cannot take it (#249)."""
+        path = self._write(project_dir)
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        content = path.read_text()
+        assert "      - demo-web-data:/var/lib/odoo\n" in content
+        assert "  demo-db-data:\n" in content
+        assert "demo-2-db-data" not in content
+
+    def test_an_external_volume_still_points_at_what_exists(self, project_dir):
+        """Renaming the key of an `external: true` volume made `up` fail with
+        "declared as external, but could not be found"."""
+        text = COMPOSE_TEMPLATE.replace("  demo-db-data:\n", "  demo-db-data:\n    external: true\n")
+        path = self._write(project_dir, text)
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        assert "  demo-db-data:\n    external: true\n" in path.read_text()
+
+    def test_the_long_volume_syntax_stays_consistent(self, project_dir):
+        """The key was rewritten and the `source:` beside it was not, which
+        left the file referring to a volume it no longer declared."""
         text = COMPOSE_TEMPLATE.replace(
-            "      - demo-web-data:/var/lib/odoo\n",
-            "      - demo-web-data:/var/lib/odoo/demos\n      - demos-data:/a\n      - demo-x:/mydemo\n",
-        ).replace("    container_name: db-demo\n", "    container_name: db-demo-mydemo_demo.demos\n")
+            "      - demo-db-data:/var/lib/postgresql/data/pgdata\n",
+            "      - type: volume\n        source: demo-db-data\n        target: /var/lib/postgresql/data/pgdata\n",
+        )
         path = self._write(project_dir, text)
 
         _rename_project_in_compose(project_dir, "demo", "demo-2")
 
         content = path.read_text()
-        assert "      - demo-2-web-data:/var/lib/odoo/demos\n" in content
-        assert "      - demos-data:/a\n" in content
-        assert "      - demo-2-x:/mydemo\n" in content
-        assert "    container_name: db-demo-2-mydemo_demo.demos\n" in content
+        assert "        source: demo-db-data\n" in content
+        assert "  demo-db-data:\n" in content
+
+    def test_a_public_image_of_the_same_name_is_not_renamed(self, project_dir):
+        """A project named like a public image had the database service's
+        `image: postgres` rewritten to `postgres-2`, which is a tag that does
+        not exist. Two services naming one image is exactly that case, and
+        there neither is renamed: the copies share a tag, which costs a
+        rebuild and destroys nothing (#249)."""
+        text = COMPOSE_TEMPLATE.replace("name: demo\n", "name: postgres\n")
+        text = text.replace("    image: demo\n", "    image: postgres\n")
+        text = text.replace("    image: postgres:16\n", "    image: postgres\n")
+        path = self._write(project_dir, text)
+
+        _rename_project_in_compose(project_dir, "postgres", "postgres-2")
+
+        content = path.read_text()
+        # The fixture's containers are named after `demo`, so the only
+        # `postgres` tokens left to judge are the two image lines.
+        assert "    image: postgres\n" in content
+        assert "image: postgres-2" not in content
+        assert "name: postgres-2\n" in content
+
+    def test_the_built_image_is_renamed_whatever_the_order_of_the_keys(self, project_dir):
+        """Asking the surrounding lines whether a service builds made the
+        answer depend on `build:` being written above `image:`, and a compose
+        with them the other way round got its containers renamed while its
+        image kept the old tag -- a half rename, which is what the all or
+        nothing rule exists to prevent (#249)."""
+        text = COMPOSE_TEMPLATE.replace(
+            "    build: .\n    restart: unless-stopped\n    image: demo\n",
+            "    image: demo\n    build: .\n    restart: unless-stopped\n",
+        )
+        path = self._write(project_dir, text)
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        content = path.read_text()
+        assert "    image: demo-2\n" in content
+        assert "    container_name: odoo-demo-2\n" in content
+
+    def test_an_image_nobody_builds_is_not_renamed(self, project_dir):
+        """A project that pulls its image instead of building it -- the tag
+        exists in a registry, and `demo-2` does not: renaming it leaves an
+        `up` that cannot find the image (#249)."""
+        text = COMPOSE_TEMPLATE.replace("    build: .\n", "")
+        path = self._write(project_dir, text)
+
+        _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        content = path.read_text()
+        assert "    image: demo\n" in content
+        assert "name: demo-2\n" in content
+        assert "    container_name: odoo-demo-2\n" in content
+
+    def test_a_compose_that_cannot_be_parsed_still_renames_the_identity(self, project_dir):
+        """The image question is asked of the parsed YAML; when there is no
+        parse, the answer is no -- a shared tag costs a rebuild, while the
+        identity that decides whose containers these are is still rewritten."""
+        text = COMPOSE_TEMPLATE + "\n\t- esto no es YAML valido\n"
+        path = self._write(project_dir, text)
+
+        assert _rename_project_in_compose(project_dir, "demo", "demo-2")
+
+        content = path.read_text()
+        assert "name: demo-2\n" in content
+        assert "    container_name: odoo-demo-2\n" in content
 
     def test_crlf_line_endings_are_preserved(self, project_dir):
         """Mutation: `splitlines()` without keepends rejoins with \\n."""

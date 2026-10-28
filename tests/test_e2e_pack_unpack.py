@@ -240,8 +240,15 @@ def test_two_copies_of_a_project_coexist(compose_copy, docker_available):
     volumes = subprocess.run(
         ["docker", "volume", "ls", "--format", "{{.Name}}"], capture_output=True, text=True
     ).stdout.split()
-    assert f"{COEXIST_PROJECT}_{COEXIST_PROJECT}-db-data" in volumes
-    assert f"{new_name}_{new_name}-db-data" in volumes
+    # Compose prefixes a named volume with the project, which is what keeps
+    # the two apart; the key inside the file is the same in both and is not
+    # rewritten (#249). What matters is that Docker ends up with two volumes,
+    # not one shared.
+    original_volume = f"{COEXIST_PROJECT}_{COEXIST_PROJECT}-db-data"
+    copy_volume = f"{new_name}_{COEXIST_PROJECT}-db-data"
+    assert original_volume in volumes
+    assert copy_volume in volumes
+    assert original_volume != copy_volume
 
     for root, name in ((original, f"db-{COEXIST_PROJECT}"), (copy, f"db-{new_name}")):
         running = _compose(root, "ps", "--status", "running", "-q", "db", timeout=30).stdout.strip()

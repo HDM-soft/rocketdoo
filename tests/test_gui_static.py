@@ -948,3 +948,15 @@ def test_the_mailpit_ports_are_not_hardcoded():
     assert ":1025" not in html
     assert "mail.web_port" in html
     assert "mail.smtp_port" in html
+
+
+def test_the_mailpit_card_does_not_offer_a_link_to_a_stopped_container():
+    """The ports come from the compose, which declares them whether the block
+    is commented or not, so the card showed a port for a disabled service and
+    an "open" link for a container that was not running (#249).
+    """
+    html = INDEX_HTML.read_text()
+
+    assert "mail.enabled && mail.smtp_port" in html
+    assert "mail.enabled && mail.web_port" in html
+    assert 'v-if="mail.running && mail.web_port"' in html

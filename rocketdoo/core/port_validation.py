@@ -4,10 +4,22 @@ import platform
 import re
 import socket
 import subprocess
-import sys
 from pathlib import Path
 
 import yaml
+
+# Un connect() a un puerto filtrado no se rechaza: se descarta, y el socket
+# espera el timeout del sistema -- medido en 145 s en esta máquina, con la
+# suite de unpack entera detrás. Un firewall con DROP es lo normal en un VPS,
+# así que sin esto `rkd init` se cuelga minutos sin decir por qué (#249).
+#
+# Generoso a propósito. El chequeo del SO de más abajo no siempre es una
+# segunda opinión: en WSL2, sin `netstat` y con `lsof` corriendo como usuario
+# normal, el `docker-proxy` de root es invisible, así que para un puerto que
+# publica Docker este sondeo es el único que lo detecta. Un connect local
+# responde en microsegundos; el segundo entero es para la máquina cargada, no
+# para la red.
+_CONNECT_TIMEOUT = 1.0
 
 
 def is_port_in_use(port: int) -> bool:
@@ -16,6 +28,7 @@ def is_port_in_use(port: int) -> bool:
     """
     # Primero intenta con socket (rápido para conexiones activas)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(_CONNECT_TIMEOUT)
         if s.connect_ex(("localhost", port)) == 0:
             return True
 
@@ -27,8 +40,12 @@ def is_port_in_use(port: int) -> bool:
             return _check_port_windows(port)
         elif system in ["Linux", "Darwin"]:  # Darwin es macOS
             return _check_port_unix(port)
-    except Exception as e:
-        print(f"⚠️  Advertencia al verificar puerto {port}: {e}", file=sys.stderr)
+    except Exception:
+        # Silent on purpose: `core/mailpit.py` reaches this function, and a
+        # module of core/ printing is what the contract of #143 forbids --
+        # the guard is per module, so this one slipped through it (#249).
+        # The conservative answer below is the information the caller needs:
+        # a port that could not be checked is treated as taken.
         return True
 
     return False
