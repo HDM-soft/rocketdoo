@@ -55,8 +55,22 @@ def instance_init(force):
     Saves configuration to .rkd/instance.yaml
     """
     from rocketdoo.core.instance.config_manager import InstanceConfigManager
+    from rocketdoo.core.project_info import project_exists
 
     project_path = Path.cwd()
+
+    # Both wizards write credentials under .rkd/. Run one directory too deep
+    # and they land somewhere the generated .gitignore does not cover and
+    # `rkd pack` used to ship (#246): refuse rather than scatter them.
+    if not project_exists(project_path):
+        console.print("\n[red]No Rocketdoo project in this directory.[/red]")
+        console.print(f"[dim]{project_path} has no Dockerfile and docker-compose.yaml next to each other.[/dim]")
+        console.print("[dim]Run this from the project root: what it writes under .rkd/ are credentials,[/dim]")
+        console.print("[dim]and a copy below the root is neither gitignored nor kept out of `rkd pack`.[/dim]\n")
+        # Non-zero, so `rkd deploy init && rkd deploy run` does not carry on
+        # as if a configuration had been written.
+        raise SystemExit(1)
+
     mgr = InstanceConfigManager(project_path)
 
     if mgr.exists() and not force:
@@ -192,17 +206,26 @@ def instance_deploy(env, dry_run, yes):
     # ── Result ──
     console.print()
     if success:
-        scheme = "https"
-        console.print(
-            Panel(
+        if dep_type == "native":
+            # Nothing stands in front of a native deploy until #211: the
+            # domain has no certificate and nothing listens on 443, so
+            # promising https there sends the operator to a dead URL.
+            body = (
                 f"[bold green]Deployment successful![/bold green]\n\n"
                 f"[dim]Environment:[/dim] {env}\n"
-                f"[dim]URL        :[/dim] [cyan underline]{scheme}://{domain}[/cyan underline]\n\n"
-                "[dim]It may take a few minutes for Let's Encrypt to issue the certificate.[/dim]",
-                border_style="green",
-                box=box.DOUBLE,
+                f"[dim]URL        :[/dim] [cyan underline]http://{host}:8069[/cyan underline]\n"
+                f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env\n\n"
+                "[dim]Plain HTTP on port 8069: a native deploy has no reverse proxy yet.[/dim]"
             )
-        )
+        else:
+            body = (
+                f"[bold green]Deployment successful![/bold green]\n\n"
+                f"[dim]Environment:[/dim] {env}\n"
+                f"[dim]URL        :[/dim] [cyan underline]https://{domain}[/cyan underline]\n"
+                f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env\n\n"
+                "[dim]It may take a few minutes for Let's Encrypt to issue the certificate.[/dim]"
+            )
+        console.print(Panel(body, border_style="green", box=box.DOUBLE))
     else:
         console.print(
             Panel(

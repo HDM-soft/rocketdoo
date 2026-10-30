@@ -64,13 +64,18 @@ class EnvConfig(BaseModel):
     odoo_tag: str = ""
     domain: str = ""
     email: str = ""
-    db_user: str = "odoo"
+    # Empty, like the model: InstanceConfig derives it from the
+    # environment name, and a form that posts nothing must not overwrite
+    # what the file already says (#248).
+    db_user: str = ""
+    db_name: str = ""
     db_version: str = "16"
     admin_passwd: str = ""
     use_enterprise: bool = False
     use_gitman: bool = False
     gitman_config: str = ""
     pg_profile: str = "small"
+    proxy_mode: bool = False
     remote_path: str = ""
 
 
@@ -84,6 +89,14 @@ async def init_instances(body: InstanceInitRequest):
     try:
         from rocketdoo.core.instance.config_manager import InstanceConfigManager
         from rocketdoo.core.instance.secrets_store import random_password
+        from rocketdoo.core.project_info import project_exists
+
+        # Same guard as `rkd instance init` (#246), and this endpoint writes
+        # more than a config: without an admin_passwd in the form it
+        # generates one, so an empty directory ended up holding a credential
+        # that no .gitignore covers.
+        if not project_exists(Path.cwd()):
+            return {"ok": False, "error": f"No Rocketdoo project in {Path.cwd()}. Open a project first."}
 
         raw = {}
         for env, cfg in body.environments.items():

@@ -134,6 +134,43 @@ class TestDeployability:
         assert env.missing_fields() == ["vps.password"]
 
 
+class TestDatabaseNaming:
+    """Two environments that share a role also share a database (#248).
+
+    The role name is only derivable where the environment's name is known,
+    which is the config, not the environment model.
+    """
+
+    def test_each_environment_gets_its_own_role(self):
+        config = InstanceConfig.model_validate({"environments": {"stage": {}, "prod": {}}})
+
+        assert config.environments["stage"].db_user == "odoo_stage"
+        assert config.environments["prod"].db_user == "odoo_prod"
+
+    def test_a_configured_role_is_left_alone(self):
+        config = InstanceConfig.model_validate({"environments": {"prod": {"db_user": "erp"}}})
+
+        assert config.environments["prod"].db_user == "erp"
+
+    def test_the_database_follows_the_role_unless_named(self):
+        config = InstanceConfig.model_validate({"environments": {"prod": {}, "stage": {"db_name": "erp_qa"}}})
+
+        assert config.environments["prod"].db_name == "odoo_prod"
+        assert config.environments["stage"].db_name == "erp_qa"
+
+    def test_a_file_without_the_environments_wrapper_is_named_too(self):
+        config = InstanceConfig.model_validate({"prod": {"host": "h"}})
+
+        assert config.environments["prod"].db_user == "odoo_prod"
+
+    def test_the_names_survive_a_round_trip(self):
+        config = InstanceConfig.model_validate({"environments": {"prod": {}}})
+        again = InstanceConfig.model_validate(config.to_yaml_dict())
+
+        assert again.environments["prod"].db_user == "odoo_prod"
+        assert again.environments["prod"].db_name == "odoo_prod"
+
+
 class TestInstanceConfigRoundTrip:
     def test_yaml_round_trip_is_stable(self, tmp_path):
         """Writing and re-reading must not change the config."""

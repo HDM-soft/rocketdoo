@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 from rocketdoo.core.deploy import vps
-from rocketdoo.core.instance import deployer_docker, deployer_native, ssh_utils
+from rocketdoo.core.instance import deployer_docker, deployer_native, secrets_store, ssh_utils
 
 SENTINEL = "RKD-SENTINEL-PASSWORD"
 
@@ -181,6 +181,10 @@ class TestConfigureOdooStdin:
 
         deployer._configure_odoo()
 
+        # The database password is generated on first deploy; the role is
+        # created with this same value (#248), which tests/test_instance_native
+        # covers.
+        db_password = secrets_store.load(tmp_path, "stage")[secrets_store.PG_PASS]
         conf = run.calls[0][1]["input"]
         assert conf == (
             "[options]\n"
@@ -190,7 +194,8 @@ class TestConfigureOdooStdin:
             "db_host = localhost\n"
             "db_port = 5432\n"
             "db_user = odoo_stage\n"
-            "db_password = False\n"
+            f"db_password = {db_password}\n"
+            "db_name = odoo_stage\n"
             "db_maxconn = 64\n"
             "log_level = info\n"
             "logfile = /var/log/odoo/odoo-server.log\n"
@@ -198,7 +203,7 @@ class TestConfigureOdooStdin:
             "gevent_port = 8072\n"
             "limit_memory_hard = 1610612736\n"
             "limit_memory_soft = 1073741824\n"
-            "proxy_mode = True\n"
+            "proxy_mode = False\n"
             "list_db = False\n"
         )
 

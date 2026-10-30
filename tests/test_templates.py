@@ -50,6 +50,8 @@ INSTANCE_CONTEXT = {
     "traefik_email": "ops@example.com",
     "odoo_tag": "17.0",
     "db_user": "odoo",
+    "db_name": "demo_stage",
+    "db_password": "s3cr3t-pg",
     "db_version": "15",
     "admin_passwd": "s3cr3t-admin",
     "workers": 2,
@@ -97,15 +99,55 @@ def _context_for(rel_path: str) -> dict:
 
 
 def assert_snapshot(name: str, content: str):
-    """Compare against the stored render, or record it the first time."""
+    """Compare against the stored render, recording it only when asked.
+
+    A missing snapshot used to be recorded on the spot and the test skipped,
+    which is not a failure: add a template, forget to commit its snapshot,
+    and CI stays green over a file nothing compares. A test that cannot fail
+    when its own baseline is gone is not a test (#249).
+    """
     SNAPSHOT_DIR.mkdir(exist_ok=True)
     snapshot = SNAPSHOT_DIR / name
-    if os.environ.get("UPDATE_SNAPSHOTS") or not snapshot.exists():
+    if os.environ.get("UPDATE_SNAPSHOTS"):
         snapshot.write_text(content)
-        if not os.environ.get("UPDATE_SNAPSHOTS"):
-            pytest.skip(f"recorded new snapshot {name}")
         return
+    assert snapshot.exists(), f"no snapshot for {name}. Record it with: UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py"
     assert content == snapshot.read_text(), f"{name} changed. If intended: UPDATE_SNAPSHOTS=1 pytest tests/test_templates.py"
+
+
+class TestTheSnapshotHelperItself:
+    """It used to record a missing snapshot and skip, so a template added
+    without committing its baseline left CI green over a file nothing
+    compared (#249)."""
+
+    def test_a_missing_snapshot_fails_instead_of_skipping(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("UPDATE_SNAPSHOTS", raising=False)
+        # Pointed at a directory of its own: the behaviour under test is one
+        # that writes the snapshot it did not find, and the repository's
+        # snapshots are not the place to find that out.
+        monkeypatch.setattr("tests.test_templates.SNAPSHOT_DIR", tmp_path)
+
+        # Not `pytest.raises`: a `pytest.skip()` inside the helper raises
+        # `Skipped`, which would carry this test away with it and leave the
+        # suite green -- the very outcome being tested against.
+        try:
+            assert_snapshot("no_existe_este_snapshot.txt", "lo que sea")
+        except AssertionError as exc:
+            assert "no snapshot for" in str(exc)
+        except BaseException as exc:  # noqa: BLE001 -- Skipped is one of these
+            raise AssertionError(f"a missing snapshot must fail, not raise {type(exc).__name__}") from None
+        else:
+            raise AssertionError("a missing snapshot was accepted silently")
+
+        assert not (tmp_path / "no_existe_este_snapshot.txt").exists()
+
+    def test_recording_still_works_when_asked(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("UPDATE_SNAPSHOTS", "1")
+        monkeypatch.setattr("tests.test_templates.SNAPSHOT_DIR", tmp_path)
+
+        assert_snapshot("nuevo.txt", "contenido")
+
+        assert (tmp_path / "nuevo.txt").read_text() == "contenido"
 
 
 class TestAllTemplates:
@@ -224,6 +266,32 @@ class TestInstanceTemplates:
         """list_db must stay off on a public instance."""
         conf = render("instance/odoo.conf.jinja", **INSTANCE_CONTEXT)
         assert "list_db = False" in conf
+
+    def test_odoo_conf_carries_the_database_password(self):
+        """The image's entrypoint only injects --db_password when the conf
+        does not define it, and the conf used to define it as False: the
+        secret the compose mounts never reached Odoo (#250). Declaring it
+        also keeps it out of the container's argv, which `ps` on the host
+        shows to everyone."""
+        conf = render("instance/odoo.conf.jinja", **INSTANCE_CONTEXT)
+
+        assert "db_password = s3cr3t-pg" in conf
+        assert "db_password = False" not in conf
+
+    def test_odoo_conf_names_the_database_to_serve(self):
+        """With list_db = False there is no database manager to pick one."""
+        conf = render("instance/odoo.conf.jinja", **INSTANCE_CONTEXT)
+
+        assert "db_name = demo_stage" in conf
+
+    def test_only_postgres_is_handed_the_password_file(self, compose):
+        """Compose mounts a `file:` secret with the host's uid and mode, and
+        the odoo image reads it as uid 100: a restricted odoo_pg_pass made
+        the entrypoint die with Permission denied. postgres reads it as root
+        before dropping privileges, and the conf already carries the
+        password for Odoo (#250)."""
+        assert "postgresql_password" not in yaml.dump(compose["services"]["web"])
+        assert "postgresql_password" in yaml.dump(compose["services"]["db"])
 
     @pytest.mark.parametrize(("env", "workers"), [("stage", 2), ("prod", 4)])
     def test_worker_count_follows_the_environment(self, env, workers):
