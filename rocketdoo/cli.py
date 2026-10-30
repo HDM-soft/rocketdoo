@@ -16,6 +16,7 @@ from rocketdoo.core.gitignore_manager import missing_entries
 from rocketdoo.core.models.profiles import ProfileCatalog, get_golden_path
 from rocketdoo.deploy_cli import deploy, deploy_config, deploy_init, deploy_run, list_modules, validate_modules
 from rocketdoo.docker_cli import build, docker, down, logs, pause, restart, status, stop, up
+from rocketdoo.easter_egg import launch_command
 from rocketdoo.gui_cli import gui_command
 from rocketdoo.instance_cli import instance
 from rocketdoo.mail_cli import mail
@@ -159,7 +160,7 @@ def delete_command(ctx, delete_identifier, dry_run, path, quiet):
     console.print("─" * 60 + "\n")
 
 
-@click.group()
+@click.group(epilog="Pre-flight checklist complete. One system is still not on this list.")
 @click.version_option(
     version=f"{__version__}", prog_name="Rocketdoo"
 )  # version declared on rocketdoo/core/__init__.py and pyproject.toml
@@ -304,8 +305,11 @@ def help(command_name):
         else:
             click.echo(f"❌ Command '{command_name}' not found")
             click.echo("Available commands:")
-            for name in main.list_commands(click.Context(main)):
-                click.echo(f"  {name}")
+            ctx = click.Context(main)
+            for name in main.list_commands(ctx):
+                command = main.get_command(ctx, name)
+                if command is not None and not command.hidden:
+                    click.echo(f"  {name}")
     else:
         # Show general help
         click.echo(main.get_help(click.Context(main)))
@@ -683,6 +687,8 @@ main.add_command(validate_modules, name="deploy-validate")
 # 🖥️  Register GUI command
 # ============================================================
 main.add_command(gui_command, name="gui")
+
+main.add_command(launch_command, name="launch")
 
 # ============================================================
 # 🤖 Register CI/CD command
