@@ -677,6 +677,7 @@ class TestMailOnReportsThePublishedPorts:
             "smtp_port": 1125,
             "web_port": 8125,
             "ports_moved": True,
+            "ports_changed": {"smtp_port": 1025, "web_port": 8025},
             "db": "demo",
             "db_error": "",
             "db_archived": None,
@@ -695,21 +696,93 @@ class TestMailOnReportsThePublishedPorts:
         assert "localhost:1025" not in output
         assert "Odoo reaches it at mailpit:1025 inside the Compose network." in output
         assert "smtp_port = 1025" in output
-        assert "were taken" in output
+        assert "SMTP port 1025 was taken" in output
+        assert "Web UI port 8025 was taken" in output
 
     def test_mail_on_without_moving_stays_quiet_about_it(self, monkeypatch):
-        output = self._invoke(monkeypatch, ports_moved=False, smtp_port=1025, web_port=8025)
+        output = self._invoke(monkeypatch, ports_moved=False, ports_changed={}, smtp_port=1025, web_port=8025)
 
-        assert "were taken" not in output
+        assert "was taken" not in output
         assert "localhost:1025" in output
 
+    def test_only_the_port_that_moved_is_named(self, monkeypatch):
+        """One of the two moving used to be announced as both."""
+        output = self._invoke(monkeypatch, ports_changed={"web_port": 8025}, smtp_port=1025, web_port=8125)
+
+        assert "Web UI port 8025 was taken" in output
+        assert "SMTP port" not in output
+
     def test_mail_on_with_a_block_without_ports_does_not_crash(self, monkeypatch):
-        output = self._invoke(monkeypatch, ports_moved=False, smtp_port=None, web_port=None)
+        output = self._invoke(monkeypatch, ports_moved=False, ports_changed={}, smtp_port=None, web_port=None)
 
         assert "Mailpit is ready" in output
         assert "None" not in output
 
     def test_already_enabled_names_the_real_web_port(self, monkeypatch):
-        output = self._invoke(monkeypatch, changed=False, ports_moved=False)
+        output = self._invoke(monkeypatch, changed=False, ports_moved=False, ports_changed={})
 
         assert "http://localhost:8125" in output
+
+
+class TestStatusShowsThePortsWithTheProjectDown:
+    """The compose is the single source of truth for the published ports
+    (#234), but the table only printed them with the container running, which
+    is exactly when you do not need to ask (#249).
+    """
+
+    def _status(self, monkeypatch, tmp_path, running):
+        from click.testing import CliRunner
+        from rich.console import Console
+
+        from rocketdoo import mail_cli
+
+        (tmp_path / "docker-compose.yaml").write_text(
+            "services:\n  web:\n    image: odoo:18.0\n\n"
+            "  # rkd:mailpit\n  mailpit:\n    image: axllent/mailpit:latest\n    ports:\n"
+            '      - "1125:1025"\n      - "8125:8025"\n  # /rkd:mailpit\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(mail_cli, "console", Console(width=200))
+        monkeypatch.setattr(mail_cli, "container_running", lambda *a, **k: running)
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "no db"))
+        monkeypatch.setattr(mail_cli, "_mailpit_server_line", lambda *a: ("n/a", "dim", []))
+        result = CliRunner().invoke(mail_cli.mail, ["status"])
+        return " ".join(result.output.split())
+
+    def test_the_ports_are_shown_with_the_container_stopped(self, monkeypatch, tmp_path):
+        output = self._status(monkeypatch, tmp_path, running=False)
+
+        assert "8125" in output
+        assert "1125" in output
+        assert "not listening" in output
+
+    def test_a_disabled_block_shows_no_ports_at_all(self, monkeypatch, tmp_path):
+        """`_block_ports` reads the commented block too, and that number is
+        what `mail on` will reconsider: printing it as a link offers a
+        service that does not exist (#249)."""
+        from click.testing import CliRunner
+        from rich.console import Console
+
+        from rocketdoo import mail_cli
+
+        (tmp_path / "docker-compose.yaml").write_text(
+            "services:\n  web:\n    image: odoo:18.0\n\n"
+            "  # rkd:mailpit\n  #mailpit:\n  #  image: axllent/mailpit:latest\n  #  ports:\n"
+            '  #    - "1125:1025"\n  #    - "8125:8025"\n  # /rkd:mailpit\n'
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(mail_cli, "console", Console(width=200))
+        monkeypatch.setattr(mail_cli, "container_running", lambda *a, **k: False)
+        monkeypatch.setattr(mail_cli, "_resolve_db", lambda db: (None, "no db"))
+        monkeypatch.setattr(mail_cli, "_mailpit_server_line", lambda *a: ("n/a", "dim", []))
+
+        output = " ".join(CliRunner().invoke(mail_cli.mail, ["status"]).output.split())
+
+        assert "8125" not in output
+        assert "1125" not in output
+
+    def test_running_does_not_carry_that_note(self, monkeypatch, tmp_path):
+        output = self._status(monkeypatch, tmp_path, running=True)
+
+        assert "8125" in output
+        assert "not listening" not in output

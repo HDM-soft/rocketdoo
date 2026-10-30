@@ -269,8 +269,8 @@ def _resolve_project_name(root: Path, current: str | None, meta: dict, inventory
 
 
 def _rename_project_in_compose(project_dir: Path, old: str, new: str) -> bool:
-    """Rewrites the Compose identity (project name, image, container names and
-    named volumes) in place as text, line by line. PyYAML would drop the
+    """Rewrites the Compose identity (project name, built image and container
+    names) in place as text, line by line. PyYAML would drop the
     `# rkd:mailpit` markers, and every line that is not identity must stay
     byte for byte the same.
 
@@ -281,6 +281,23 @@ def _rename_project_in_compose(project_dir: Path, old: str, new: str) -> bool:
     other copy's containers as this project's, recreates them and mounts its
     volumes. Measured, not inferred. `unpack()` refuses the same case one
     level up; this guard is here so no future caller can reach past it.
+
+    Volume and network names are deliberately left alone (#249). Compose
+    already prefixes a named volume with the project -- `demo_demo-db-data`
+    against `demo-2_demo-db-data`, measured -- so renaming the keys bought no
+    isolation at all, while breaking the two shapes that cannot take it: a
+    volume or network declared `external: true`, whose name refers to
+    something that exists outside this file, and the long syntax, where the
+    key was rewritten and the `source:` next to it was not.
+
+    `image:` is renamed only when exactly one service declares that image and
+    that service builds it, which is the shape rkd emits. Two services naming
+    the same image is a project called like a public one -- `postgres` -- and
+    there the database's `image: postgres` must not be touched; renaming
+    neither leaves the two copies sharing a tag, which costs a rebuild and
+    destroys nothing. The question is asked of the parsed YAML rather than of
+    the surrounding lines: whether a service builds has nothing to do with
+    whether `build:` is written above or below `image:`.
     """
     compose_path = _compose_file(project_dir)
     if compose_path is None:
@@ -292,15 +309,25 @@ def _rename_project_in_compose(project_dir: Path, old: str, new: str) -> bool:
     value_line = re.compile(r"^(\s*#?\s*(?:-\s+)?(?:name|image):[ \t]*)(\S+)([ \t]*\r?\n?)$")
     body_prefix = re.compile(r"^\s*#?\s*(?:-\s+)?")
 
+    services = (read_docker_compose(project_dir) or {}).get("services")
+    naming_old = [
+        name
+        for name, service in (services if isinstance(services, dict) else {}).items()
+        if isinstance(service, dict) and service.get("image") == old
+    ]
+    # A compose PyYAML cannot read leaves this False: the image keeps the old
+    # tag, which costs a rebuild, while the identity that matters is renamed.
+    rename_image = len(naming_old) == 1 and "build" in services[naming_old[0]]
+
     original = compose_path.read_bytes().decode()
     lines = []
     for line in original.splitlines(keepends=True):
         body = body_prefix.sub("", line)
-        if body.startswith(("name:", "image:")):
+        if body.startswith("name:") or (body.startswith("image:") and rename_image):
             match = value_line.match(line)
             if match and match.group(2) == old:
                 line = f"{match.group(1)}{new}{match.group(3)}"
-        elif body.startswith("container_name:") or body.startswith(f"{old}-"):
+        elif body.startswith("container_name:"):
             line = token.sub(new, line)
         lines.append(line)
 
@@ -363,8 +390,17 @@ def _is_container_running(container_name: str | None) -> bool:
         return False
 
 
-def _wait_for_postgres(db_container: str, report: ProgressCallback, max_wait: int = 60) -> bool:
-    """Polls pg_isready, reporting progress every 10s (RF9.3 keeps the cadence)."""
+def _wait_for_postgres(db_container: str, report: ProgressCallback, max_wait: int = 150) -> bool:
+    """Polls pg_isready, reporting progress every 10s (RF9.3 keeps the cadence).
+
+    The two outcomes are not symmetric. Waiting longer than necessary costs a
+    slower failure on an environment that is broken anyway, and the progress
+    line keeps saying so every 10s. Giving up too early costs the restore:
+    the containers are up, so the command carries on and finishes with a
+    database that never arrived -- the whole reason the ZIP was unpacked.
+    60s was enough on an idle machine and not on a busy one; it was how the
+    round-trip e2e failed on CI while passing four times in a row locally.
+    """
     report(f"Waiting for PostgreSQL to be ready (max {max_wait}s)...")
     for i in range(max_wait):
         result = subprocess.run(["docker", "exec", db_container, "pg_isready", "-U", "root"], capture_output=True)
@@ -902,6 +938,11 @@ def unpack(
         "project_renamed": renamed_from is not None,
         "renamed_from": renamed_from,
         "ssh_configured": ssh_configured,
+        # Whether there was anything to restore, so a caller can tell "this ZIP
+        # carried no database" from "the restore did not run". Without it the
+        # CLI could not say which of the two had happened, and showed the same
+        # green panel either way.
+        "db_backup_present": db_dump is not None,
         "db_restored": db_restored,
         "filestore_restored": filestore_restored,
         "started": started,

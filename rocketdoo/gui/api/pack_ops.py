@@ -85,7 +85,7 @@ def pack(body: PackRequest):
         messages.append(message)
 
     try:
-        core_pack.pack(
+        report = core_pack.pack(
             Path.cwd(),
             include_db=body.include_db,
             db_name=body.db_name,
@@ -96,7 +96,23 @@ def pack(body: PackRequest):
     except core_pack.PackError as exc:
         return {"ok": False, "stdout": "\n".join(messages), "stderr": _with_hint(exc)}
 
-    return {"ok": True, "stdout": "\n".join(messages), "stderr": ""}
+    # The pack succeeded, so `ok` stays True, but the names of the files the
+    # scanner flagged have to reach the user: the complaint behind #245 was a
+    # panel reporting success while a secret rode inside the archive, and
+    # discarding the report here reproduced it in the GUI.
+    notices = []
+    if report["secrets_found_in_zip"]:
+        flagged = "\n".join(f"  - {name}" for name in report["secrets_suspicious"])
+        notices.append(f"Files rkd treats as secrets were found inside the ZIP:\n{flagged}\nReview it before sharing.")
+    # Through stdout, which the SPA shows as the operation's log: `stderr` on
+    # a successful pack is rendered as a red error toast, and a link left out
+    # is something to know, not a failure. The secrets warning above is a
+    # failure of expectations and does belong there.
+    if report["symlinks_skipped"]:
+        left_out = "\n".join(f"  - {name}" for name in report["symlinks_skipped"])
+        messages.append(f"Symbolic links are not packaged, so these were left out:\n{left_out}")
+
+    return {"ok": True, "stdout": "\n".join(messages), "stderr": "\n\n".join(notices)}
 
 
 @router.post("/unpack")

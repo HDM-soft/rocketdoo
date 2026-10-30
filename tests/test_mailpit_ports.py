@@ -115,26 +115,37 @@ class TestReadingTheBlock:
 
 class TestChoosingThePorts:
     def test_free_ports_are_kept(self, host, tmp_path):
-        assert _choose_ports({1025: 1025, 8025: 8025}, tmp_path) == ({1025: 1025, 8025: 8025}, False)
+        assert _choose_ports({1025: 1025, 8025: 8025}, tmp_path) == ({1025: 1025, 8025: 8025}, {})
 
     def test_a_busy_port_moves(self, host, tmp_path):
         host["busy"] = {1025, 8025}
         chosen, moved = _choose_ports({1025: 1025, 8025: 8025}, tmp_path)
-        assert moved is True
+        # What moved and where from, not a bare flag: the caller used to say
+        # "the default ports were taken" for one port out of two (#249).
+        assert moved == {1025: 1025, 8025: 8025}
         assert chosen == {1025: 1026, 8025: 8026}
 
     def test_only_the_busy_one_moves(self, host, tmp_path):
         host["busy"] = {8025}
         chosen, moved = _choose_ports({1025: 1025, 8025: 8025}, tmp_path)
         assert chosen == {1025: 1025, 8025: 8026}
-        assert moved is True
+        assert moved == {8025: 8025}, "the SMTP port never moved"
+
+    def test_what_moved_remembers_the_port_it_left(self, host, tmp_path):
+        """The compose may well not have been on the default: a block
+        already moved to 8026 that finds it taken reports 8026, not 8025."""
+        host["busy"] = {8026}
+
+        _chosen, moved = _choose_ports({8025: 8026}, tmp_path)
+
+        assert moved == {8025: 8026}
 
     def test_a_port_declared_by_a_stopped_sibling_is_avoided(self, host, tmp_path):
         host["declared"] = {1025: "other"}
         chosen, moved = _choose_ports({1025: 1025, 8025: 8025}, tmp_path)
         assert chosen[1025] != 1025
         assert chosen[8025] == 8025
-        assert moved is True
+        assert moved == {1025: 1025}
 
     def test_the_two_mappings_never_get_the_same_port(self, host, tmp_path):
         host["busy"] = {1025}
@@ -176,6 +187,22 @@ class TestEnableAndDisable:
         assert '"1025:1025"' in content and '"8025:8025"' in content
         assert report["ports_moved"] is False
         assert (report["smtp_port"], report["web_port"]) == (1025, 8025)
+
+    def test_enable_reports_which_port_moved_and_from_where(self, host, tmp_path):
+        """The report is what the CLI turns into the warning: with a single
+        flag it announced both ports as taken, and the default as the one
+        they left (#249)."""
+        host["busy"] = {8025}
+
+        report = enable(_project(tmp_path))
+
+        assert report["ports_changed"] == {"web_port": 8025}
+        assert report["ports_moved"] is True
+
+    def test_enable_reports_nothing_changed_when_nothing_moved(self, host, tmp_path):
+        report = enable(_project(tmp_path))
+
+        assert report["ports_changed"] == {}
 
     def test_two_projects_get_different_ports(self, host, tmp_path):
         first = enable(_project(tmp_path / "a"))
@@ -298,5 +325,26 @@ class TestMailpitNeverTakesThisProjectsOwnPort:
 
         chosen, moved = _choose_ports(_block_ports(_block()), tmp_path)
 
-        assert moved is True
+        assert moved == {8025: 8025}
         assert chosen[8025] not in (8026, 8888), "Mailpit took a port this project already publishes"
+
+
+class TestOneCriterionForWhichLineWins:
+    """`_block_ports` reads the first mapping for a container port and
+    `_toggle_compose` used to rewrite every one of them, so a hand-edited
+    block with two mappings for 1025 ended up with both host sides set to the
+    same chosen port -- two identical mappings, which Compose refuses (#249).
+    """
+
+    TWO_MAPPINGS = BLOCK.format(smtp=1025, web=8025).replace(
+        '  #    - "1025:1025"\n', '  #    - "1025:1025"\n  #    - "1126:1025"\n'
+    )
+
+    def test_only_the_mapping_that_was_read_is_rewritten(self):
+        result = _toggle_compose(self.TWO_MAPPINGS, enable=True, ports={1025: 1125, 8025: 8025})
+
+        assert '- "1125:1025"' in result
+        assert '- "1126:1025"' in result, "the second mapping was rewritten to the same port as the first"
+
+    def test_the_port_that_is_read_is_the_first_one(self):
+        assert _block_ports(self.TWO_MAPPINGS)[1025] == 1025

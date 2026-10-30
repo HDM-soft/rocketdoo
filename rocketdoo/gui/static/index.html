@@ -2119,12 +2119,12 @@ const Services = {
           <div style="display:flex;gap:10px;align-items:center;"><span style="color:var(--su);min-width:72px;">{{ $t('container') }}</span>
             <div style="display:flex;align-items:center;gap:6px;"><span class="dot" :class="mail.running?'dot-green':'dot-red'"></span><span style="color:var(--mu);">{{ mail.running?$t('runningState'):$t('stoppedState') }}</span></div>
           </div>
-          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">SMTP</span><span style="color:var(--tx);font-family:monospace;">{{ mail.smtp_port ? ':' + mail.smtp_port : '—' }}</span></div>
-          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('webUiLabel') }}</span><span style="color:var(--tx);font-family:monospace;">{{ mail.web_port ? ':' + mail.web_port : '—' }}</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">SMTP</span><span style="color:var(--tx);font-family:monospace;">{{ mail.enabled && mail.smtp_port ? ':' + mail.smtp_port : '—' }}</span></div>
+          <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('webUiLabel') }}</span><span style="color:var(--tx);font-family:monospace;">{{ mail.enabled && mail.web_port ? ':' + mail.web_port : '—' }}</span></div>
         </div>
 
         <div style="border-top:1px solid var(--ln);padding-top:12px;">
-          <a v-if="mail.web_port" :href="'http://localhost:' + mail.web_port" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
+          <a v-if="mail.running && mail.web_port" :href="'http://localhost:' + mail.web_port" target="_blank" class="btn btn-ghost" style="text-decoration:none;">
             <span v-html="I.ext"></span> {{ $t('openMailpit') }}
           </a>
         </div>
@@ -2536,7 +2536,9 @@ const Pack = {
         if (packForm.value.db_name) body.db_name = packForm.value.db_name
         const r = await api.post('/pack/pack', body)
         output.value = [r.stdout, r.stderr].filter(Boolean).join('\n')
-        r.ok ? notify(t('packCompleted')) : notify(r.stderr||t('packFailed'),'err')
+        if (!r.ok) notify(r.stderr || t('packFailed'), 'err')
+        else if (r.stderr) notify(r.stderr.split('\n')[0], 'err')
+        else notify(t('packCompleted'))
         if (r.ok) await load()
       } finally { packBusy.value = false }
     }

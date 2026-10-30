@@ -126,11 +126,19 @@ def pack_environment(no_db, output, db_name, yes):
         console.print()
         return
 
-    if report["ssh_found_in_zip"]:
+    if report["symlinks_skipped"]:
+        console.print()
+        console.print("[yellow]Symbolic links are not packaged, so these were left out:[/yellow]")
+        for name in report["symlinks_skipped"]:
+            console.print(f"  [yellow]• {name}[/yellow]")
+        console.print("[dim]A link carries its target's content under the link's name, which is a way[/dim]")
+        console.print("[dim]out for anything it points at. Copy what the receiver needs instead.[/dim]")
+
+    if report["secrets_found_in_zip"]:
         console.print()
         console.print("[bold red]⚠️  SECURITY WARNING:[/bold red]")
-        console.print("[red]Possible private SSH keys detected inside the ZIP:[/red]")
-        for name in report["ssh_suspicious"]:
+        console.print("[red]Files rkd treats as secrets were found inside the ZIP:[/red]")
+        for name in report["secrets_suspicious"]:
             console.print(f"  [red]• {name}[/red]")
         console.print("[dim]Please review the ZIP contents before sharing.[/dim]")
 
@@ -148,6 +156,13 @@ def pack_environment(no_db, output, db_name, yes):
     stale_skipped = report.get("stale_backups_skipped") or 0
     stale_line = f" [dim](+{stale_skipped} older backup file(s) left out)[/dim]" if stale_skipped else ""
 
+    # The same reasoning for the secrets: a ZIP that correctly kept the
+    # sender's VPS credentials out looked exactly like one that never had any
+    # (#249). The panel named what it found inside and nothing of what it
+    # deliberately left behind.
+    secrets_out = len(report.get("secrets_excluded") or ())
+    secrets_line = f"{secrets_out} file(s) kept out ✓" if secrets_out else "none found"
+
     console.print()
     console.print(
         Panel(
@@ -156,6 +171,7 @@ def pack_environment(no_db, output, db_name, yes):
             f"[bold]📦 Files included:[/bold] {report['file_count']}{stale_line}\n"
             f"[bold]💾 Size:[/bold] {zip_size_mb:.1f} MB\n"
             f"[bold]🔐 SSH Keys:[/bold] {'excluded ✓' if report['ssh_sanitized'] else 'not applicable'}\n"
+            f"[bold]🔑 Deployment secrets:[/bold] {secrets_line}\n"
             f"[bold]💿 DB Backup:[/bold] {db_line}\n\n"
             f"[dim]Share the ZIP with the other developer.\n"
             f"The recipient should run: [cyan]rkd unpack[/cyan][/dim]",

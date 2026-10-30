@@ -178,11 +178,11 @@ def mail_on(db):
     else:
         console.print("[yellow]⚠ Could not start mailpit (is Docker running?)[/yellow]")
 
-    if report["ports_moved"]:
-        console.print(
-            "[yellow]⚠[/yellow] the default Mailpit ports were taken; published on "
-            f"{_describe_ports(report['web_port'], report['smtp_port'])}"
-        )
+    for key, previous in (report.get("ports_changed") or {}).items():
+        # Named one by one: the single line claimed both had moved, and that
+        # the port they left was the default (#249).
+        label = "Web UI" if key == "web_port" else "SMTP"
+        console.print(f"[yellow]⚠[/yellow] {label} port {previous} was taken; Mailpit published on {report[key]}")
 
     _print_enable_mail_server(report)
 
@@ -269,12 +269,18 @@ def mail_status(db):
     table.add_row("Enabled", "[green]Yes[/green]" if enabled else "[yellow]No — run rkd mail on[/yellow]")
     table.add_row("Container running", "[green]Yes[/green]" if running else "[dim]No[/dim]")
 
-    if running:
-        ports = published_ports()
-        if ports["web_port"]:
-            table.add_row("Web UI", f"[cyan underline]http://localhost:{ports['web_port']}[/cyan underline]")
-        if ports["smtp_port"]:
-            table.add_row("SMTP", f"localhost:{ports['smtp_port']}")
+    # Shown while the block is enabled, running or not: the compose is the
+    # single source of truth for these (#234), and gating on `running` left a
+    # stopped project with no way to tell which port Mailpit had settled on.
+    # Not while it is disabled, though -- `_block_ports` reads the commented
+    # block too, and that number is what `mail on` will reconsider, so
+    # printing it as a link offers a service that does not exist (#249).
+    ports = published_ports() if enabled else {"web_port": None, "smtp_port": None}
+    idle = "" if running else " [dim](not listening)[/dim]"
+    if ports["web_port"]:
+        table.add_row("Web UI", f"[cyan underline]http://localhost:{ports['web_port']}[/cyan underline]{idle}")
+    if ports["smtp_port"]:
+        table.add_row("SMTP", f"localhost:{ports['smtp_port']}{idle}")
 
     table.add_row("Mailpit mail server", f"[{mailpit_style}]{mailpit_line}[/{mailpit_style}]")
     table.add_row("Other active servers", _format_other_servers(others))

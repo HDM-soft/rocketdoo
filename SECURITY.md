@@ -44,17 +44,67 @@ todo esto. CORS es una política que **solo respetan los navegadores**; un scrip
 
 | Credencial | Dónde vive | Protección |
 |---|---|---|
-| Password de VPS (deploy de instancia) | `.rkd/secrets/instance_{env}.env` | 0600, gitignored |
-| Password de VPS (deploy de módulos) | `.rkd/secrets/vps_{target}.env` | 0600, gitignored |
-| `odoo_pg_pass` / `admin_passwd` runtime (instancia) | `.rkd/secrets/instance_{env}_db.env` | 0600, gitignored |
-| `admin_passwd` (proyecto local) | `config/odoo.conf`, en claro | gitignored, sin permisos restringidos explícitos |
-| `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos |
+| Password de VPS (deploy de instancia) | `.rkd/secrets/instance_{env}.env` | 0600, gitignored, **excluido de `rkd pack`** |
+| Password de VPS (deploy de módulos) | `.rkd/secrets/vps_{target}.env` | 0600, gitignored, **excluido de `rkd pack`** |
+| `odoo_pg_pass` / `admin_passwd` runtime (instancia) | `.rkd/secrets/instance_{env}_db.env` | 0600, gitignored, **excluido de `rkd pack`** |
+| Password del rol PostgreSQL de la instancia | `.rkd/secrets/instance_{env}_db.env` en local; en el VPS `/etc/odoo/odoo.conf` (nativo) o `{env}/odoo_pg_pass` + `{env}/config/odoo.conf` (Docker) | 0600 en local y 0600 el `odoo_pg_pass` del VPS. El conf nativo queda `odoo:` 640; **el del camino Docker queda 644** y lleva este password y el `admin_passwd` — ver riesgos residuales (#248, #250) |
+| Password del usuario `admin` de la instancia (nativo y Docker) | `.rkd/secrets/instance_{env}_db.env`, y hasheada en la base | 0600 en local; se fija sólo al crear la base, viaja por `stdin` y nunca como argumento (#248, #250) |
+| `admin_passwd` (proyecto local) | `config/odoo.conf`, en claro | gitignored, sin permisos restringidos explícitos; **viaja en el ZIP de `rkd pack`** (ver abajo) |
+| `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos, **excluido de `rkd pack`** |
+| Targets de deploy (host, usuario, ruta de la clave SSH) | `.rkd/deploy.yaml`, en claro | gitignored y excluido de `rkd pack` desde 3.9.2 |
+| Clave de cuenta y certificados de Let's Encrypt | `traefik/certs/acme.json`, que escribe Traefik | 0600 al crearlo; gitignored y excluido de `rkd pack` desde 3.9.2 (#246) |
 | Clave SSH privada (build de imagen) | copiada a `.ssh/<clave>` dentro del contexto de build | gitignored (`.ssh/` en `SENSITIVE_ENTRIES`) |
 | `SSHPASS` (autenticación por password a un VPS) | variable de entorno del subproceso `sshpass`, nunca en disco | vive solo en memoria del proceso hijo (desde 3.2.1) |
 | Token de sesión de la GUI | memoria del proceso `rkd gui` (`app.state.rkd_token`) | efímero, no se persiste en disco |
 
 `rkd scaffold`/`rkd init` generan un `.gitignore` que cubre las rutas marcadas "gitignored"
 arriba; `rkd info` avisa si un proyecto existente le falta cobertura.
+
+#### El ZIP de `rkd pack` es un canal de salida, igual que git (#245, 3.9.2)
+
+Hasta la 3.9.1, `rkd pack` excluía únicamente `.ssh/`, así que `.rkd/secrets/`,
+`.rkd/instance.yaml` y `.rkd/deploy.yaml` —password del VPS, host, usuario, ruta de la clave—
+viajaban dentro del archivo cuyo propósito es entregárselo a otra persona. El verificador del ZIP
+sólo buscaba nombres de clave SSH (`id_rsa` y parientes), así que el panel informaba éxito sin
+advertencias.
+
+Desde la 3.9.2 la exclusión y el verificador se derivan de la **misma** lista,
+`gitignore_manager.SENSITIVE_ENTRIES`: lo que rkd declara secreto queda fuera del ZIP por
+defecto, y que algo viaje requiere agregarlo explícitamente a `_SHAREABLE_SECRETS` en
+`core/pack.py`. Hoy esa excepción tiene dos entradas, por necesidad del entorno recibido:
+
+- **`odoo_pg_pass`** — `docker-compose.yaml` lo monta como Docker secret; sin él la base no arranca.
+- **`config/odoo.conf`** — `Dockerfile.jinja:3` hace `COPY ./config/odoo.conf`; sin él no buildea.
+
+Las dos son credenciales locales del entorno que se está compartiendo a propósito, no de un
+servidor remoto. Con todo, **el `admin_passwd` de `config/odoo.conf` viaja en claro**: es el que
+el usuario tipeó en `rkd init`, `rkd unpack` no lo rota, y el receptor queda corriendo con el
+master password del emisor. Si ese password se reusa en otro lado, conviene cambiarlo antes de
+empaquetar.
+
+**Si ya compartiste un ZIP hecho con 3.9.1 o anterior** en un proyecto donde corriste
+`rkd instance init` o `rkd deploy init`, esas credenciales salieron de tu máquina y hay que
+rotarlas: un archivo enviado no se puede desenviar.
+
+**Los dos caminos laterales, cerrados en #246 (3.9.2).** La exclusión compara la ruta relativa
+dentro del proyecto, sin distinguir mayúsculas y aceptando patrones de gitignore, y había dos
+formas de llegar al mismo archivo por otro lado. Un **enlace simbólico** a un secreto: `zipfile`
+lo sigue y guarda el contenido bajo el nombre del enlace, así que ni la exclusión ni el
+verificador lo veían; ahora **ningún enlace simbólico entra al ZIP** y el panel los nombra. Y un
+`.rkd/` **anidado** más abajo del árbol, que los wizards podían crear corridos desde un
+subdirectorio; ahora la exclusión y el verificador reconocen un `.rkd/` a cualquier profundidad,
+y los wizards —CLI y GUI— se niegan a correr fuera de la raíz del proyecto. Un **hard link** a un
+secreto del propio proyecto tampoco viaja: los secretos se identifican además por inodo.
+
+**Si compartiste un ZIP hecho con 3.9.1 o anterior desde un proyecto con enlaces o con un `.rkd/`
+anidado**, revisá qué contenía: lo mismo que arriba, un archivo enviado no se puede desenviar.
+
+**Lo que esta defensa sigue sin cubrir.** Un **hard link a un archivo de afuera del proyecto**
+(`ln ~/.ssh/id_rsa addons/clave`) es, para el sistema de archivos, un archivo más del proyecto:
+no se distingue de haberlo copiado a mano, y ni la exclusión ni el verificador lo detectan salvo
+que el nombre dispare las heurísticas de clave privada. Copiar un secreto al proyecto, con
+cualquier nombre, tiene exactamente el mismo efecto: **lo que el ZIP garantiza es que rkd no
+filtra lo que rkd mismo escribió**, no que el proyecto no contenga secretos que alguien puso ahí.
 
 ## Las tres defensas y qué cubre cada una
 
@@ -125,6 +175,13 @@ Riesgos residuales aceptados, documentados en lugar de prometidos como resueltos
 - **Sin cifrado en tránsito.** `rkd gui` habla HTTP plano en `127.0.0.1`; no hay TLS. Es
   aceptable en loopback, pero **`rkd gui --host 0.0.0.0`** expone esto a la red y convierte al
   token en la única barrera real, viajando en claro. No es la configuración recomendada.
+- **El `odoo.conf` de una instancia dockerizada queda legible para todo el VPS.** Lleva el
+  `admin_passwd` y, desde #250, el password del rol PostgreSQL, con los 644 que deja `rsync`. No se
+  restringe porque el contenedor lo monta y lo lee como uid 100: un `chmod 600` impide el arranque.
+  Declararlo ahí mantiene el secreto fuera del `argv` del proceso, pero es un **canje y no una
+  reducción**: la misma audiencia —cualquier usuario del VPS— lo alcanza con `cat`, y el archivo
+  persiste con los contenedores apagados, cosa que el `argv` no hace. Cerrarlo de verdad pide que el
+  deploy maneje el dueño del archivo, que hoy no hace.
 - **Quien puede leer el filesystem o el entorno del proceso ya tiene las credenciales.**
   `config/odoo.conf` y `.rkd/instance.yaml` guardan `admin_passwd` en claro, sin permisos
   restringidos explícitos (a diferencia de `.rkd/secrets/`, que sí usa 0600). El token de la GUI
@@ -134,7 +191,10 @@ Riesgos residuales aceptados, documentados en lugar de prometidos como resueltos
   confiable.** `remote_path`, `container_name` y `service_name` (entre otros) del propio
   `deploy.yaml`/`instance.yaml` del usuario se interpolan en comandos SSH sin sanitizar; están
   fuera de alcance porque son configuración que el propio usuario escribe, no entrada de un
-  tercero.
+  tercero. La excepción son `db_user` y `db_name` del deploy nativo, que
+  desde #248 se validan como identificadores PostgreSQL antes de que se arme un solo comando:
+  ahí el valor entra además en una sentencia SQL, y un nombre con comillas se escapa de ella
+  sin necesidad de tocar el shell.
 - **El mensaje de error del wizard puede contener una ruta.** `/api/setup/init` devuelve
   `str(e)`, y una excepción de archivo trae la ruta que falló (`'/home/<usuario>/.ssh/...'`).
   Se acepta: es la ruta que el propio usuario pidió en la petición, y sin ella el error deja de
