@@ -2,7 +2,7 @@ name: {{project_name}}
 services:
   web:
     build: .
-    restart: {{restart}}
+    restart: "{{restart}}"
     image: {{project_name}}
     container_name: {{odoo_container}}
     depends_on:
@@ -17,7 +17,7 @@ services:
       #- ./enterprise:/usr/lib/python3/dist-packages/odoo/enterprise
       - ./.vscode:/usr/lib/python3/dist-packages/odoo/.vscode
   db:
-    restart: {{restart}}
+    restart: "{{restart}}"
     image: postgres:{{db_version}}
     container_name: {{db_container}}
     environment:

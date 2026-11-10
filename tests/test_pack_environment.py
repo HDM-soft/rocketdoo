@@ -277,12 +277,12 @@ class TestSshSafetyNet:
         ],
     )
     def test_a_private_key_is_reported(self, tmp_path, name):
-        found = core_pack._scan_zip_for_secrets(self._zip_with(tmp_path, name))
+        found, _keys = core_pack._scan_zip_for_secrets(self._zip_with(tmp_path, name))
         assert found == [name]
 
     @pytest.mark.parametrize("name", ["project/.ssh/id_rsa.pub", "project/config/odoo.conf"])
     def test_public_keys_and_ordinary_files_are_not_reported(self, tmp_path, name):
-        assert core_pack._scan_zip_for_secrets(self._zip_with(tmp_path, name)) == []
+        assert core_pack._scan_zip_for_secrets(self._zip_with(tmp_path, name)) == ([], [])
 
 
 class TestPackWithDatabaseBackup:
@@ -951,7 +951,7 @@ class TestSecretsDoNotTravelInTheZip:
             zf.writestr(".rkd/instance.yaml", "prod: {}")
             zf.writestr("odoo_pg_pass", "local")
 
-        found = core_pack._scan_zip_for_secrets(path)
+        found, _keys = core_pack._scan_zip_for_secrets(path)
 
         assert sorted(found) == [".rkd/instance.yaml", ".rkd/secrets/instance_prod.env"]
 
@@ -997,7 +997,7 @@ class TestSecretsDoNotTravelInTheZip:
 
         from rocketdoo.cli import main
 
-        monkeypatch.setattr(core_pack, "_scan_zip_for_secrets", lambda _zip: [".rkd/secrets/instance_prod.env"])
+        monkeypatch.setattr(core_pack, "_scan_zip_for_secrets", lambda _zip: ([".rkd/secrets/instance_prod.env"], []))
 
         result = CliRunner().invoke(main, ["pack", "--no-db", "-o", str(packable_project / "x.zip")])
 
@@ -1197,7 +1197,7 @@ class TestANestedRkdIsStillRkds:
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("addons/mi_modulo/.rkd/secrets/instance_prod.env", "PASSWORD=x\n")
 
-        assert core_pack._scan_zip_for_secrets(zip_path) == ["addons/mi_modulo/.rkd/secrets/instance_prod.env"]
+        assert core_pack._scan_zip_for_secrets(zip_path) == (["addons/mi_modulo/.rkd/secrets/instance_prod.env"], [])
 
 
 class TestTheWizardsDoNotScatterCredentials:
@@ -1341,7 +1341,7 @@ class TestTheLetsEncryptKeyStaysHome:
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("traefik/certs/acme.json", "{}")
 
-        assert core_pack._scan_zip_for_secrets(zip_path) == ["traefik/certs/acme.json"]
+        assert core_pack._scan_zip_for_secrets(zip_path) == (["traefik/certs/acme.json"], [])
 
 
 class TestWhatThePanelSaysItLeftBehind:
@@ -1379,8 +1379,8 @@ class TestWhatThePanelSaysItLeftBehind:
 
         result = CliRunner().invoke(main, ["pack", "--no-db"])
 
-        assert "Deployment secrets" in result.output
-        assert "kept out" in result.output
+        assert "Secrets kept out" in result.output
+        assert ".rkd/secrets/instance_prod.env" in result.output
 
 
 class TestTheSendersBackupHistoryStaysHome:
@@ -1423,3 +1423,320 @@ class TestTheSendersBackupHistoryStaysHome:
 
         with zipfile.ZipFile(output) as zf:
             assert ".rkd/traefik.yaml" in zf.namelist()
+
+
+class TestTheUsersOwnEnvFile:
+    """`*.env` was a secret for the generated .gitignore and not for the ZIP:
+    the shape of #245 one level up, with the user's own credentials instead of
+    rkd's. Nothing rkd generates reads one -- no template declares `env_file`
+    -- so keeping it out costs the receiver nothing rkd wrote (#253).
+    """
+
+    def test_an_env_file_stays_out_and_is_reported(self, packable_project):
+        (packable_project / ".env").write_text("STRIPE_KEY=sk_live_notamyinvention\n")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert ".env" not in zf.namelist()
+        assert ".env" in report["secrets_excluded"]
+
+    def test_one_inside_an_addon_stays_out_too(self, packable_project):
+        """A pattern, not a path: the same file one directory deeper is the
+        same credential."""
+        addon = packable_project / "addons" / "mi_modulo"
+        addon.mkdir(parents=True, exist_ok=True)
+        (addon / "produccion.env").write_text("API_TOKEN=x\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert "addons/mi_modulo/produccion.env" not in zf.namelist()
+
+    def test_the_example_still_travels(self, packable_project):
+        """`.env.example` holds the names, not the values, and it is the only
+        description the receiver gets of what the environment needs. The
+        generated .gitignore already draws that line with `!*.env.example`."""
+        (packable_project / ".env.example").write_text("STRIPE_KEY=\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert ".env.example" in zf.namelist()
+
+    def test_the_exception_does_not_reach_the_other_secrets(self, packable_project):
+        """Scoped to the pattern that declares it. A file named
+        `...env.example` inside `.rkd/secrets/` is still inside rkd's own
+        credential directory, and an exception applied to the whole list
+        would hand it over."""
+        secrets = packable_project / ".rkd" / "secrets"
+        secrets.mkdir(parents=True, exist_ok=True)
+        (secrets / "instance_prod.env.example").write_text("INSTANCE_PROD_PASSWORD=x\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert not [n for n in zf.namelist() if n.startswith(".rkd/secrets")]
+
+
+class TestTheVerifierReadsInsteadOfGuessing:
+    """The scanner knew the names OpenSSH hands out, so a key copied in under
+    any other name was reported clean -- including the hard link from outside
+    the project that #246 left open on purpose (#253).
+    """
+
+    @pytest.mark.parametrize(
+        "header",
+        [
+            "-----BEGIN OPENSSH PRIVATE KEY-----",
+            "-----BEGIN RSA PRIVATE KEY-----",
+            "-----BEGIN EC PRIVATE KEY-----",
+            "-----BEGIN PRIVATE KEY-----",
+            "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+        ],
+    )
+    def test_a_key_under_an_innocent_name_is_flagged(self, tmp_path, header):
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("addons/mi_modulo/notas.txt", f"{header}\nb3BlbnNzaC1rZXktdjEA\n")
+
+        assert core_pack._scan_zip_for_secrets(path) == ([], ["addons/mi_modulo/notas.txt"])
+
+    def test_an_ordinary_file_is_not_flagged(self, tmp_path):
+        """Including one that talks about private keys without carrying one:
+        a false positive costs a line in the panel, but a check that fires on
+        every README is one nobody reads."""
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("addons/mi_modulo/__manifest__.py", "{'name': 'mi_modulo'}\n")
+            zf.writestr("README.md", "Put your private key in ~/.ssh and never commit it.\n")
+            zf.writestr("id_rsa.pub", "ssh-rsa AAAAB3NzaC1yc2E comentario\n")
+
+        assert core_pack._scan_zip_for_secrets(path) == ([], [])
+
+    def test_a_directory_entry_does_not_break_the_scan(self, tmp_path):
+        """An archive built elsewhere carries them; `zf.open()` on one
+        returns nothing and must not take the scan down with it."""
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("addons/", "")
+            zf.writestr("addons/mi_modulo/__manifest__.py", "{'name': 'mi_modulo'}\n")
+
+        assert core_pack._scan_zip_for_secrets(path) == ([], [])
+
+    def test_the_window_is_bounded(self, tmp_path):
+        """Known ceiling, taken on purpose: the ZIP carries a database dump
+        and a filestore tarball, and reading every byte of both to look for a
+        header that compression puts out of reach anyway is not a trade this
+        check makes."""
+        path = tmp_path / "probe.zip"
+        filler = "x" * (core_pack._KEY_SCAN_BYTES + 1024)
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("rkd_backups/db_x_20260101_120000.dump", filler + "-----BEGIN PRIVATE KEY-----")
+
+        assert core_pack._scan_zip_for_secrets(path) == ([], [])
+
+
+class TestTheVerifierDoesNotAssumeForwardSlashes:
+    """Entry names use `/` by specification and `zipfile` normalises what it
+    writes, but this check is the one that is supposed to hold for an archive
+    built somewhere else (#253)."""
+
+    def test_a_secret_path_spelled_with_backslashes_is_flagged(self, tmp_path):
+        """`.rkd/instance.yaml` on purpose: it is caught by the path list and
+        by nothing else, so the separator is the only thing under test."""
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr(".rkd\\instance.yaml", "prod:\n  vps:\n    host: vps.cliente.com\n")
+
+        assert core_pack._scan_zip_for_secrets(path) == ([".rkd\\instance.yaml"], [])
+
+    def test_the_ssh_heuristic_folds_them_too_and_reports_the_stored_name(self, tmp_path):
+        """No PEM header in it, so the content check has no say: the entry is
+        reached through `/.ssh/` or not at all. What the panel prints is the
+        name as stored, which is how the user finds it inside the archive."""
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("proyecto\\.ssh\\id_rsa", "la clave, sin encabezado PEM\n")
+
+        assert core_pack._scan_zip_for_secrets(path) == (["proyecto\\.ssh\\id_rsa"], [])
+
+
+class TestWhatTheScannerDoesWithAnArchiveItCannotRead:
+    """The check runs on a ZIP that is already written and already reported
+    as produced. Nothing it meets inside may turn that into a traceback."""
+
+    def _with_a_corrupt_member(self, path):
+        payload = b"-----BEGIN OPENSSH PRIVATE KEY-----\n" + b"A" * 4000 + b"\n"
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("roto.bin", payload)
+        raw = bytearray(path.read_bytes())
+        with zipfile.ZipFile(path) as zf:
+            header = zf.infolist()[0].header_offset
+        name_len = int.from_bytes(raw[header + 26 : header + 28], "little")
+        extra_len = int.from_bytes(raw[header + 28 : header + 30], "little")
+        data = header + 30 + name_len + extra_len
+        raw[data : data + 8] = b"\x00" * 8
+        path.write_bytes(bytes(raw))
+        return path
+
+    def test_a_damaged_member_does_not_take_the_pack_down(self, tmp_path):
+        """`zlib.error` descends straight from Exception, so a decompressor
+        failure walked past a narrower `except` and out of `pack()` -- past
+        the panel, and in the GUI as a 500 over a ZIP that exists."""
+        path = self._with_a_corrupt_member(tmp_path / "probe.zip")
+
+        assert core_pack._scan_zip_for_secrets(path) == ([], [])
+
+    def test_the_damage_is_real(self, tmp_path):
+        """Pins the fixture: without it the test above passes for the wrong
+        reason, and the `except` it exercises is never reached."""
+        import pytest as _pytest
+
+        path = self._with_a_corrupt_member(tmp_path / "probe.zip")
+
+        with zipfile.ZipFile(path) as zf, _pytest.raises(Exception):
+            zf.open(zf.infolist()[0]).read()
+
+
+class TestTwoMembersUnderOneName:
+    """A ZIP may carry the same name twice, and `ZipFile` resolves a name to
+    the last of them. Opening by name read the decoy and left the key in the
+    archive unseen -- in the very case this check claims to cover, an archive
+    built by something other than rkd (#253)."""
+
+    @pytest.mark.filterwarnings("ignore:Duplicate name")
+    def test_the_first_member_is_read_too(self, tmp_path):
+        path = tmp_path / "probe.zip"
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("notas.txt", "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n")
+            zf.writestr("notas.txt", "nada que ver\n")
+
+        assert core_pack._scan_zip_for_secrets(path) == ([], ["notas.txt"])
+
+
+class TestThePackerFoldsSeparatorsToo:
+    """The verifier folded `\\` and the packer did not, so a file named
+    `.rkd\\instance.yaml` -- a legal filename on Linux -- was packaged by one
+    and condemned by the other, and the secret travelled anyway. Two lists
+    answering the same question differently is the bug this whole epic is
+    about (#245), so the fold lives in `_matches_secret`, which both use."""
+
+    def test_a_backslash_spelled_secret_stays_out(self, packable_project):
+        (packable_project / ".rkd\\instance.yaml").write_text("prod:\n  vps:\n    host: vps.cliente.com\n")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert ".rkd\\instance.yaml" not in zf.namelist()
+        assert report["secrets_found_in_zip"] is False
+
+
+class TestADirectoryThatMatchesAPattern:
+    """`*.env` excludes the directory the way git does: everything under it.
+    Matching only the entry's own name handed over `secretos.env/clave.txt`
+    while the same pattern in the generated .gitignore covered the subtree."""
+
+    def test_what_is_inside_it_does_not_travel(self, packable_project):
+        inside = packable_project / "secretos.env"
+        inside.mkdir()
+        (inside / "clave.txt").write_text("STRIPE_SECRET=sk_live_x\n")
+        output = packable_project / "compartido.zip"
+
+        core_pack.pack(packable_project, include_db=False, output=output)
+
+        with zipfile.ZipFile(output) as zf:
+            assert not [n for n in zf.namelist() if n.startswith("secretos.env")]
+
+
+class TestTheTwoFindingsAreNotTheSameFinding:
+    """A path-list hit is a defect: something rkd declares secret got in
+    anyway. A content hit is a question, and it has honest answers -- Odoo's
+    `l10n_ar_edi` ships a test key, so an Enterprise project trips it on
+    every pack. One red warning for both would be dismissed by the time it
+    names a real one (#253)."""
+
+    def _project_with_a_key(self, packable_project):
+        addon = packable_project / "addons" / "mi_modulo"
+        addon.mkdir(parents=True, exist_ok=True)
+        (addon / "notas.txt").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n")
+        return packable_project
+
+    def test_the_report_keeps_them_apart(self, packable_project):
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(self._project_with_a_key(packable_project), include_db=False, output=output)
+
+        assert report["private_keys_in_zip"] == ["addons/mi_modulo/notas.txt"]
+        assert report["secrets_suspicious"] == []
+        assert report["secrets_found_in_zip"] is False
+
+    def test_the_cli_does_not_raise_the_red_alarm_for_it(self, packable_project):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        self._project_with_a_key(packable_project)
+
+        result = CliRunner().invoke(main, ["pack", "--no-db"])
+
+        output = " ".join(result.output.split())
+        assert "read like a private key" in output
+        assert "addons/mi_modulo/notas.txt" in output
+        assert "SECURITY WARNING" not in output
+
+    def test_a_real_secret_still_raises_it(self, packable_project, monkeypatch):
+        """The quiet channel must not become the only one: a file rkd itself
+        declares secret, found inside, is still the loud warning."""
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        monkeypatch.setattr(core_pack, "_scan_zip_for_secrets", lambda _zip: ([".rkd/secrets/instance_prod.env"], []))
+
+        result = CliRunner().invoke(main, ["pack", "--no-db"])
+
+        assert "SECURITY WARNING" in " ".join(result.output.split())
+
+
+class TestADirectoryOfSecretsDoesNotFloodThePanel:
+    """`python -m venv .env` leaves a couple of hundred files under a name
+    that matches `*.env`. Keeping them out is right; naming every one of them
+    in the panel buries the line that matters, and the report still carries
+    the whole list for anyone who wants it (#253)."""
+
+    def test_the_panel_lists_some_and_counts_the_rest(self, packable_project):
+        from click.testing import CliRunner
+
+        from rocketdoo.cli import main
+
+        venv = packable_project / ".env"
+        venv.mkdir()
+        for index in range(core_pack.LISTED_AT_MOST + 5):
+            (venv / f"archivo_{index}.py").write_text("x = 1\n")
+
+        result = CliRunner().invoke(main, ["pack", "--no-db"])
+
+        output = " ".join(result.output.split())
+        assert "and 5 more" in output
+        # By count, not by name: the list comes out in filesystem order, so
+        # which ten get printed is not something to pin down.
+        assert output.count("• .env/archivo_") == core_pack.LISTED_AT_MOST
+
+    def test_the_report_keeps_them_all(self, packable_project):
+        venv = packable_project / ".env"
+        venv.mkdir()
+        for index in range(core_pack.LISTED_AT_MOST + 5):
+            (venv / f"archivo_{index}.py").write_text("x = 1\n")
+        output = packable_project / "compartido.zip"
+
+        report = core_pack.pack(packable_project, include_db=False, output=output)
+
+        assert len(report["secrets_excluded"]) == core_pack.LISTED_AT_MOST + 5
+        with zipfile.ZipFile(output) as zf:
+            assert not [n for n in zf.namelist() if n.startswith(".env/")]

@@ -7,6 +7,8 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from rocketdoo.core.project_info import as_text
+
 router = APIRouter()
 
 
@@ -25,12 +27,18 @@ async def get_gitman():
 
         data = yaml.safe_load(gp.read_text()) or {}
         raw = data.get("sources", [])
+        # As text, because gitman.yaml is the user's file and `yaml.safe_load`
+        # is YAML 1.1: `rev: 16.0` -- the way an Odoo branch gets written --
+        # comes back as a float and an empty `repo:` as None. Handed over raw,
+        # the card showed `16` for a branch called `16.0`, the edit form died
+        # on `.trim()` of a Number, and `POST /api/gitman` rejected the very
+        # object this endpoint had just produced (#263).
         sources = [
             {
-                "name": s.get("name", ""),
-                "repo": s.get("repo", ""),
-                "rev": s.get("rev", "main"),
-                "type": s.get("type", "git"),
+                "name": as_text(s.get("name", "")) or "",
+                "repo": as_text(s.get("repo", "")) or "",
+                "rev": as_text(s.get("rev", "main")) or "main",
+                "type": as_text(s.get("type", "git")) or "git",
             }
             for s in raw
         ]

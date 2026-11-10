@@ -96,3 +96,31 @@ class TestEnsureGitignore:
 
     def test_accepts_a_string_path(self, tmp_path):
         assert ensure_gitignore(str(tmp_path))[0] == "created"
+
+
+class TestThePatternThatWouldSwallowItsOwnExample:
+    """`*.env` keeps the values out of git; `*.env.example` is the list of
+    names, and a project that loses it loses the only description of what the
+    environment needs. The template already drew that line; the appended
+    block did not (#253)."""
+
+    def test_the_template_keeps_the_negation(self):
+        assert "!*.env.example" in template_content()
+
+    def test_the_appended_block_carries_the_negation_after_the_pattern(self, tmp_path):
+        """Order is the whole point: in a .gitignore the negation only works
+        below the rule it undoes."""
+        (tmp_path / ".gitignore").write_text("build/\n")
+
+        ensure_gitignore(tmp_path)
+
+        lines = [line.strip() for line in (tmp_path / ".gitignore").read_text().splitlines()]
+        assert lines.index("*.env") < lines.index("!*.env.example")
+
+    def test_the_negation_is_not_reported_as_a_covered_secret(self, tmp_path):
+        """It is an exception to a leak vector, not one of them: `rkd info`
+        would otherwise list it as a credential left uncovered."""
+        _action, entries = ensure_gitignore(tmp_path)
+
+        assert "!*.env.example" not in entries
+        assert "*.env" in entries
