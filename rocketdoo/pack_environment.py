@@ -27,7 +27,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from rocketdoo.cli_output import console_progress
-from rocketdoo.core.pack import MissingDatabaseError, PackError, pack
+from rocketdoo.core.pack import LISTED_AT_MOST, MissingDatabaseError, PackError, pack
 
 console = Console()
 
@@ -142,6 +142,19 @@ def pack_environment(no_db, output, db_name, yes):
             console.print(f"  [red]• {name}[/red]")
         console.print("[dim]Please review the ZIP contents before sharing.[/dim]")
 
+    # Deliberately quieter than the block above, and deliberately separate.
+    # That one means a file rkd declares secret got in anyway; this one means
+    # a file rkd knows nothing about reads like a private key, and some of
+    # them are supposed to be there -- Odoo's l10n_ar_edi ships one in its
+    # tests, so an Enterprise project would see red on every single pack.
+    if report.get("private_keys_in_zip"):
+        console.print()
+        console.print("[yellow]These files in the ZIP read like a private key:[/yellow]")
+        for name in report["private_keys_in_zip"]:
+            console.print(f"  [yellow]• {name}[/yellow]")
+        console.print("[dim]rkd did not write them, so it cannot tell a test fixture of a[/dim]")
+        console.print("[dim]third-party addon from a key of yours. Check the ones that are yours.[/dim]")
+
     zip_path = Path(report["zip"])
     zip_size_mb = zip_path.stat().st_size / (1024 * 1024)
     if report["db_backup"]:
@@ -160,8 +173,21 @@ def pack_environment(no_db, output, db_name, yes):
     # sender's VPS credentials out looked exactly like one that never had any
     # (#249). The panel named what it found inside and nothing of what it
     # deliberately left behind.
-    secrets_out = len(report.get("secrets_excluded") or ())
-    secrets_line = f"{secrets_out} file(s) kept out ✓" if secrets_out else "none found"
+    # Named, not just counted: `*.env` joined the list in #253, and that one
+    # is a file the receiver has to write again on their side. A number alone
+    # does not tell them which.
+    excluded_secrets = list(report.get("secrets_excluded") or ())
+    secrets_line = f"{len(excluded_secrets)} file(s) ✓" if excluded_secrets else "none found"
+
+    if excluded_secrets:
+        console.print()
+        console.print("[green]Secrets rkd kept out of the ZIP:[/green]")
+        for name in excluded_secrets[:LISTED_AT_MOST]:
+            console.print(f"  [green]• {name}[/green]")
+        rest = len(excluded_secrets) - LISTED_AT_MOST
+        if rest > 0:
+            console.print(f"  [green]• … and {rest} more[/green]")
+        console.print("[dim]The receiver gets the environment without them.[/dim]")
 
     console.print()
     console.print(
@@ -171,7 +197,7 @@ def pack_environment(no_db, output, db_name, yes):
             f"[bold]📦 Files included:[/bold] {report['file_count']}{stale_line}\n"
             f"[bold]💾 Size:[/bold] {zip_size_mb:.1f} MB\n"
             f"[bold]🔐 SSH Keys:[/bold] {'excluded ✓' if report['ssh_sanitized'] else 'not applicable'}\n"
-            f"[bold]🔑 Deployment secrets:[/bold] {secrets_line}\n"
+            f"[bold]🔑 Secrets kept out:[/bold] {secrets_line}\n"
             f"[bold]💿 DB Backup:[/bold] {db_line}\n\n"
             f"[dim]Share the ZIP with the other developer.\n"
             f"The recipient should run: [cyan]rkd unpack[/cyan][/dim]",
