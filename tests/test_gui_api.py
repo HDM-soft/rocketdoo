@@ -453,6 +453,117 @@ class TestThePackEndpointReportsWhatWasLeftOut:
 
         assert ".rkd/secrets/instance_prod.env" in body["stderr"]
 
+    def test_a_file_that_reads_like_a_key_is_news_not_an_error(self, client, project_dir, monkeypatch):
+        """Not the red toast: rkd did not write it and some are supposed to
+        be there -- Odoo's l10n_ar_edi ships a test key, so an Enterprise
+        project would see one on every pack and stop reading them (#253)."""
+        from rocketdoo.gui.api import pack_ops
+
+        report = {
+            "zip": str(project_dir / "demo.zip"),
+            "secrets_found_in_zip": False,
+            "secrets_suspicious": [],
+            "private_keys_in_zip": ["addons/mi_modulo/notas.txt"],
+            "symlinks_skipped": [],
+        }
+        monkeypatch.setattr(pack_ops.core_pack, "pack", lambda *a, **k: report)
+
+        body = client.post("/api/pack/pack", json={"include_db": False}).json()
+
+        assert "addons/mi_modulo/notas.txt" in body["stdout"]
+        assert body["stderr"] == ""
+
+    def test_the_key_notice_comes_first_in_the_log(self, client, project_dir, monkeypatch):
+        """The SPA renders this log in a short box that does not scroll
+        itself, and a pack with an empty `stderr` closes with a green toast.
+        Appended last, the one finding that needs a human is below the fold
+        under every progress line."""
+        from rocketdoo.gui.api import pack_ops
+
+        report = {
+            "zip": str(project_dir / "demo.zip"),
+            "secrets_found_in_zip": False,
+            "secrets_suspicious": [],
+            "private_keys_in_zip": ["addons/mi_modulo/notas.txt"],
+            "secrets_excluded": [".env"],
+            "symlinks_skipped": ["addons/enlace.txt"],
+        }
+        monkeypatch.setattr(pack_ops.core_pack, "pack", lambda *a, **k: report)
+
+        body = client.post("/api/pack/pack", json={"include_db": False}).json()
+
+        assert body["stdout"].startswith("These files in the ZIP read like a private key:")
+
+    def test_a_long_list_of_exclusions_is_cut_short(self, client, project_dir, monkeypatch):
+        """A `*.env` directory contributes every file under it."""
+        from rocketdoo.gui.api import pack_ops
+
+        report = {
+            "zip": str(project_dir / "demo.zip"),
+            "secrets_found_in_zip": False,
+            "secrets_suspicious": [],
+            "secrets_excluded": [f".env/archivo_{i}.py" for i in range(pack_ops.core_pack.LISTED_AT_MOST + 3)],
+            "symlinks_skipped": [],
+        }
+        monkeypatch.setattr(pack_ops.core_pack, "pack", lambda *a, **k: report)
+
+        body = client.post("/api/pack/pack", json={"include_db": False}).json()
+
+        assert "... and 3 more" in body["stdout"]
+        assert ".env/archivo_9.py" in body["stdout"]
+        assert ".env/archivo_10.py" not in body["stdout"]
+
+    def test_the_secrets_kept_out_are_named(self, client, project_dir, monkeypatch):
+        """`*.env` joined the exclusion in #253 and the receiver has to write
+        their own; the sender can only tell them which file it was if the
+        panel says so. The CLI names them, the GUI reported nothing."""
+        from rocketdoo.gui.api import pack_ops
+
+        report = {
+            "zip": str(project_dir / "demo.zip"),
+            "secrets_found_in_zip": False,
+            "secrets_suspicious": [],
+            "secrets_excluded": [".env", ".rkd/secrets/instance_prod.env"],
+            "symlinks_skipped": [],
+        }
+        monkeypatch.setattr(pack_ops.core_pack, "pack", lambda *a, **k: report)
+
+        body = client.post("/api/pack/pack", json={"include_db": False}).json()
+
+        assert ".env" in body["stdout"]
+        assert body["stderr"] == ""
+
+
+class TestTheGitmanEditorSurvivesTheUsersYaml:
+    """`gitman.yaml` is written by hand and `yaml.safe_load` is YAML 1.1:
+    `rev: 16.0` -- the way an Odoo branch gets written -- comes back a float,
+    an empty `repo:` None. Handed over raw, the card named a branch called
+    `16`, the edit form died on `.trim()` of a Number, and the save endpoint
+    rejected the object the read endpoint had just produced (#263).
+    """
+
+    TRICKY = "sources:\n  - name: oca\n    repo: https://github.com/OCA/web\n    rev: 16.0\n  - name: roto\n    repo:\n"
+
+    def test_the_values_arrive_as_text(self, client, project_dir):
+        (project_dir / "gitman.yaml").write_text(self.TRICKY)
+
+        sources = client.get("/api/gitman").json()["sources"]
+
+        assert sources[0]["rev"] == "16.0"
+        assert sources[1]["repo"] == ""
+        assert all(isinstance(value, str) for source in sources for value in source.values())
+
+    def test_what_the_read_returns_the_save_accepts(self, client, project_dir):
+        """Round trip with nothing edited: this is what made the editor
+        unusable rather than merely wrong."""
+        (project_dir / "gitman.yaml").write_text(self.TRICKY)
+        sources = client.get("/api/gitman").json()["sources"]
+
+        saved = client.post("/api/gitman", json={"sources": sources})
+
+        assert saved.status_code == 200, saved.text
+        assert saved.json().get("ok") is True
+
 
 class TestTheGuiDoesNotWriteCredentialsOutsideAProject:
     """The CLI wizards need a `cd` too far to land outside a project; the GUI

@@ -6,13 +6,13 @@ fixed per Odoo version, so the golden paths in #139 have something to build on
 rather than rediscovering it.
 """
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 Edition = Literal["Community", "Enterprise"]
 
-SUPPORTED_ODOO_VERSIONS = ("15.0", "16.0", "17.0", "18.0", "19.0")
+SUPPORTED_ODOO_VERSIONS = ("15.0", "16.0", "17.0", "18.0", "19.0", "20.0")
 
 
 class Profile(BaseModel):
@@ -105,53 +105,62 @@ def get_profile(odoo_version: str) -> Profile:
         raise ValueError(f"Unsupported Odoo version {odoo_version!r}. Supported: {supported}") from None
 
 
-class ProjectPorts(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    odoo: int = 8069
-    vscode: int = 8888
-
-    @field_validator("odoo", "vscode")
-    @classmethod
-    def _unprivileged(cls, value: int) -> int:
-        if not 1024 <= value <= 65535:
-            raise ValueError(f"Port must be between 1024 and 65535, got {value}")
-        return value
-
-
 class ProjectConfig(BaseModel):
-    """A generated Rocketdoo project, as read back from disk."""
+    """A generated Rocketdoo project, as read back from disk.
 
-    model_config = ConfigDict(extra="allow")
+    The field names are the contract, not a design choice made here: the GUI
+    serialises this straight to JSON and the SPA reads `odoo_port`, `ssh_key`,
+    `admin_passwd` and the rest by those names. Renaming one is a silent
+    break of a panel no test of this module would notice (#204).
 
-    project_name: str
-    odoo_version: str = "17.0"
+    Everything optional and nothing rejected. The source is a Dockerfile and a
+    docker-compose.yaml the user can edit by hand, and a project rkd can still
+    describe must not become one rkd refuses to read: `rkd info`, the GUI
+    dashboard and `rkd pack` all call this on whatever is in the directory.
+    The rules about what a *valid* project looks like live where the project
+    is written -- `init_project.py` lowercases the name and says so, and
+    `core/port_validation.py` owns the port range.
+
+    Ports are strings because that is what the compose file says and what the
+    panel prints; parsing them to int here would change the JSON the SPA
+    already consumes for no gain inside this module.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_name: str | None = None
+    odoo_version: str | None = None
     odoo_edition: Edition = "Community"
-    db_version: str = "16"
+    db_version: str | None = None
 
-    odoo_container: str = ""
-    db_container: str = ""
-    ports: ProjectPorts = Field(default_factory=ProjectPorts)
+    odoo_container: str | None = None
+    db_container: str | None = None
+    odoo_port: str | None = None
+    vsc_port: str | None = None
+    db_port: str | None = None
 
-    uses_ssh: bool = False
-    ssh_key_name: str = ""
-    third_party_repos: list[str] = Field(default_factory=list)
-    restart: str = "unless-stopped"
+    restart_policy: str | None = None
+    admin_passwd: str | None = None
 
-    @field_validator("project_name")
-    @classmethod
-    def _docker_requires_lowercase(cls, value: str) -> str:
-        """Docker Compose rejects uppercase project names."""
-        if value != value.lower():
-            raise ValueError(f"Project name must be lowercase, got {value!r}")
-        return value
+    use_private_repos: bool = False
+    ssh_key: str | None = None
+    use_third_party_repos: bool = False
+    # The values are not typed on purpose: these come straight from the
+    # user's gitman.yaml, and YAML reads `rev: 16.0` as a float, `rev: 17`
+    # as an int and an empty `repo:` as None (measured). The Odoo branch
+    # people actually write is `16.0`, so a stricter type here would
+    # reject an ordinary file that rkd reads fine today.
+    third_party_repos: list[dict[str, Any]] = Field(default_factory=list)
 
     @property
-    def profile(self) -> Profile:
-        return get_profile(self.odoo_version)
+    def profile(self) -> Profile | None:
+        """The facts fixed by this project's Odoo version, or None.
 
-    def model_post_init(self, _context) -> None:
-        if not self.odoo_container:
-            self.odoo_container = f"odoo-{self.project_name}"
-        if not self.db_container:
-            self.db_container = f"db-{self.project_name}"
+        None rather than an exception, for the same reason the fields are
+        optional: the version is scraped from a file the user can edit, and
+        an unreadable version is not a reason to stop describing the project.
+        """
+        try:
+            return get_profile(self.odoo_version)
+        except ValueError:
+            return None

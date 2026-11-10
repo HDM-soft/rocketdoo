@@ -22,7 +22,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
-from rocketdoo.core.gitignore_manager import SENSITIVE_ENTRIES
+from rocketdoo.core.gitignore_manager import SENSITIVE_ENTRIES, SENSITIVE_EXCEPTIONS
 from rocketdoo.core.odoo_db import databases_result, db_container
 from rocketdoo.core.project_info import get_project_info, project_exists, read_docker_compose
 from rocketdoo.core.service import ProgressCallback, ServiceError, reporter
@@ -55,6 +55,19 @@ _SHAREABLE_SECRETS = {"odoo_pg_pass", "config/odoo.conf"}
 # it (#249).
 _LOCAL_STATE = (".rkd/deploy_backups",)
 
+# What the content check looks for, and how far into an entry it looks.
+# Every PEM private key begins with this line, whatever the algorithm and
+# whether or not it is encrypted.
+_PRIVATE_KEY_HEADER = re.compile(rb"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
+_KEY_SCAN_BYTES = 65536
+
+# How many names a caller shows out of a list that can be long: a secret
+# pattern that matches a directory contributes every file under it, and
+# `python -m venv .env` leaves a couple of hundred under a name matching
+# `*.env`. The report always carries the full list; this is what the CLI
+# panel and the GUI log print before falling back to a count.
+LISTED_AT_MOST = 10
+
 
 def _secret_paths() -> list[str]:
     """Project-relative paths that must not leave the machine inside the ZIP."""
@@ -69,16 +82,29 @@ def _is_under(name: str, path: str) -> bool:
     literal prefixes would have let it through while the comment above claimed
     the opposite -- the kind of promise that is worse than no promise.
 
+    A pattern matches a directory the same way git treats one: everything
+    below `secretos.env/` is as excluded as the directory itself, which is
+    what the generated .gitignore does with the same pattern.
+
     Case-insensitive, because `/mnt/c` is: rkd's own `mkdir(exist_ok=True)`
     writes into an existing `.rkd/Secrets` there, and the file would travel.
     Same reason `is_the_archive()` compares by identity rather than by name.
     """
     lowered, target = name.lower(), path.lower()
+    # Scoped to the pattern that declares it, not applied to the whole list:
+    # `*.env.example` is the template `*.env` must not swallow, while a
+    # `.env.example` sitting inside `.rkd/secrets/` is still rkd's own
+    # directory and has no business travelling.
+    for exception in SENSITIVE_EXCEPTIONS.get(path, ()):
+        if fnmatch.fnmatch(lowered, exception) or fnmatch.fnmatch(Path(lowered).name, exception):
+            return False
     if lowered == target or lowered.startswith(target + "/"):
         return True
     if not any(ch in path for ch in "*?["):
         return False
-    return fnmatch.fnmatch(lowered, target) or fnmatch.fnmatch(Path(lowered).name, target)
+    if fnmatch.fnmatch(lowered, target) or fnmatch.fnmatch(Path(lowered).name, target):
+        return True
+    return any(fnmatch.fnmatch(component, target) for component in lowered.split("/")[:-1])
 
 
 def _secret_candidates(name: str) -> list[str]:
@@ -98,8 +124,16 @@ def _secret_candidates(name: str) -> list[str]:
 
 
 def _matches_secret(name: str, secret_paths: Iterable[str]) -> bool:
-    """Whether this entry is one of the paths rkd declares secret."""
-    candidates = _secret_candidates(name)
+    """Whether this entry is one of the paths rkd declares secret.
+
+    Separators are folded here rather than at one of the two call sites: the
+    packer builds its names from the filesystem walk and the verifier reads
+    them from a finished archive, and the whole point of #245 is that those
+    two must not answer the same question differently. On Linux a backslash
+    is a legal character in a filename, so `.rkd\\instance.yaml` is a file
+    the packer would otherwise ship and the verifier would then condemn.
+    """
+    candidates = _secret_candidates(name.replace("\\", "/"))
     return any(_is_under(candidate, path) for candidate in candidates for path in secret_paths)
 
 
@@ -240,26 +274,69 @@ def _restore_dockerfile(dockerfile_path: Path, original_content: str) -> None:
     dockerfile_path.write_text(original_content)
 
 
-def _scan_zip_for_secrets(zip_path: Path) -> list[str]:
+def _carries_a_private_key(archive: zipfile.ZipFile, member: zipfile.ZipInfo) -> bool:
+    """Whether a PEM private key header appears in this entry's first bytes.
+
+    The filename heuristics answer "is this called like a key"; this answers
+    "does it read like one", which is what a key copied in as `notas.txt` and
+    a hard link to one outside the project (#246) both walked past.
+
+    Opened by `ZipInfo` and not by name: two members of an archive can share
+    one, `ZipFile` resolves a name to the last of them, and the duplicate is
+    free for anyone writing the archive by hand -- which is the case this
+    check claims to cover.
+
+    Bounded on purpose. The window is read from each entry, not the entry, so
+    the dump and the filestore tarball cost what a config file costs; what
+    they carry compressed inside is out of reach for any amount of reading
+    here. A key further into a large plain file is the price of that bound.
+    """
+    try:
+        with archive.open(member) as handle:
+            return _PRIVATE_KEY_HEADER.search(handle.read(_KEY_SCAN_BYTES)) is not None
+    except Exception:
+        # Deliberately broad. Every decompressor ZIP allows has its own error
+        # type -- `zlib.error` descends straight from Exception, and bzip2 and
+        # lzma bring their own -- so naming them is a list that goes stale
+        # against a corrupt member nobody anticipated. The archive is written
+        # by the time this runs and the other two checks still have their say:
+        # an unreadable entry must not turn a finished pack into a traceback.
+        return False
+
+
+def _scan_zip_for_secrets(zip_path: Path) -> tuple[list[str], list[str]]:
     """Last check before the ZIP is handed over: anything in it that should not be.
 
-    Two questions, because neither covers the other. The path list answers
-    "did something rkd itself calls a secret end up in here", which is how
-    .rkd/secrets/ travelled while this function reported the archive clean
-    (#245): it only knew about SSH key filenames.
+    Returns two lists, because the two answers do not carry the same weight.
+    The first is what rkd itself declares secret, found inside the archive
+    anyway: that is a defect, and it is how .rkd/secrets/ travelled while this
+    function reported the archive clean (#245). The second is entries that
+    read like a private key without rkd having written them -- a question
+    worth asking, and one that has honest positives: Odoo's own
+    `l10n_ar_edi` ships a test key, so the two cannot share a warning without
+    the loud one firing on every Enterprise project (#253).
 
-    The name heuristics answer a narrower question than it is tempting to
-    claim: not "is there a private key in here" but "is there one under a
-    name OpenSSH hands out". A key copied in as `notas.txt` passes, and so
-    does a hard link to one outside the project (#246). Reading the contents
-    would answer the real question; this does not.
+    The name heuristics in the first list answer something narrower than it is
+    tempting to claim: not "is there a private key in here" but "is there one
+    under a name OpenSSH hands out".
+
+    Entry names use `/` by the ZIP specification and `zipfile` normalises what
+    it writes, but this function is the check on a *finished* archive -- the
+    one place meant to hold for a file built somewhere else. Folding the
+    separator is `_matches_secret`'s job, so that the packer and this function
+    cannot disagree about which file a name refers to; the `.ssh/` heuristic
+    below folds it for the same reason. What gets reported is the name as
+    stored, which is how the user will find it.
     """
     secret_paths = _secret_paths()
-    suspicious = []
+    suspicious: list[str] = []
+    private_keys: list[str] = []
     with zipfile.ZipFile(zip_path, "r") as zf:
-        for name in zf.namelist():
-            basename = Path(name).name
-            if _matches_secret(name, secret_paths):
+        for member in zf.infolist():
+            name = member.filename
+            normalised = name.replace("\\", "/")
+            basename = Path(normalised).name
+            if _matches_secret(normalised, secret_paths):
                 suspicious.append(name)
                 continue
             if any(
@@ -267,11 +344,14 @@ def _scan_zip_for_secrets(zip_path: Path) -> list[str]:
                     basename.startswith("id_rsa") and not basename.endswith(".pub"),
                     basename.startswith("id_ed25519") and not basename.endswith(".pub"),
                     basename.startswith("id_ecdsa") and not basename.endswith(".pub"),
-                    "/.ssh/" in name and not name.endswith(".pub"),
+                    "/.ssh/" in normalised and not normalised.endswith(".pub"),
                 ]
             ):
                 suspicious.append(name)
-    return suspicious
+                continue
+            if _carries_a_private_key(zf, member):
+                private_keys.append(name)
+    return suspicious, private_keys
 
 
 def _create_zip(
@@ -438,10 +518,10 @@ def pack(
         raise PackError("No Rocketdoo project detected in this directory.", "Run rkd init first.")
 
     project_info = get_project_info(root)
-    project_name = project_info.get("project_name") or root.name
+    project_name = project_info.project_name or root.name
     compose_data = read_docker_compose(root)
     report(f"Project detected: {project_name}")
-    report(f"Odoo: {project_info.get('odoo_version', 'unknown')} ({project_info.get('odoo_edition', 'Community')})")
+    report(f"Odoo: {project_info.odoo_version or 'unknown'} ({project_info.odoo_edition})")
 
     backup_dir = root / "rkd_backups"
     db_backup_path = None
@@ -509,8 +589,8 @@ def pack(
                     report(f"Odoo container {odoo_container} is not running - filestore skipped.", "warn")
                     fs_backup_path = None
 
-    uses_ssh = project_info.get("use_private_repos", False)
-    ssh_key_name = project_info.get("ssh_key")
+    uses_ssh = project_info.use_private_repos
+    ssh_key_name = project_info.ssh_key
 
     dockerfile_path = root / "Dockerfile"
     original_dockerfile = None
@@ -524,11 +604,11 @@ def pack(
         "rkd_shared": True,
         "packed_at": datetime.now().isoformat(),
         "project_name": project_name,
-        "odoo_version": project_info.get("odoo_version"),
-        "odoo_edition": project_info.get("odoo_edition", "Community"),
-        "db_version": project_info.get("db_version"),
-        "odoo_port": project_info.get("odoo_port"),
-        "vsc_port": project_info.get("vsc_port"),
+        "odoo_version": project_info.odoo_version,
+        "odoo_edition": project_info.odoo_edition,
+        "db_version": project_info.db_version,
+        "odoo_port": project_info.odoo_port,
+        "vsc_port": project_info.vsc_port,
         "uses_private_repos": uses_ssh,
         "ssh_key_name": ssh_key_name,
         "has_db_backup": db_backup_path is not None and db_backup_path.exists(),
@@ -583,9 +663,19 @@ def pack(
         report(message, "warn")
         warnings.append(message)
 
-    secrets_in_zip = _scan_zip_for_secrets(zip_path)
+    secrets_in_zip, private_keys_in_zip = _scan_zip_for_secrets(zip_path)
     if secrets_in_zip:
         message = "Files rkd treats as secrets were found inside the ZIP."
+        report(message, "warn")
+        warnings.append(message)
+
+    if private_keys_in_zip:
+        # Kept apart from the line above on purpose. That one is a defect:
+        # something rkd declares secret got in anyway. This one is a question
+        # for the user, and it has honest answers -- Odoo's own l10n_ar_edi
+        # ships a test key, so an Enterprise project trips it on every pack.
+        # Merged into one red warning, the loud one would stop being read.
+        message = f"{len(private_keys_in_zip)} file(s) in the ZIP read like a private key."
         report(message, "warn")
         warnings.append(message)
 
@@ -598,6 +688,7 @@ def pack(
         "ssh_sanitized": original_dockerfile is not None,
         "secrets_found_in_zip": bool(secrets_in_zip),
         "secrets_suspicious": list(secrets_in_zip),
+        "private_keys_in_zip": list(private_keys_in_zip),
         "symlinks_skipped": skipped_links,
         "secrets_excluded": excluded_secrets,
         "file_count": file_count,

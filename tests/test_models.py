@@ -302,24 +302,50 @@ class TestProfiles:
 
 
 class TestProjectConfig:
-    def test_container_names_derive_from_the_project(self):
-        config = ProjectConfig(project_name="demo")
-        assert config.odoo_container == "odoo-demo"
-        assert config.db_container == "db-demo"
+    """What `get_project_info()` returns, since #204.
 
-    def test_explicit_container_names_are_kept(self):
-        config = ProjectConfig(project_name="demo", odoo_container="custom")
-        assert config.odoo_container == "custom"
+    The model describes a project *read back from disk*, so it tolerates
+    whatever is there: the rules about what a valid project looks like belong
+    to whoever writes one (`init_project.py` lowercases the name and says so;
+    `core/port_validation.py` owns the port range). A project rkd can still
+    describe must not become one rkd refuses to read.
+    """
 
-    def test_rejects_an_uppercase_project_name(self):
-        """Docker Compose rejects these, so `rkd init` lowercases them."""
-        with pytest.raises(ValidationError, match="lowercase"):
-            ProjectConfig(project_name="MyProject")
+    def test_everything_is_optional(self):
+        """`rkd info` runs on a half-written project and prints what it found."""
+        config = ProjectConfig()
+
+        assert config.project_name is None
+        assert config.odoo_version is None
+        assert config.odoo_edition == "Community"
+        assert config.third_party_repos == []
+
+    def test_an_odd_project_is_read_not_rejected(self):
+        """Uppercase name and a privileged port: Compose would complain and
+        `rkd init` would have fixed the name, but this is the reader."""
+        config = ProjectConfig(project_name="MyProject", odoo_port="80")
+
+        assert config.project_name == "MyProject"
+        assert config.odoo_port == "80"
+
+    def test_gitman_values_are_taken_as_they_come(self):
+        """YAML reads `rev: 16.0` as a float and an empty `repo:` as None,
+        and an Odoo branch is exactly the kind of thing written as `16.0`."""
+        config = ProjectConfig(third_party_repos=[{"name": "oca", "repo": None, "rev": 16.0}])
+
+        assert config.third_party_repos[0]["rev"] == 16.0
 
     def test_exposes_the_profile_for_its_version(self):
-        assert ProjectConfig(project_name="demo", odoo_version="15.0").profile.base_distro == "debian-bullseye"
+        assert ProjectConfig(odoo_version="15.0").profile.base_distro == "debian-bullseye"
 
-    @pytest.mark.parametrize("port", [80, 70000])
-    def test_rejects_privileged_or_out_of_range_ports(self, port):
+    @pytest.mark.parametrize("version", [None, "", "4.2"])
+    def test_an_unreadable_version_has_no_profile(self, version):
+        """None instead of raising: the version is scraped from a Dockerfile
+        the user can edit."""
+        assert ProjectConfig(odoo_version=version).profile is None
+
+    def test_an_unknown_key_is_refused(self):
+        """The producer is the only caller that builds one, so a mistyped key
+        there has to fail at once instead of disappearing from the panel."""
         with pytest.raises(ValidationError):
-            ProjectConfig(project_name="demo", ports={"odoo": port})
+            ProjectConfig(odoo_prot="8069")

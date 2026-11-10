@@ -20,11 +20,19 @@ SENSITIVE_ENTRIES = [
     (".ssh/", "SSH private key copied into the build context"),
     (".rkd/secrets/", "VPS passwords"),
     ("odoo_pg_pass", "PostgreSQL password"),
+    ("*.env", "environment variables: API keys and passwords read at runtime"),
     (".rkd/instance.yaml", "deployment config with admin_passwd"),
     (".rkd/deploy.yaml", "deploy targets with VPS host, user and SSH key path"),
     ("config/odoo.conf", "Odoo config with admin_passwd"),
     ("traefik/certs/acme.json", "Let's Encrypt account key and issued certificates"),
 ]
+
+# Patterns that would also swallow the file documenting them. `.env` holds the
+# values; `.env.example` holds the names, and it is what lets whoever receives
+# the project write their own. The template already draws that line with
+# `!*.env.example`, and everything built on SENSITIVE_ENTRIES draws the same
+# one: the block appended below and the ZIP exclusion in core/pack.py (#253).
+SENSITIVE_EXCEPTIONS = {"*.env": ("*.env.example",)}
 
 
 def template_content() -> str:
@@ -76,7 +84,9 @@ def ensure_gitignore(project_root: Path) -> tuple[str, list[str]]:
 
     current = gitignore.read_text()
     block = ["", "# ─── Added by Rocketdoo: secrets that must not be committed ───"]
-    block += [pat for pat, _ in missing]
+    for pat, _ in missing:
+        block.append(pat)
+        block += [f"!{exception}" for exception in SENSITIVE_EXCEPTIONS.get(pat, ())]
     suffix = "\n".join(block) + "\n"
     gitignore.write_text(current if current.endswith("\n") else current + "\n")
     with gitignore.open("a") as fh:
