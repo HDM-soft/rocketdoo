@@ -8,6 +8,8 @@ from typing import Dict, Optional
 
 import yaml
 
+from rocketdoo.core.models.project import ProjectConfig
+
 
 def read_docker_compose(project_root: Path | str | None = None) -> Optional[Dict]:
     """Lee el archivo docker-compose.yaml"""
@@ -147,8 +149,36 @@ def detect_enterprise_edition(project_root: Path | str | None = None) -> bool:
     return False
 
 
-def get_project_info(project_root: Path | str | None = None) -> Dict:
-    """Collects all project information"""
+def as_text(value):
+    """A YAML scalar as text, because `yaml.safe_load` is YAML 1.1.
+
+    `restart: no` reads back as the boolean False, not as the "no" docker
+    reads, and `name: 2024` as an int (measured). This is not an exotic
+    hand-edit: `rkd init` offers `no` as one of its three restart policies
+    and the generated compose wrote it unquoted, so rkd produced the file
+    that rkd could not read once `get_project_info()` started validating
+    types (#204).
+
+    A folded boolean cannot be unfolded -- YAML 1.1 reads `no`, `off` and
+    `false` as the same False -- so it is spelled back the way the only key
+    that legitimately carries one is spelled in a compose file.
+    """
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return "no" if value is False else "yes"
+    return str(value)
+
+
+def get_project_info(project_root: Path | str | None = None) -> ProjectConfig:
+    """Collects all project information.
+
+    Scrapes the generated files and returns the result as a `ProjectConfig`
+    (#204). The keys below are the model's field names and the GUI sends
+    them to the SPA unchanged, so the dict built here is validated on the
+    way out rather than handed over as-is: a mistyped key raises here
+    instead of quietly vanishing from the panel.
+    """
     info = {
         "project_name": None,
         "odoo_version": None,
@@ -181,7 +211,7 @@ def get_project_info(project_root: Path | str | None = None) -> Dict:
     if compose_data:
         # Project name - from "name" key in docker-compose
         if "name" in compose_data:
-            info["project_name"] = compose_data["name"]
+            info["project_name"] = as_text(compose_data["name"])
 
         # Services
         if "services" in compose_data:
@@ -194,10 +224,10 @@ def get_project_info(project_root: Path | str | None = None) -> Dict:
             # === WEB SERVICE (ODOO) INFO ===
             if web_service:
                 # Container name
-                info["odoo_container"] = web_service.get("container_name", "odoo-unknown")
+                info["odoo_container"] = as_text(web_service.get("container_name", "odoo-unknown"))
 
                 # Restart policy
-                info["restart_policy"] = web_service.get("restart", "no")
+                info["restart_policy"] = as_text(web_service.get("restart", "no"))
 
                 # Ports - format "8069:8069" or "8888:8888"
                 ports = web_service.get("ports", [])
@@ -217,7 +247,7 @@ def get_project_info(project_root: Path | str | None = None) -> Dict:
 
                 # Odoo version - from "image" field (fallback if not in Dockerfile)
                 if not info["odoo_version"]:
-                    image = web_service.get("image", "")
+                    image = as_text(web_service.get("image", "")) or ""
                     if "odoo:" in image.lower():
                         # Format: "odoo:18.0" or "test2" (custom image)
                         if ":" in image:
@@ -229,10 +259,10 @@ def get_project_info(project_root: Path | str | None = None) -> Dict:
             # === DB SERVICE (POSTGRESQL) INFO ===
             if db_service:
                 # Container name
-                info["db_container"] = db_service.get("container_name", "db-unknown")
+                info["db_container"] = as_text(db_service.get("container_name", "db-unknown"))
 
                 # PostgreSQL version - from "image" field
-                image = db_service.get("image", "")
+                image = as_text(db_service.get("image", "")) or ""
                 if "postgres:" in image:
                     # Format: "postgres:14" -> extract "14"
                     version = image.split("postgres:")[1].split("-")[0].strip()
@@ -269,7 +299,7 @@ def get_project_info(project_root: Path | str | None = None) -> Dict:
                 {"name": src.get("name", "unknown"), "repo": src.get("repo", ""), "rev": src.get("rev", "")} for src in sources
             ]
 
-    return info
+    return ProjectConfig(**info)
 
 
 def project_exists(project_root: Path | str | None = None) -> bool:

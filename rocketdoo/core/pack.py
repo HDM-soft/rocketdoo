@@ -518,10 +518,10 @@ def pack(
         raise PackError("No Rocketdoo project detected in this directory.", "Run rkd init first.")
 
     project_info = get_project_info(root)
-    project_name = project_info.get("project_name") or root.name
+    project_name = project_info.project_name or root.name
     compose_data = read_docker_compose(root)
     report(f"Project detected: {project_name}")
-    report(f"Odoo: {project_info.get('odoo_version', 'unknown')} ({project_info.get('odoo_edition', 'Community')})")
+    report(f"Odoo: {project_info.odoo_version or 'unknown'} ({project_info.odoo_edition})")
 
     backup_dir = root / "rkd_backups"
     db_backup_path = None
@@ -589,8 +589,8 @@ def pack(
                     report(f"Odoo container {odoo_container} is not running - filestore skipped.", "warn")
                     fs_backup_path = None
 
-    uses_ssh = project_info.get("use_private_repos", False)
-    ssh_key_name = project_info.get("ssh_key")
+    uses_ssh = project_info.use_private_repos
+    ssh_key_name = project_info.ssh_key
 
     dockerfile_path = root / "Dockerfile"
     original_dockerfile = None
@@ -604,11 +604,11 @@ def pack(
         "rkd_shared": True,
         "packed_at": datetime.now().isoformat(),
         "project_name": project_name,
-        "odoo_version": project_info.get("odoo_version"),
-        "odoo_edition": project_info.get("odoo_edition", "Community"),
-        "db_version": project_info.get("db_version"),
-        "odoo_port": project_info.get("odoo_port"),
-        "vsc_port": project_info.get("vsc_port"),
+        "odoo_version": project_info.odoo_version,
+        "odoo_edition": project_info.odoo_edition,
+        "db_version": project_info.db_version,
+        "odoo_port": project_info.odoo_port,
+        "vsc_port": project_info.vsc_port,
         "uses_private_repos": uses_ssh,
         "ssh_key_name": ssh_key_name,
         "has_db_backup": db_backup_path is not None and db_backup_path.exists(),

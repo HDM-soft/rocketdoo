@@ -15,9 +15,10 @@ async def get_project():
         exists = project_exists()
         if not exists:
             return {"exists": False}
-        info = get_project_info()
-        info["exists"] = True
-        return info
+        # `model_dump()` and not the model itself: the SPA reads these keys
+        # by name, so what goes over the wire stays the flat object it has
+        # always been, with `exists` added beside it (#204).
+        return {**get_project_info().model_dump(), "exists": True}
     except Exception as e:
         return JSONResponse({"exists": False, "error": str(e)}, status_code=200)
 

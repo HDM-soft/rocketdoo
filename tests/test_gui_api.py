@@ -534,6 +534,37 @@ class TestThePackEndpointReportsWhatWasLeftOut:
         assert body["stderr"] == ""
 
 
+class TestTheGitmanEditorSurvivesTheUsersYaml:
+    """`gitman.yaml` is written by hand and `yaml.safe_load` is YAML 1.1:
+    `rev: 16.0` -- the way an Odoo branch gets written -- comes back a float,
+    an empty `repo:` None. Handed over raw, the card named a branch called
+    `16`, the edit form died on `.trim()` of a Number, and the save endpoint
+    rejected the object the read endpoint had just produced (#263).
+    """
+
+    TRICKY = "sources:\n  - name: oca\n    repo: https://github.com/OCA/web\n    rev: 16.0\n  - name: roto\n    repo:\n"
+
+    def test_the_values_arrive_as_text(self, client, project_dir):
+        (project_dir / "gitman.yaml").write_text(self.TRICKY)
+
+        sources = client.get("/api/gitman").json()["sources"]
+
+        assert sources[0]["rev"] == "16.0"
+        assert sources[1]["repo"] == ""
+        assert all(isinstance(value, str) for source in sources for value in source.values())
+
+    def test_what_the_read_returns_the_save_accepts(self, client, project_dir):
+        """Round trip with nothing edited: this is what made the editor
+        unusable rather than merely wrong."""
+        (project_dir / "gitman.yaml").write_text(self.TRICKY)
+        sources = client.get("/api/gitman").json()["sources"]
+
+        saved = client.post("/api/gitman", json={"sources": sources})
+
+        assert saved.status_code == 200, saved.text
+        assert saved.json().get("ok") is True
+
+
 class TestTheGuiDoesNotWriteCredentialsOutsideAProject:
     """The CLI wizards need a `cd` too far to land outside a project; the GUI
     gets there with a button -- /api/workspace/navigate accepts any directory
