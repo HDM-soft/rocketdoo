@@ -581,3 +581,16 @@ class TestCiWorkflowTemplate:
         run_steps = " ".join(step.get("run", "") for step in parsed["jobs"]["lint"]["steps"])
         assert "ruff check" in run_steps
         assert "rkd deploy validate" in run_steps
+
+
+class TestTheRestartPolicyIsNotAYamlBoolean:
+    """`rkd init` offers three policies and one is `no`. Unquoted, YAML 1.1
+    reads that back as the boolean False, not as the "no" docker expects, so
+    the file rkd generated was one rkd could not read as text (#204)."""
+
+    @pytest.mark.parametrize("policy", ["no", "always", "unless-stopped"])
+    def test_every_policy_survives_a_yaml_round_trip(self, policy):
+        compose = yaml.safe_load(render("docker-compose.yaml.jinja", **{**PROJECT_CONTEXT, "restart": policy}))
+
+        assert compose["services"]["web"]["restart"] == policy
+        assert compose["services"]["db"]["restart"] == policy

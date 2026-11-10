@@ -347,54 +347,54 @@ def info():
     table.add_column("Value", style="green")
 
     # Project name
-    if project_info["project_name"]:
-        table.add_row("📦 Project Name", project_info["project_name"])
+    if project_info.project_name:
+        table.add_row("📦 Project Name", project_info.project_name)
 
     # Odoo version and edition - ALWAYS show if we have the info
-    if project_info["odoo_version"]:
-        table.add_row("🐳 Odoo Version", project_info["odoo_version"])
+    if project_info.odoo_version:
+        table.add_row("🐳 Odoo Version", project_info.odoo_version)
 
     # Always show edition (default is Community)
-    table.add_row("📦 Odoo Edition", project_info["odoo_edition"])
+    table.add_row("📦 Odoo Edition", project_info.odoo_edition)
 
     # PostgreSQL version
-    if project_info["db_version"]:
-        table.add_row("🗄️  PostgreSQL Version", project_info["db_version"])
+    if project_info.db_version:
+        table.add_row("🗄️  PostgreSQL Version", project_info.db_version)
 
     # Containers
-    if project_info["odoo_container"]:
-        table.add_row("📦 Web Container", project_info["odoo_container"])
+    if project_info.odoo_container:
+        table.add_row("📦 Web Container", project_info.odoo_container)
 
-    if project_info["db_container"]:
-        table.add_row("📦 DB Container", project_info["db_container"])
+    if project_info.db_container:
+        table.add_row("📦 DB Container", project_info.db_container)
 
     # Ports
-    if project_info["odoo_port"]:
-        table.add_row("🌐 Odoo Port", project_info["odoo_port"])
+    if project_info.odoo_port:
+        table.add_row("🌐 Odoo Port", project_info.odoo_port)
 
-    if project_info["vsc_port"]:
-        table.add_row("🐛 VSCode Port", project_info["vsc_port"])
+    if project_info.vsc_port:
+        table.add_row("🐛 VSCode Port", project_info.vsc_port)
 
-    if project_info["db_port"]:
-        table.add_row("🗄️  PostgreSQL Port", project_info["db_port"])
+    if project_info.db_port:
+        table.add_row("🗄️  PostgreSQL Port", project_info.db_port)
 
     # Restart policy
-    if project_info["restart_policy"]:
+    if project_info.restart_policy:
         restart_emoji = {"no": "🚫", "always": "🔄", "unless-stopped": "⏸️", "on-failure": "⚠️"}.get(
-            project_info["restart_policy"], "♻️"
+            project_info.restart_policy, "♻️"
         )
-        table.add_row(f"{restart_emoji} Restart Policy", project_info["restart_policy"])
+        table.add_row(f"{restart_emoji} Restart Policy", project_info.restart_policy)
 
     # Master password (partially hidden)
-    if project_info["admin_passwd"]:
-        passwd = project_info["admin_passwd"]
+    if project_info.admin_passwd:
+        passwd = project_info.admin_passwd
         # Hide password except first 3 characters
         masked_passwd = passwd[:3] + "*" * (len(passwd) - 3) if len(passwd) > 3 else "****"
         table.add_row("🔑 Master Password", masked_passwd)
 
     # SSH / Private repositories
-    if project_info["use_private_repos"] and project_info["ssh_key"]:
-        table.add_row("🔐 Private Repositories", f"✅ (key: {project_info['ssh_key']})")
+    if project_info.use_private_repos and project_info.ssh_key:
+        table.add_row("🔐 Private Repositories", f"✅ (key: {project_info.ssh_key})")
     else:
         table.add_row("🔐 Private Repositories", "❌")
 
@@ -411,20 +411,20 @@ def info():
     )
 
     # 🚀 ===== QUICK ACCESS PANEL ===== 🚀
-    if project_info.get("odoo_port"):
+    if project_info.odoo_port:
         console.print()
 
         # Build panel content
         access_content = Text()
         access_content.append("🌐 ", style="bold green")
         access_content.append("Your Odoo instance is available at:\n\n", style="bold green")
-        access_content.append(f"http://localhost:{project_info['odoo_port']}\n\n", style="bold cyan underline")
+        access_content.append(f"http://localhost:{project_info.odoo_port}\n\n", style="bold cyan underline")
 
         # Add credentials if available
         # if project_info.get('admin_passwd'):
         #     access_content.append("🔑 ", style="bold yellow")
         #     access_content.append("Master Password: ", style="bold yellow")
-        #     access_content.append(f"{project_info['admin_passwd']}\n\n", style="yellow")
+        #     access_content.append(f"{project_info.admin_passwd}\n\n", style="yellow")
 
         access_content.append("💡 ", style="dim")
         access_content.append("Click the link or copy it to your browser", style="dim")
@@ -440,25 +440,30 @@ def info():
         )
 
     # Third-party repositories (Gitman)
-    if project_info["use_third_party_repos"] and project_info["third_party_repos"]:
+    if project_info.use_third_party_repos and project_info.third_party_repos:
         repos_table = Table(show_header=True, box=box.SIMPLE_HEAD, padding=(0, 1), expand=True)
         repos_table.add_column("📚 Name", style="yellow bold", no_wrap=True)
         repos_table.add_column("🔗 Repository", style="blue", overflow="fold")
         repos_table.add_column("🏷️  Branch", style="green", justify="center")
 
-        for repo in project_info["third_party_repos"]:
-            # Shorten URL if too long
-            repo_url = repo["repo"]
+        for repo in project_info.third_party_repos:
+            # Rendered as text here, not read as text: these values come from
+            # the user's gitman.yaml, and YAML gives a float for `rev: 16.0`
+            # -- which Rich refuses to render -- and None for an empty
+            # `repo:`, which has no length. An Odoo branch is exactly what
+            # gets written as `16.0`, so the natural spelling was the one
+            # that ended `rkd info` in a traceback (#262).
+            repo_url = str(repo.get("repo") or "")
             if len(repo_url) > 60:
                 repo_url = repo_url[:57] + "..."
 
-            repos_table.add_row(repo["name"], repo_url, repo["rev"])
+            repos_table.add_row(str(repo.get("name") or ""), repo_url, str(repo.get("rev") or ""))
 
         console.print()
         console.print(
             Panel(
                 repos_table,
-                title=f"[bold magenta]📚 Third-Party Repositories ({len(project_info['third_party_repos'])})[/bold magenta]",
+                title=f"[bold magenta]📚 Third-Party Repositories ({len(project_info.third_party_repos)})[/bold magenta]",
                 border_style="magenta",
                 box=box.ROUNDED,
                 padding=(1, 1),
@@ -569,7 +574,7 @@ def gitman_init(force):
 
     # Detect Odoo version from the project to use as default branch
     project_info = get_project_info()
-    odoo_version = project_info.get("odoo_version", "17.0") or "17.0"
+    odoo_version = project_info.odoo_version or "17.0"
 
     gitman_sources = []
 

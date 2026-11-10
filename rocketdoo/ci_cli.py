@@ -72,15 +72,15 @@ def prepare(admin_passwd):
         kept.append("config/odoo.conf")
     else:
         info = get_project_info()
-        context = {**info, "admin_passwd": admin_passwd or "admin"}
+        context = {**info.model_dump(), "admin_passwd": admin_passwd or "admin"}
         render_template(CONFIG_TEMPLATE_DIR, "odoo.conf.jinja", os.path.join("config", "odoo.conf"), **context)
         created.append("config/odoo.conf")
 
-        if info["odoo_edition"] == "Enterprise":
+        if info.odoo_edition == "Enterprise":
             add_enterprise_to_odoo_conf(odoo_conf)
 
-        if info["third_party_repos"]:
-            update_odoo_conf_with_gitman(odoo_conf, info["third_party_repos"])
+        if info.third_party_repos:
+            update_odoo_conf_with_gitman(odoo_conf, info.third_party_repos)
 
     action, changes = ensure_addons_path(project_root)
 
@@ -169,12 +169,12 @@ def _ruff_target(odoo_version):
 
 def _unsupported_reasons(info):
     reasons = []
-    if info["odoo_edition"] == "Enterprise":
+    if info.odoo_edition == "Enterprise":
         reasons.append(
             "Enterprise addons are not public; the install job would need your "
             "subscription credentials as a repository secret."
         )
-    if info["use_private_repos"]:
+    if info.use_private_repos:
         reasons.append("The Dockerfile copies a private SSH key into the build context (.ssh/), which CI runners do not have.")
     return reasons
 
@@ -214,10 +214,10 @@ def _ci_context(project_root, install_trigger):
     info = get_project_info()
     reasons = _unsupported_reasons(info)
     return {
-        "project_name": info["project_name"],
+        "project_name": info.project_name,
         "default_branch": _default_branch(project_root),
         "rkd_spec": _rkd_spec(__version__),
-        "ruff_target": _ruff_target(info["odoo_version"]),
+        "ruff_target": _ruff_target(info.odoo_version),
         "install_supported": not reasons,
         "install_trigger": install_trigger,
         "unsupported_reasons": reasons,

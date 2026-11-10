@@ -24,7 +24,6 @@ from rocketdoo.core.models.project import (
     SUPPORTED_ODOO_VERSIONS,
     Profile,
     ProjectConfig,
-    ProjectPorts,
     get_profile,
 )
 
@@ -40,7 +39,6 @@ __all__ = [
     "OdooSHConfig",
     "Profile",
     "ProjectConfig",
-    "ProjectPorts",
     "TargetConnection",
     "VPSConnection",
     "get_profile",
