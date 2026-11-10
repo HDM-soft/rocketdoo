@@ -53,6 +53,7 @@ todo esto. CORS es una política que **solo respetan los navegadores**; un scrip
 | `admin_passwd` (config de instancia declarada) | `.rkd/instance.yaml`, en claro | gitignored, sin permisos restringidos explícitos, **excluido de `rkd pack`** |
 | Targets de deploy (host, usuario, ruta de la clave SSH) | `.rkd/deploy.yaml`, en claro | gitignored y excluido de `rkd pack` desde 3.9.2 |
 | Clave de cuenta y certificados de Let's Encrypt | `traefik/certs/acme.json`, que escribe Traefik | 0600 al crearlo; gitignored y excluido de `rkd pack` desde 3.9.2 (#246) |
+| Variables de entorno del propio usuario | `.env` en cualquier parte del proyecto, en claro | gitignored por el template generado; excluido de `rkd pack` desde 3.10.0 (#253). `*.env.example` sí viaja |
 | Clave SSH privada (build de imagen) | copiada a `.ssh/<clave>` dentro del contexto de build | gitignored (`.ssh/` en `SENSITIVE_ENTRIES`) |
 | `SSHPASS` (autenticación por password a un VPS) | variable de entorno del subproceso `sshpass`, nunca en disco | vive solo en memoria del proceso hijo (desde 3.2.1) |
 | Token de sesión de la GUI | memoria del proceso `rkd gui` (`app.state.rkd_token`) | efímero, no se persiste en disco |
@@ -101,10 +102,66 @@ anidado**, revisá qué contenía: lo mismo que arriba, un archivo enviado no se
 
 **Lo que esta defensa sigue sin cubrir.** Un **hard link a un archivo de afuera del proyecto**
 (`ln ~/.ssh/id_rsa addons/clave`) es, para el sistema de archivos, un archivo más del proyecto:
-no se distingue de haberlo copiado a mano, y ni la exclusión ni el verificador lo detectan salvo
-que el nombre dispare las heurísticas de clave privada. Copiar un secreto al proyecto, con
-cualquier nombre, tiene exactamente el mismo efecto: **lo que el ZIP garantiza es que rkd no
-filtra lo que rkd mismo escribió**, no que el proyecto no contenga secretos que alguien puso ahí.
+no se distingue de haberlo copiado a mano, y la exclusión no lo ve. Desde la 3.10.0 el
+verificador lo nombra si el archivo es una clave privada en formato PEM, pero eso es un aviso
+sobre el ZIP ya escrito y no una exclusión. Copiar un secreto al proyecto, con cualquier nombre,
+tiene exactamente el mismo efecto: **lo que el ZIP garantiza es que rkd no filtra lo que rkd
+mismo escribió**, no que el proyecto no contenga secretos que alguien puso ahí.
+
+#### El escalón siguiente: lo que pone el usuario (#253, 3.10.0)
+
+#245 y #246 cerraron lo que rkd escribe y los caminos laterales hacia esos mismos archivos. Lo
+que sigue es lo que el usuario deja en el proyecto, y son tres cambios:
+
+- **`*.env` es un secreto más.** El `.gitignore` generado ya lo excluía (`*.env`, con
+  `!*.env.example`) pero `SENSITIVE_ENTRIES` no lo listaba, así que un `.env` con claves de API
+  viajaba en el ZIP y el verificador lo daba por limpio: el mismo hueco de #245 un nivel más
+  arriba, con credenciales del usuario en vez de las de rkd. Ahora queda afuera, igual que todo
+  lo que haya debajo de un *directorio* con ese nombre, y el panel **nombra** lo que dejó afuera
+  —en la CLI y en la GUI— porque es lo que el receptor va a tener que volver a escribir.
+  **`*.env.example` sigue viajando**: es la lista de nombres que el receptor necesita para
+  escribir el suyo, y la excepción está acotada al patrón que la declara, así que un
+  `…env.example` dentro de `.rkd/secrets/` no sale igual. El panel nombra hasta diez archivos y
+  cuenta el resto —un `python -m venv .env` deja un par de cientos bajo un nombre que matchea el
+  patrón—, y el reporte sigue trayendo la lista completa. Ningún template de rkd lee un `.env`
+  —el compose generado no declara `env_file`— así que el entorno recibido levanta lo mismo.
+  Sigue la grafía de git: `.env.local`, `.env.production` y `.envrc` **no** terminan en `.env` y
+  por lo tanto viajan, exactamente como tampoco los ignora el `.gitignore` generado.
+- **El verificador lee, no sólo adivina por el nombre.** Hasta la 3.9.2 reconocía claves privadas
+  por los nombres que reparte OpenSSH (`id_rsa` y parientes, cualquier ruta bajo `.ssh/`), así
+  que una clave copiada como `notas.txt` pasaba limpia. Ahora busca además el encabezado **PEM**
+  (`-----BEGIN … PRIVATE KEY-----`) en los primeros 64 KiB de cada entrada. Sólo PEM: una clave
+  de PuTTY (`.ppk`), un bloque PGP o una clave en DER binario no lo tienen y no se detectan.
+  **Techo conocido y tomado a propósito:** es una ventana y no el archivo entero, porque el ZIP
+  lleva un dump y un filestore de cientos de MB y lo que viaja comprimido adentro de un
+  `.tar.gz` no se alcanza leyendo más. Medido sobre un ZIP de 422 MB con 34.000 entradas —el
+  tamaño de un proyecto Enterprise real—: 3,2 s contra 1,2 s recorriendo sólo los nombres. Del
+  lado del empaquetador, la entrada `*.env` obliga a comparar cada ruta contra un comodín: sobre
+  un árbol real de 53.000 entradas, 0,9 s por pasada contra 0,3 s antes, y `rkd pack` hace dos.
+  Las dos cifras son chicas al lado de los segundos que lleva comprimir el proyecto y volcar la
+  base, pero son costo que antes no estaba.
+- **Separadores.** Los nombres dentro de un ZIP usan `/` por especificación y `zipfile` normaliza
+  lo que escribe, pero el verificador es justamente el chequeo que tiene que valer para un
+  archivo armado por otra herramienta. El plegado de `\` vive en la función que comparan **las
+  dos** puntas, el empaquetador y el verificador: que una excluyera y la otra condenara el mismo
+  archivo es el bug que esta épica viene cerrando, no una variante nueva de él.
+
+**Los dos hallazgos no son el mismo hallazgo, y el panel no los mezcla.** Que aparezca adentro
+algo que rkd declara secreto es un defecto, y se informa como hasta ahora: aviso rojo en la CLI,
+`stderr` en la GUI. Que un archivo *lea* como una clave privada es una pregunta para el usuario,
+y tiene respuestas legítimas: medido sobre los proyectos Enterprise de este equipo, **cinco
+archivos por pack** vienen de las localizaciones del propio Odoo —`l10n_ar_edi` (dos),
+`l10n_cl_edi` y `l10n_cl_edi_stock` (plantillas CAF) y `l10n_co_dian`—, que traen claves de
+prueba en `demo/` y `tests/`. Con un solo aviso rojo para las dos cosas, un proyecto Enterprise
+lo vería en cada pack y dejaría de leerlo justo para el día que nombre un `notas.txt` de verdad.
+Por eso va en un bloque propio y más tranquilo, que dice que rkd no escribió esos archivos y que
+hay que mirar los que sean propios.
+
+El verificador **avisa; no borra ni cancela el pack**. El archivo ya está escrito cuando el
+chequeo corre, y lo que corresponde ahí es que decida el usuario. Un *miembro* que no se puede
+leer —dañado, cifrado— tampoco lo cancela: se saltea, porque ninguno de los otros chequeos
+depende de él. Si lo ilegible fuera el archivo entero, en cambio, el comando sí falla: eso
+significaría que el ZIP que rkd acaba de escribir está roto, y callarlo sería peor que el error.
 
 ## Las tres defensas y qué cubre cada una
 

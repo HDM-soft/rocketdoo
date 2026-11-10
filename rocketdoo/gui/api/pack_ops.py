@@ -112,7 +112,45 @@ def pack(body: PackRequest):
         left_out = "\n".join(f"  - {name}" for name in report["symlinks_skipped"])
         messages.append(f"Symbolic links are not packaged, so these were left out:\n{left_out}")
 
+    # Same channel, same reasoning. A file that merely reads like a private
+    # key is not a failure -- Odoo's own l10n_ar_edi ships one in its tests,
+    # so a red toast on every pack of an Enterprise project would train the
+    # user to dismiss the one that matters (#253).
+    if report.get("private_keys_in_zip"):
+        like_keys = "\n".join(f"  - {name}" for name in report["private_keys_in_zip"])
+        # At the top of the log, not appended to it. The SPA renders this in
+        # a 280px box that does not scroll itself, and a pack with no entry
+        # in `stderr` closes with a green toast: last in the list is below
+        # the fold, under every progress line. The quiet channel is the one
+        # carrying the finding that matters -- the red one is rkd checking
+        # itself and should never fire at all.
+        messages.insert(
+            0,
+            f"These files in the ZIP read like a private key:\n{like_keys}\n"
+            "rkd did not write them; check the ones that are yours.",
+        )
+
+    # What was kept out reaches the user too: `*.env` joined the exclusion in
+    # #253 and the receiver has to write their own, which they can only do if
+    # the sender knows which file it was. The CLI names them in its panel.
+    if report.get("secrets_excluded"):
+        messages.append(_kept_out_summary(report["secrets_excluded"]))
+
     return {"ok": True, "stdout": "\n".join(messages), "stderr": "\n\n".join(notices)}
+
+
+def _kept_out_summary(excluded: list[str]) -> str:
+    """The files kept out, listed but not at any length.
+
+    A directory whose name matches a secret pattern contributes every file
+    under it, and `python -m venv .env` leaves a couple of hundred of them
+    under a name that matches `*.env`. The full list stays in the report,
+    where a caller that wants it can read it.
+    """
+    shown = "\n".join(f"  - {name}" for name in excluded[: core_pack.LISTED_AT_MOST])
+    rest = len(excluded) - core_pack.LISTED_AT_MOST
+    more = f"\n  - ... and {rest} more" if rest > 0 else ""
+    return f"Secrets rkd kept out of the ZIP:\n{shown}{more}"
 
 
 @router.post("/unpack")
