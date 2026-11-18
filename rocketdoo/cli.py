@@ -160,7 +160,7 @@ def delete_command(ctx, delete_identifier, dry_run, path, quiet):
     console.print("─" * 60 + "\n")
 
 
-@click.group(epilog="Pre-flight checklist complete. One system is still not on this list.")
+@click.group(epilog="Pre-flight checklist complete. The rocket is still on the pad - you wouldn't dare launch it.")
 @click.version_option(
     version=f"{__version__}", prog_name="Rocketdoo"
 )  # version declared on rocketdoo/core/__init__.py and pyproject.toml

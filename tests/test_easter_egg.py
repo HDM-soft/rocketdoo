@@ -71,6 +71,12 @@ class TestStaysHidden:
         result = CliRunner().invoke(main, ["--help"])
         assert "Pre-flight" in result.output
 
+    def test_hint_names_the_verb(self):
+        """A hint that names no action leaves the command unguessable."""
+        result = CliRunner().invoke(main, ["--help"])
+        epilog = result.output.rsplit("Commands:", 1)[-1]
+        assert "launch" in epilog.lower()
+
     def test_unknown_command_listing_does_not_leak_it(self):
         result = CliRunner().invoke(main, ["help", "no-such-command"])
         assert "Available commands:" in result.output
