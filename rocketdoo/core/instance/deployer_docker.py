@@ -26,7 +26,7 @@ from .config_manager import (
     invalid_identifiers,
 )
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
-from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
+from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
 console = Console()
 
@@ -299,16 +299,20 @@ class DockerInstanceDeployer:
             f"{self.remote_path}/extra-addons",
             f"{self.remote_path}/{self.env}/config",
         ]
-        if not self._ssh(f"mkdir -p {' '.join(dirs)}"):
+        if not self._ssh(ensure_dirs_command(dirs, self.remote_path, '"$(id -u):$(id -g)"')):
+            console.print(f"[red]✗ Could not create {self.remote_path} on the VPS[/red]")
             return False
 
         # The compose declares this network as external, so Compose refuses to
         # create it: on a VPS that has never run Traefik, every step from the
         # database onwards fails with "network traefik-public declared as
         # external, but could not be found".
-        return self._ssh(
+        if not self._ssh(
             f"docker network inspect {TRAEFIK_NETWORK} >/dev/null 2>&1 || docker network create {TRAEFIK_NETWORK}"
-        )
+        ):
+            console.print(f"[red]✗ Could not create the Docker network {TRAEFIK_NETWORK} on the VPS[/red]")
+            return False
+        return True
 
     def _transfer(self, tmp: Path) -> bool:
         # Dockerfile.{env}
