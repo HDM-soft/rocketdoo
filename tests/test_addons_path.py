@@ -3,16 +3,17 @@
 A nested addons/oca/mod is invisible to Odoo unless its parent directory is
 listed in addons_path too. These tests pin down discover()'s mapping from
 addons/ to container paths, and ensure_addons_path()'s promise that merging
-into config/odoo.conf never touches anything but the addons_path line.
+into config/odoo.conf never touches anything but the addons_path option.
 """
 
+import configparser
 import os
 import subprocess
 
 import pytest
 from click.testing import CliRunner
 
-from rocketdoo.core.addons_path import CONTAINER_ADDONS_ROOT, discover, ensure_addons_path
+from rocketdoo.core.addons_path import COLLAPSED, CONTAINER_ADDONS_ROOT, discover, ensure_addons_path
 
 
 def _compose(root, *args, timeout, check=True):
@@ -310,6 +311,172 @@ class TestEnsureAddonsPathUpdated:
         _write_conf(tmp_path)
         action, _ = ensure_addons_path(str(tmp_path))
         assert action == "updated"
+
+
+class TestMultiLineAddonsPath:
+    """A value spread over indented lines is one option, not one line (#267).
+
+    An older rkd rewrote only the line holding the '=', leaving the
+    continuations orphaned: the entry they were glued to ended up with a
+    newline inside it and Odoo dropped that path. Reading and writing the
+    whole option both fixes that and repairs a file already broken by it.
+    """
+
+    SANE = (
+        "[options]\n"
+        "addons_path = /odoo/enterprise,\n"
+        f"              {CONTAINER_ADDONS_ROOT},\n"
+        "              /odoo/external_addons/odoo-argentina\n"
+        "data_dir = /var/lib/odoo\n"
+    )
+
+    # Byte for byte what rkd 3.10.0 and earlier left behind on a real project.
+    BROKEN = (
+        "[options]\n"
+        f"addons_path = /odoo/enterprise,{CONTAINER_ADDONS_ROOT}\n"
+        f"              {CONTAINER_ADDONS_ROOT},\n"
+        "              /odoo/external_addons/odoo-argentina\n"
+        "data_dir = /var/lib/odoo\n"
+    )
+
+    # The same damage on a project that had no managed entry to begin with:
+    # here the orphaned continuation is a different path, so the managed
+    # entries match what discover() wants and an entry-only check sees nothing.
+    BROKEN_FOREIGN = (
+        "[options]\n"
+        f"addons_path = /odoo/enterprise,{CONTAINER_ADDONS_ROOT}\n"
+        "              /odoo/external_addons/odoo-argentina\n"
+        "data_dir = /var/lib/odoo\n"
+    )
+
+    def _conf(self, tmp_path, text):
+        config_dir = tmp_path / "config"
+        config_dir.mkdir(parents=True, exist_ok=True)
+        conf = config_dir / "odoo.conf"
+        conf.write_text(text)
+        return conf
+
+    def _odoo_sees(self, conf):
+        parser = configparser.RawConfigParser()
+        parser.read(conf)
+        return [path.strip() for path in parser["options"]["addons_path"].split(",")]
+
+    def test_a_sane_multi_line_value_loses_no_entry(self, tmp_path):
+        conf = self._conf(tmp_path, self.SANE)
+
+        ensure_addons_path(tmp_path)
+
+        assert self._odoo_sees(conf) == [
+            "/odoo/enterprise",
+            CONTAINER_ADDONS_ROOT,
+            "/odoo/external_addons/odoo-argentina",
+        ]
+
+    def test_a_sane_multi_line_value_is_reported_as_collapsed(self, tmp_path):
+        self._conf(tmp_path, self.SANE)
+
+        action, changes = ensure_addons_path(tmp_path)
+
+        # No entry moved, so the caller still gets told why the file changed.
+        assert (action, changes) == ("updated", [COLLAPSED])
+
+    def test_a_broken_value_is_repaired(self, tmp_path):
+        conf = self._conf(tmp_path, self.BROKEN)
+        assert any("\n" in path for path in self._odoo_sees(conf))
+
+        action, _ = ensure_addons_path(tmp_path)
+
+        assert action == "updated"
+        assert self._odoo_sees(conf) == [
+            "/odoo/enterprise",
+            CONTAINER_ADDONS_ROOT,
+            "/odoo/external_addons/odoo-argentina",
+        ]
+
+    def test_a_broken_value_whose_managed_entries_already_match_is_repaired(self, tmp_path):
+        conf = self._conf(tmp_path, self.BROKEN_FOREIGN)
+
+        ensure_addons_path(tmp_path)
+
+        assert self._odoo_sees(conf) == [
+            "/odoo/enterprise",
+            CONTAINER_ADDONS_ROOT,
+            "/odoo/external_addons/odoo-argentina",
+        ]
+
+    def test_repairing_is_idempotent(self, tmp_path):
+        conf = self._conf(tmp_path, self.BROKEN)
+        ensure_addons_path(tmp_path)
+        repaired = conf.read_text()
+
+        assert ensure_addons_path(tmp_path) == ("ok", [])
+        assert conf.read_text() == repaired
+
+    def test_the_rest_of_the_file_survives_the_collapse(self, tmp_path):
+        conf = self._conf(tmp_path, self.BROKEN)
+
+        ensure_addons_path(tmp_path)
+
+        lines = conf.read_text().splitlines()
+        assert lines[0] == "[options]"
+        assert lines[-1] == "data_dir = /var/lib/odoo"
+        assert sum(line.startswith("addons_path") for line in lines) == 1
+
+    def test_a_foreign_path_between_two_managed_ones_keeps_its_place(self, tmp_path):
+        """Order is how Odoo resolves a module, so ours must not jump the queue.
+
+        Grouping the managed block at the position of the first managed entry
+        moved /mnt/custom behind both of ours, silently changing which copy of
+        a duplicated module wins.
+        """
+        _module(tmp_path / "addons", "oca/mod")
+        conf = self._conf(
+            tmp_path,
+            f"[options]\naddons_path = {CONTAINER_ADDONS_ROOT},/mnt/custom,{CONTAINER_ADDONS_ROOT}/oca\n",
+        )
+
+        assert ensure_addons_path(tmp_path) == ("ok", [])
+        assert self._odoo_sees(conf) == [
+            CONTAINER_ADDONS_ROOT,
+            "/mnt/custom",
+            f"{CONTAINER_ADDONS_ROOT}/oca",
+        ]
+
+    def test_a_new_entry_lands_behind_the_last_managed_one(self, tmp_path):
+        _module(tmp_path / "addons", "oca/mod")
+        conf = self._conf(
+            tmp_path,
+            f"[options]\naddons_path = /odoo/enterprise,{CONTAINER_ADDONS_ROOT},/mnt/custom\n",
+        )
+
+        ensure_addons_path(tmp_path)
+
+        assert self._odoo_sees(conf) == [
+            "/odoo/enterprise",
+            CONTAINER_ADDONS_ROOT,
+            f"{CONTAINER_ADDONS_ROOT}/oca",
+            "/mnt/custom",
+        ]
+
+    def test_an_option_written_with_a_colon_is_not_duplicated(self, tmp_path):
+        """A second addons_path line makes Odoo refuse to start (#267)."""
+        conf = self._conf(tmp_path, f"[options]\naddons_path: /odoo/enterprise,{CONTAINER_ADDONS_ROOT}\ndata_dir = /x\n")
+
+        ensure_addons_path(tmp_path)
+
+        assert sum(line.startswith("addons_path") for line in conf.read_text().splitlines()) == 1
+        assert self._odoo_sees(conf) == ["/odoo/enterprise", CONTAINER_ADDONS_ROOT]
+
+    def test_a_comment_at_column_zero_inside_the_value(self, tmp_path):
+        conf = self._conf(
+            tmp_path,
+            f"[options]\naddons_path = {CONTAINER_ADDONS_ROOT},\n; a note\n              /odoo/ext\ndata_dir = /x\n",
+        )
+
+        ensure_addons_path(tmp_path)
+
+        assert self._odoo_sees(conf) == [CONTAINER_ADDONS_ROOT, "/odoo/ext"]
+        assert "; a note" in conf.read_text()
 
 
 class TestUpSyncsAddonsPathFirst:
