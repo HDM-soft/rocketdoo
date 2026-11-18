@@ -19,6 +19,8 @@ DeploymentType = Literal["docker", "native"]
 EnterpriseSource = Literal["rsync", "clone"]
 PGProfileName = Literal["small", "medium", "large"]
 
+NATIVE_ADDONS_PATH = "/opt/odoo/extra-addons"
+
 # Flat keys the GUI used, mapped onto the canonical names.
 _LEGACY_ALIASES = {
     "password_ref": "password",
@@ -182,17 +184,18 @@ class InstanceConfig(BaseModel):
         if not isinstance(data, dict):
             return data
         if "environments" in data:
-            return cls._name_the_database_roles(data)
+            return cls._fill_per_environment_defaults(data)
         if data and all(isinstance(v, dict) for v in data.values()):
-            return cls._name_the_database_roles({"environments": data})
+            return cls._fill_per_environment_defaults({"environments": data})
         return data
 
     @staticmethod
-    def _name_the_database_roles(data: dict) -> dict:
-        """Give each environment its own role name when the file omits one.
+    def _fill_per_environment_defaults(data: dict) -> dict:
+        """Give each environment its own role name and remote path when the file omits them.
 
         Only here is the environment's name known; the environment model sees
-        its own fields and nothing else.
+        its own fields and nothing else. An empty remote path is dangerous:
+        the deployers join it into shell commands, where it evaporates.
         """
         environments = data.get("environments")
         if not isinstance(environments, dict):
@@ -202,6 +205,9 @@ class InstanceConfig(BaseModel):
         for name, env in environments.items():
             if isinstance(env, dict) and not env.get("db_user"):
                 env = {**env, "db_user": f"odoo_{name}"}
+            if isinstance(env, dict) and not env.get("remote_path"):
+                native = env.get("type") == "native"
+                env = {**env, "remote_path": NATIVE_ADDONS_PATH if native else f"/opt/odoo-{name}"}
             named[name] = env
         return {**data, "environments": named}
 

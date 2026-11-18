@@ -1136,3 +1136,17 @@ class TestUnpackProjectName:
         monkeypatch.setattr(pack_ops.core_unpack, "inspect", lambda root: info)
 
         assert client.get("/api/pack/unpack-info").json()["project"] == info["project"]
+
+
+def test_instances_init_adds_an_environment_without_dropping_the_others(client, project_dir):
+    import yaml
+
+    (project_dir / "Dockerfile").write_text("FROM odoo:19.0\n")
+    (project_dir / "docker-compose.yaml").write_text("services: {}\n")
+    env = {"host": "h", "auth_method": "password", "password_ref": "${P}", "domain": "d.example.com"}
+
+    assert client.post("/api/instances/init", json={"environments": {"prod": env}}).json()["ok"]
+    assert client.post("/api/instances/init", json={"environments": {"stage": env}}).json()["ok"]
+
+    saved = yaml.safe_load((project_dir / ".rkd" / "instance.yaml").read_text())
+    assert set(saved["environments"]) == {"stage", "prod"}
