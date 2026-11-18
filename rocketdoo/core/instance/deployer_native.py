@@ -22,7 +22,7 @@ from rich.console import Console
 
 from .config_manager import LOG_LEVEL_BY_ENV, MEMORY_BY_ENV, WORKERS_BY_ENV, invalid_identifiers
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
-from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
+from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
 console = Console()
 
@@ -258,7 +258,9 @@ class NativeInstanceDeployer:
             console.print("[yellow]  No local addons/ directory found — skipping sync[/yellow]")
             return True
 
-        self._ssh(f"sudo mkdir -p {self.remote_addons} && sudo chown {self.user} {self.remote_addons}")
+        if not self._ssh(ensure_dirs_command([self.remote_addons], self.remote_addons, self.user)):
+            console.print(f"[red]✗ Could not create {self.remote_addons} on the VPS[/red]")
+            return False
         cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, f"{addons_dir}/", f"{self.remote_addons}/")
         result = subprocess.run(cmd, env=env)
         return result.returncode == 0

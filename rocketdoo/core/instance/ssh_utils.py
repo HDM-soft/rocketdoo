@@ -108,6 +108,23 @@ def build_ssh_cmd(
     return sshpass_wrap(password, argv)
 
 
+def ensure_dirs_command(dirs: list[str], chown_target: str, owner: str) -> str:
+    """Create `dirs` as the SSH user, falling back to sudo when the parent is root's.
+
+    `sudo -n` because the deploy runs ssh without a TTY: a password prompt
+    would fail with an opaque askpass error instead of saying what to fix.
+    `mkdir -p` succeeds on a directory that exists but belongs to root, so the
+    first branch also asks whether the target is writable.
+    """
+    paths = " ".join(dirs)
+    return (
+        f"mkdir -p {paths} 2>/dev/null && [ -w {chown_target} ]"
+        f" || {{ sudo -n mkdir -p {paths} && sudo -n chown -R {owner} {chown_target}; }}"
+        " || { echo 'Cannot create the remote directory: the SSH user needs passwordless sudo"
+        " for it, or an absolute remote_path it owns (for example /home/ubuntu/odoo-prod).' >&2; exit 1; }"
+    )
+
+
 def build_rsync_cmd(
     auth: dict, port: int, user: str, host: str, local: str, remote: str, extra_opts: list[str] | None = None
 ) -> tuple[list[str], dict | None]:
