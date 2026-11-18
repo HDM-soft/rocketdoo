@@ -32,6 +32,7 @@ PURE_CORE = [
     "core/service.py",
     "core/compose.py",
     "core/addons_path.py",
+    "core/odoo_conf.py",
     "core/odoo_db.py",
     "core/project_info.py",
     "core/mailpit.py",
@@ -41,6 +42,7 @@ PURE_CORE = [
 ]
 
 NO_CWD: list[str] = [
+    "core/odoo_conf.py",
     "core/project_info.py",
     "core/mailpit.py",
     "core/traefik.py",

@@ -6,6 +6,8 @@ leaves behind — read as ready, and Odoo then started without the Enterprise
 addons. `validate_enterprise_setup` reports what would actually break.
 """
 
+import configparser
+
 import pytest
 
 from rocketdoo.core.edition_setup import (
@@ -110,3 +112,19 @@ class TestComposeAndConf:
         conf.write_text("[options]\ndb_host = db\n")
         add_enterprise_to_odoo_conf(conf)
         assert "addons_path" in conf.read_text()
+
+    def test_a_multi_line_addons_path_keeps_every_entry(self, tmp_path):
+        """#267: rewriting only the line holding the '=' orphaned the rest."""
+        conf = tmp_path / "odoo.conf"
+        conf.write_text("[options]\naddons_path = /mnt/a,\n              /mnt/b\ndb_host = db\n")
+
+        add_enterprise_to_odoo_conf(conf)
+
+        parser = configparser.ConfigParser()
+        parser.read(conf)
+        assert [path.strip() for path in parser["options"]["addons_path"].split(",")] == [
+            "/usr/lib/python3/dist-packages/odoo/enterprise",
+            "/mnt/a",
+            "/mnt/b",
+        ]
+        assert "db_host = db" in conf.read_text()
