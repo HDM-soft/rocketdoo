@@ -20,13 +20,16 @@ from pathlib import Path
 
 from rich.console import Console
 
+from rocketdoo.cli_output import print_checks
+
+from . import preflight
 from .config_manager import (
+    CRON_THREADS,
     DEBIAN_PG_MAX_CONNECTIONS,
     LOG_LEVEL_BY_ENV,
     MEMORY_BY_ENV,
     WORKERS_BY_ENV,
     db_maxconn,
-    invalid_identifiers,
 )
 from .enterprise import branch, clone_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
@@ -77,6 +80,7 @@ class NativeInstanceDeployer:
 
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
+        self._warnings: list[dict] = []
 
     # ─── public API ──────────────────────────────────────────────────────────
 
@@ -84,17 +88,15 @@ class NativeInstanceDeployer:
         """Run full native deployment. Returns True on success."""
         console.print(f"\n[bold cyan]Native deploy {self.env.upper()} → {self.host}[/bold cyan]\n")
 
-        invalid = invalid_identifiers(self.db_user, self.db_name)
-        if invalid:
-            console.print(f"[red]✗ Not a valid PostgreSQL identifier: {', '.join(invalid)}[/red]")
-            console.print(
-                "[dim]db_user and db_name may hold up to 63 letters, digits and underscores, and cannot start with a digit.[/dim]"
-            )
+        if not self._preflight():
             return False
 
-        if self._enterprise_missing_locally():
-            return False
+        try:
+            return self._run(dry_run)
+        finally:
+            self._repeat_warnings()
 
+    def _run(self, dry_run: bool) -> bool:
         if dry_run:
             self._show_plan()
             return True
@@ -107,6 +109,19 @@ class NativeInstanceDeployer:
             console.print(f"[green]✓[/green] {label}")
 
         return True
+
+    def _preflight(self) -> bool:
+        cfg = {**self.cfg, "remote_path": self.remote_addons, "db_user": self.db_user, "db_name": self.db_name}
+        console.print("[dim]Pre-flight checks...[/dim]")
+        checks = preflight.run(self.project_path, self.auth, cfg, env=self.env)
+        print_checks(console, checks)
+        self._warnings = [c for c in checks if c["level"] == "warn" and not c["ok"]]
+        return not preflight.blocking(checks)
+
+    def _repeat_warnings(self):
+        if self._warnings:
+            console.print("[yellow]Warnings from the pre-flight:[/yellow]")
+            print_checks(console, self._warnings)
 
     def _steps(self) -> list[tuple[str, Callable[[], bool]]]:
         """The deployment, in order.
@@ -250,7 +265,7 @@ class NativeInstanceDeployer:
             f"log_level = {log_level}\n"
             "logfile = /var/log/odoo/odoo-server.log\n"
             f"workers = {workers}\n"
-            "max_cron_threads = 1\n"
+            f"max_cron_threads = {CRON_THREADS}\n"
             "gevent_port = 8072\n"
             f"limit_memory_hard = {mem['hard']}\n"
             f"limit_memory_soft = {mem['soft']}\n"
@@ -281,20 +296,6 @@ class NativeInstanceDeployer:
             console.print(f"[red]✗ Could not create {self.remote_addons} on the VPS[/red]")
             return False
         return self._rsync(f"{addons_dir}/", f"{self.remote_addons}/")
-
-    def _enterprise_missing_locally(self) -> bool:
-        if not self.cfg.get("use_enterprise", False) or self.cfg.get("enterprise_source", "rsync") != "rsync":
-            return False
-        local = self.project_path / "enterprise"
-        # Continuing would start an Odoo whose addons_path points at an empty
-        # directory, which is the defect this step exists to close.
-        if local.is_dir():
-            return False
-        console.print(
-            f"[red]✗ use_enterprise is on but {local} does not exist. "
-            "Copy odoo/enterprise there or set enterprise_source: clone.[/red]"
-        )
-        return True
 
     def _sync_enterprise(self) -> bool:
         if not self.cfg.get("use_enterprise", False):

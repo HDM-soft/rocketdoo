@@ -74,6 +74,10 @@ MEMORY_BY_ENV = {
 # The native deployer does not tune postgresql.conf, so this is what a stock
 # Debian cluster allows.
 DEBIAN_PG_MAX_CONNECTIONS = 100
+DEBIAN_PG_SHARED_BUFFERS = "128MB"
+
+# Cron threads in both odoo.conf files, and in the pre-flight's memory sum.
+CRON_THREADS = 1
 
 
 def db_maxconn(pg_max_connections: int, workers: int) -> int:

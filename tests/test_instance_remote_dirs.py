@@ -9,6 +9,8 @@ import subprocess
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("green_preflight")
+
 from rocketdoo.core.instance import deployer_docker, deployer_native, ssh_utils
 from tests.test_instance_docker import _config
 

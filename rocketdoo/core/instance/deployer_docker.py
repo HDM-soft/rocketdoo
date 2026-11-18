@@ -16,15 +16,17 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
 
+from rocketdoo.cli_output import print_checks
 from rocketdoo.core.traefik import NETWORK as TRAEFIK_NETWORK
 
+from . import preflight
 from .config_manager import (
+    CRON_THREADS,
     LOG_LEVEL_BY_ENV,
     MEMORY_BY_ENV,
     PG_PROFILES,
     WORKERS_BY_ENV,
     db_maxconn,
-    invalid_identifiers,
 )
 from .enterprise import branch, clone_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
@@ -43,6 +45,8 @@ _HTTP_RETRIES = 45
 # Written once the admin user's password has been replaced, so a step
 # that failed is retried instead of skipped for good.
 _ADMIN_PASSWORD_MARK = "rkd.admin_password_set"
+
+_PLACEHOLDER = "<generated at deploy time>"
 
 
 class DockerInstanceDeployer:
@@ -79,6 +83,7 @@ class DockerInstanceDeployer:
         self.pg = PG_PROFILES.get(env_config.get("pg_profile"), PG_PROFILES["small"])
         self.project_name = self._detect_project_name()
         self.slug = self.project_name.replace("-", "_").replace(" ", "_")
+        self._warnings: list[dict] = []
 
     # ─── public API ──────────────────────────────────────────────────────────
 
@@ -86,23 +91,20 @@ class DockerInstanceDeployer:
         """Run full deployment. Returns True on success."""
         console.print(f"\n[bold cyan]Deploying {self.env.upper()} to {self.host}[/bold cyan]\n")
 
-        invalid = invalid_identifiers(self.db_user, self.db_name)
-        if invalid:
-            console.print(f"[red]✗ Not a valid PostgreSQL identifier: {', '.join(invalid)}[/red]")
-            console.print(
-                "[dim]db_user and db_name may hold up to 63 letters, digits and underscores, "
-                "and cannot start with a digit.[/dim]"
-            )
+        if not self._preflight():
             return False
 
-        if self._enterprise_missing_locally():
-            return False
+        try:
+            return self._run(dry_run)
+        finally:
+            self._repeat_warnings()
 
+    def _run(self, dry_run: bool) -> bool:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
 
             console.print("[dim]Step 1/7 — Rendering configuration files...[/dim]")
-            self._render_templates(tmp_path, allow_remote_lookup=not dry_run)
+            self._render_templates(tmp_path, dry_run=dry_run)
             console.print("[green]✓[/green] Configuration files rendered")
 
             if dry_run:
@@ -147,9 +149,22 @@ class DockerInstanceDeployer:
 
         return True
 
+    def _preflight(self) -> bool:
+        cfg = {**self.cfg, "remote_path": self.remote_path, "db_user": self.db_user, "db_name": self.db_name}
+        console.print("[dim]Pre-flight checks...[/dim]")
+        checks = preflight.run(self.project_path, self.auth, cfg, env=self.env)
+        print_checks(console, checks)
+        self._warnings = [c for c in checks if c["level"] == "warn" and not c["ok"]]
+        return not preflight.blocking(checks)
+
+    def _repeat_warnings(self):
+        if self._warnings:
+            console.print("[yellow]Warnings from the pre-flight:[/yellow]")
+            print_checks(console, self._warnings)
+
     # ─── secrets ─────────────────────────────────────────────────────────────
 
-    def _resolve_secrets(self, allow_remote_lookup: bool = True) -> dict[str, str]:
+    def _resolve_secrets(self, dry_run: bool = False) -> dict[str, str]:
         """
         Resolve this environment's passwords, reusing any that already exist.
 
@@ -158,15 +173,20 @@ class DockerInstanceDeployer:
         a second deploy would lock Odoo out of the database.
 
         Precedence: local secret store → password already on the VPS → new one.
+        In a dry-run nothing is looked up, generated or written: a missing
+        secret is a placeholder.
         """
         stored = load(self.project_path, self.env)
         pg_pass = stored.get(PG_PASS)
         admin_passwd = self.cfg.get("admin_passwd") or stored.get(ADMIN_PASSWD)
 
-        if not pg_pass and allow_remote_lookup:
+        if not pg_pass and not dry_run:
             pg_pass = self._read_remote_pg_pass()
             if pg_pass:
                 console.print("[dim]  Reusing odoo_pg_pass already deployed on the VPS[/dim]")
+
+        if dry_run:
+            return {"pg_pass": pg_pass or _PLACEHOLDER, "admin_passwd": admin_passwd or _PLACEHOLDER}
 
         generated = []
         if not pg_pass:
@@ -201,7 +221,7 @@ class DockerInstanceDeployer:
 
     # ─── template rendering ───────────────────────────────────────────────────
 
-    def _render_templates(self, tmp: Path, allow_remote_lookup: bool = True):
+    def _render_templates(self, tmp: Path, dry_run: bool = False):
         """Render all Jinja2 templates into a temporary directory."""
         jinja_env = Environment(
             loader=FileSystemLoader(str(_TEMPLATES_DIR)),
@@ -209,7 +229,7 @@ class DockerInstanceDeployer:
             lstrip_blocks=True,
         )
 
-        creds = self._resolve_secrets(allow_remote_lookup=allow_remote_lookup)
+        creds = self._resolve_secrets(dry_run=dry_run)
 
         use_enterprise = self.cfg.get("use_enterprise", False)
         use_gitman = self.cfg.get("use_gitman", False)
@@ -242,6 +262,7 @@ class DockerInstanceDeployer:
             # odoo.conf specific
             "admin_passwd": admin_passwd,
             "workers": workers,
+            "max_cron_threads": CRON_THREADS,
             "log_level": LOG_LEVEL_BY_ENV.get(self.env, "info"),
             "limit_memory_hard": mem["hard"],
             "limit_memory_soft": mem["soft"],
@@ -370,20 +391,6 @@ class DockerInstanceDeployer:
             if not self._rsync(f"{addons_dir}/", f"{self.remote_path}/extra-addons/"):
                 console.print("[yellow]⚠ Failed to sync extra-addons[/yellow]")
 
-        return True
-
-    def _enterprise_missing_locally(self) -> bool:
-        if not self.cfg.get("use_enterprise", False) or self.cfg.get("enterprise_source", "rsync") != "rsync":
-            return False
-        local = self.project_path / "enterprise"
-        # Continuing would start an Odoo whose addons_path points at an empty
-        # directory, which is the defect this step exists to close.
-        if local.is_dir():
-            return False
-        console.print(
-            f"[red]✗ use_enterprise is on but {local} does not exist. "
-            "Copy odoo/enterprise there or set enterprise_source: clone.[/red]"
-        )
         return True
 
     def _sync_enterprise(self) -> bool:
