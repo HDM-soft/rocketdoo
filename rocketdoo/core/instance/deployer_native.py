@@ -28,6 +28,7 @@ from .config_manager import (
     DEBIAN_PG_MAX_CONNECTIONS,
     LOG_LEVEL_BY_ENV,
     MEMORY_BY_ENV,
+    NATIVE_ADDONS_PATH,
     WORKERS_BY_ENV,
     db_maxconn,
 )
@@ -73,7 +74,7 @@ class NativeInstanceDeployer:
         self.auth = resolve_auth(vps, env, project_path)
 
         self.odoo_version = env_config.get("odoo_version", "17.0")
-        self.remote_addons = env_config.get("remote_path", "/opt/odoo/extra-addons")
+        self.remote_addons = env_config.get("remote_path", NATIVE_ADDONS_PATH)
         self.enterprise_path = "/opt/odoo/enterprise"
         self.odoo_conf_path = "/etc/odoo/odoo.conf"
         self.service_name = "odoo"

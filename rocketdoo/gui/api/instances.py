@@ -87,7 +87,7 @@ class InstanceInitRequest(BaseModel):
 async def init_instances(body: InstanceInitRequest):
     """Save instance configuration (.rkd/instance.yaml) from GUI form data."""
     try:
-        from rocketdoo.core.instance.config_manager import InstanceConfigManager
+        from rocketdoo.core.instance.config_manager import InstanceConfigManager, merge_environments
         from rocketdoo.core.instance.secrets_store import random_password
         from rocketdoo.core.project_info import project_exists
 
@@ -105,13 +105,12 @@ async def init_instances(body: InstanceInitRequest):
             # would ship an empty admin_passwd.
             if not values.get("admin_passwd"):
                 values["admin_passwd"] = random_password()
-            values.setdefault("remote_path", "")
-            if not values["remote_path"]:
-                values["remote_path"] = f"/opt/odoo-{env}"
             raw[env] = values
 
         config = InstanceConfig.model_validate({"environments": raw})
-        InstanceConfigManager(Path.cwd()).save(config.to_yaml_dict())
+        manager = InstanceConfigManager(Path.cwd())
+        existing = manager.load() if manager.exists() else {}
+        manager.save(merge_environments(existing, config.to_yaml_dict()["environments"]))
         return {
             "ok": True,
             "environments": list(config.environments),

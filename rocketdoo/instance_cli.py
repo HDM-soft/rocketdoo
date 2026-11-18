@@ -6,6 +6,7 @@ rkd instance init / deploy / status
 from pathlib import Path
 
 import click
+import yaml
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
@@ -48,11 +49,18 @@ def instance():
 
 
 @instance.command(name="init")
-@click.option("--force", "-f", is_flag=True, help="Overwrite existing configuration")
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Ignore the existing configuration and start over: environments not configured again are dropped",
+)
 def instance_init(force):
     """Interactive wizard to configure stage / prod deployment targets.
 
-    Saves configuration to .rkd/instance.yaml
+    Saves configuration to .rkd/instance.yaml. Re-running it keeps the
+    environments already configured and the deployment type they use; only
+    the ones you choose are added or reconfigured.
     """
     from rocketdoo.core.instance.config_manager import InstanceConfigManager
     from rocketdoo.core.project_info import project_exists
@@ -73,11 +81,15 @@ def instance_init(force):
 
     mgr = InstanceConfigManager(project_path)
 
-    if mgr.exists() and not force:
-        console.print("\n[yellow]instance.yaml already exists.[/yellow]")
-        if not Confirm.ask("Overwrite?", default=False):
-            console.print("[dim]Cancelled.[/dim]\n")
-            return
+    before = {}
+    if mgr.exists():
+        try:
+            before = mgr.load()["environments"]
+        except (ValueError, yaml.YAMLError) as exc:
+            if not force:
+                console.print(f"\n[red]Cannot read {mgr.config_path}:[/red] {exc}")
+                console.print("[dim]Fix the file, or run rkd instance init --force to start over.[/dim]\n")
+                raise SystemExit(1)
 
     console.print()
     console.print(
@@ -91,19 +103,29 @@ def instance_init(force):
     console.print()
 
     try:
-        config = mgr.interactive_setup()
+        config = mgr.interactive_setup(fresh=force)
     except (KeyboardInterrupt, SystemExit):
         console.print("\n[yellow]Cancelled.[/yellow]\n")
         return
+    except ValueError as exc:
+        console.print(f"\n[red]The answers do not make a valid configuration; nothing was written:[/red] {exc}\n")
+        raise SystemExit(1)
 
-    envs = list(config.get("environments", {}).keys())
+    after = config.get("environments", {})
+    lines = []
+    for env, cfg in after.items():
+        state = "added" if env not in before else "kept" if before[env] == cfg else "updated"
+        lines.append(f"  [cyan]{env}[/cyan]  {state}")
+    lines += [f"  [cyan]{env}[/cyan]  removed" for env in before if env not in after]
+    changed = any(not line.endswith("kept") for line in lines)
+    title = "Configuration saved" if changed else "Configuration unchanged"
     console.print()
     console.print(
         Panel(
-            f"[bold green]Configuration saved[/bold green]\n\n"
-            f"[dim]File:[/dim]         [cyan]{mgr.config_path}[/cyan]\n"
-            f"[dim]Environments:[/dim] [cyan]{', '.join(envs)}[/cyan]\n\n"
-            "[dim]Deploy with:[/dim] [cyan bold]rkd instance deploy --env stage[/cyan bold]",
+            f"[bold green]{title}[/bold green]\n\n"
+            f"[dim]File:[/dim] [cyan]{mgr.config_path}[/cyan]\n"
+            + "\n".join(lines)
+            + "\n\n[dim]Deploy with:[/dim] [cyan bold]rkd instance deploy --env stage[/cyan bold]",
             border_style="green",
             box=box.ROUNDED,
         )
@@ -291,9 +313,9 @@ def instance_status():
             env_name.upper(),
             env_cfg.get("type", "docker"),
             vps.get("host", "—"),
-            env_cfg.get("domain", "—"),
+            env_cfg.get("domain") or "—",
             env_cfg.get("odoo_version", "—"),
-            env_cfg.get("pg_profile", "—"),
+            env_cfg.get("pg_profile") if env_cfg.get("type", "docker") == "docker" else "—",
             "[green]Yes[/green]" if env_cfg.get("use_enterprise") else "[dim]No[/dim]",
         )
 

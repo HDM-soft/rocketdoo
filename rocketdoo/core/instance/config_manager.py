@@ -3,6 +3,7 @@ RocketDoo Instance - Configuration manager
 Manages .rkd/instance.yaml for stage/prod deployments
 """
 
+import copy
 import re
 import secrets
 import string
@@ -15,6 +16,8 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
 from rocketdoo.core.models import InstanceConfig
+from rocketdoo.core.models.instance import NATIVE_ADDONS_PATH
+from rocketdoo.core.project_info import get_project_info
 from rocketdoo.core.ssh_manager import list_private_keys
 
 console = Console()
@@ -31,6 +34,9 @@ _custom_style = Style(
 )
 
 CONFIG_FILE = ".rkd/instance.yaml"
+
+# The file `rkd init` writes; the wizard proposes it and the pre-flight falls back to it.
+DEFAULT_GITMAN_FILE = "gitman.yaml"
 
 PG_PROFILES: dict[str, dict] = {
     "small": {
@@ -105,6 +111,17 @@ def invalid_identifiers(*names: str) -> list[str]:
     return [name for name in names if not DB_IDENTIFIER.fullmatch(name)]
 
 
+def merge_environments(existing: dict, updates: dict) -> dict:
+    """The configuration `existing` with each environment in `updates` added or replaced.
+
+    Environments that `updates` does not name are carried over untouched.
+    """
+    return {
+        **copy.deepcopy(existing),
+        "environments": {**copy.deepcopy(existing.get("environments", {})), **copy.deepcopy(updates)},
+    }
+
+
 class InstanceConfigManager:
     def __init__(self, project_path: Path):
         self.project_path = Path(project_path)
@@ -122,6 +139,12 @@ class InstanceConfigManager:
         return InstanceConfig.model_validate(raw).to_yaml_dict()
 
     def save(self, config: dict):
+        """Write the configuration, refusing one the model cannot read back.
+
+        A cancelled `questionary` prompt returns None instead of raising, so
+        a half-answered wizard reaches here with `None` in required fields.
+        """
+        InstanceConfig.model_validate(config)
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.config_path, "w") as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -129,38 +152,74 @@ class InstanceConfigManager:
     def get_env(self, env: str) -> dict:
         return self.load().get("environments", {}).get(env, {})
 
-    def interactive_setup(self) -> dict:
-        """Full interactive wizard. Returns the config dict that was saved."""
-        console.print("[bold]Which environments do you want to configure?[/bold]")
-        envs = questionary.checkbox(
-            "Select environments:",
-            choices=[
-                questionary.Choice("stage", checked=True),
-                questionary.Choice("prod", checked=True),
-            ],
-            style=_custom_style,
-        ).ask()
-        if not envs:
-            raise SystemExit("No environments selected.")
+    def interactive_setup(self, fresh: bool = False) -> dict:
+        """Interactive wizard. Returns the configuration that is on disk after it.
 
-        config: dict = {"environments": {}}
+        Environments already configured are kept unless the user chooses to
+        reconfigure them; `fresh` ignores the existing file and starts over.
+        """
+        existing = {"environments": {}} if fresh or not self.exists() else self.load()
+        known = existing["environments"]
 
-        for env in envs:
+        types = {env: cfg["type"] for env, cfg in known.items()}
+        if len(set(types.values())) > 1:
+            listed = ", ".join(f"{env}: {kind}" for env, kind in types.items())
+            console.print(
+                f"[yellow]This file mixes deployment types ({listed}). That combination is not supported: "
+                "the deployers differ in features (gitman, PostgreSQL tuning, proxy), not only in packaging. "
+                "Each environment keeps its own type; nothing is converted.[/yellow]"
+            )
+        elif types:
+            console.print(
+                f"[dim]Existing configuration uses {next(iter(types.values()))}; "
+                "run with --force to change it and start over.[/dim]"
+            )
+
+        selected = []
+        for env in ("stage", "prod"):
+            if env in known:
+                host = known[env]["vps"]["host"]
+                domain = known[env].get("domain")
+                where = ", ".join(
+                    part for part in (f"host {host}" if host else "", f"domain {domain}" if domain else "") if part
+                )
+                if Confirm.ask(f"Reconfigure {env}?" + (f" ({where})" if where else ""), default=False):
+                    selected.append(env)
+            elif Confirm.ask(f"Configure a {env} environment?", default=True):
+                selected.append(env)
+
+        if not selected:
+            if not known:
+                raise SystemExit("No environments selected.")
+            console.print("[dim]Nothing changed.[/dim]")
+            return existing
+
+        new_type = next(iter(types.values()), None)
+        updates: dict = {}
+        for env in selected:
+            if env in known:
+                dep_type = types[env]
+            else:
+                if new_type is None:
+                    new_type = questionary.select(
+                        "Deployment type (applies to every new environment):",
+                        choices=[
+                            questionary.Choice("Docker (recommended)", value="docker"),
+                            questionary.Choice("Native  (Odoo nightly packages)", value="native"),
+                        ],
+                        style=_custom_style,
+                    ).ask()
+                dep_type = new_type
             console.print(f"\n[bold cyan]── {env.upper()} environment ──[/bold cyan]")
-            config["environments"][env] = self._wizard_env(env)
+            updates[env] = {**known.get(env, {}), **self._wizard_env(env, dep_type)}
 
+        config = merge_environments(existing, updates)
         self.save(config)
         return config
 
-    def _wizard_env(self, env: str) -> dict:
-        dep_type = questionary.select(
-            "Deployment type:",
-            choices=[
-                questionary.Choice("Docker (recommended)", value="docker"),
-                questionary.Choice("Native  (Odoo nightly packages)", value="native"),
-            ],
-            style=_custom_style,
-        ).ask()
+    def _wizard_env(self, env: str, dep_type: str) -> dict:
+        docker = dep_type == "docker"
+        project = get_project_info(self.project_path)
 
         console.print("\n[bold]VPS Connection[/bold]")
         host = Prompt.ask("VPS hostname or IP")
@@ -198,11 +257,13 @@ class InstanceConfigManager:
             password_ref = f"${{{password_ref}}}"
 
         console.print("\n[bold]Odoo[/bold]")
-        odoo_version = Prompt.ask("Odoo version", default="17.0")
-        odoo_tag = Prompt.ask("Docker image tag", default=odoo_version)
-        domain = Prompt.ask("Domain (e.g. erp.mycompany.com)")
-        traefik_email = Prompt.ask("Email for Let's Encrypt")
-        db_version = Prompt.ask("PostgreSQL version", default="16")
+        odoo_version = Prompt.ask("Odoo version", default=project.odoo_version or "17.0")
+        odoo_tag = domain = traefik_email = db_version = ""
+        if docker:
+            odoo_tag = Prompt.ask("Docker image tag", default=odoo_version)
+            domain = Prompt.ask("Domain (e.g. erp.mycompany.com)")
+            traefik_email = Prompt.ask("Email for Let's Encrypt")
+            db_version = Prompt.ask("PostgreSQL version", default=project.db_version or "16")
         while True:
             db_user = Prompt.ask("DB user", default=f"odoo_{env}")
             db_name = Prompt.ask("Database name", default=db_user)
@@ -217,24 +278,53 @@ class InstanceConfigManager:
         admin_passwd = Prompt.ask("Odoo master password", password=True, show_default=False, default=generated_passwd)
         if admin_passwd == generated_passwd:
             console.print(f"Generated master password: [bold]{generated_passwd}[/bold]")
+
         use_enterprise = Confirm.ask("Use Odoo Enterprise?", default=False)
-        use_gitman = Confirm.ask("Use Gitman for third-party repos?", default=False)
+        enterprise_source = "rsync"
+        if use_enterprise:
+            has_local = (self.project_path / "enterprise").is_dir()
+            enterprise_source = questionary.select(
+                "How should Enterprise reach the server?",
+                choices=[
+                    questionary.Choice(
+                        "Transfer the local enterprise/ directory (hundreds of MB on the first deploy)",
+                        value="rsync",
+                    ),
+                    questionary.Choice(
+                        "Clone odoo/enterprise on the VPS using your forwarded SSH agent "
+                        "(no credential is stored on the server; requires ssh-add and repository access)",
+                        value="clone",
+                    ),
+                ],
+                default="rsync" if has_local else "clone",
+                style=_custom_style,
+            ).ask()
+            if enterprise_source == "rsync" and not has_local:
+                console.print("[yellow]⚠ There is no enterprise/ directory in this project to transfer.[/yellow]")
+
+        use_gitman = False
         gitman_config = ""
-        if use_gitman:
-            gitman_config = Prompt.ask("Gitman config file (local path)", default=f"gitman.{env}.yml")
+        pg_profile = ""
+        if docker:
+            use_gitman = Confirm.ask("Use Gitman for third-party repos?", default=False)
+            if use_gitman:
+                gitman_config = Prompt.ask("Gitman config file (local path)", default=DEFAULT_GITMAN_FILE)
 
-        console.print("\n[bold]PostgreSQL profile[/bold]")
-        pg_profile = questionary.select(
-            "Resource profile:",
-            choices=[
-                questionary.Choice("small  — <2 GB RAM VPS", value="small"),
-                questionary.Choice("medium — 4–8 GB RAM VPS", value="medium"),
-                questionary.Choice("large  — 16+ GB RAM VPS", value="large"),
-            ],
-            style=_custom_style,
-        ).ask()
+            console.print("\n[bold]PostgreSQL profile[/bold]")
+            pg_profile = questionary.select(
+                "Resource profile:",
+                choices=[
+                    questionary.Choice("small  — <2 GB RAM VPS", value="small"),
+                    questionary.Choice("medium — 4–8 GB RAM VPS", value="medium"),
+                    questionary.Choice("large  — 16+ GB RAM VPS", value="large"),
+                ],
+                style=_custom_style,
+            ).ask()
 
-        remote_path = Prompt.ask("Remote base path", default=f"/opt/odoo-{env}")
+        if docker:
+            remote_path = Prompt.ask("Remote base path", default=f"/opt/odoo-{env}")
+        else:
+            remote_path = Prompt.ask("Remote addons path", default=NATIVE_ADDONS_PATH)
 
         vps_cfg: dict = {"host": host, "port": port, "user": user, "auth_method": auth_method}
         if auth_method == "ssh_key":
@@ -242,20 +332,25 @@ class InstanceConfigManager:
         else:
             vps_cfg["password"] = password_ref
 
-        return {
+        result = {
             "type": dep_type,
             "vps": vps_cfg,
             "odoo_version": odoo_version,
-            "odoo_tag": odoo_tag,
-            "domain": domain,
-            "traefik_email": traefik_email,
-            "db_version": db_version,
             "db_user": db_user,
             "db_name": db_name,
             "admin_passwd": admin_passwd,
             "use_enterprise": use_enterprise,
-            "use_gitman": use_gitman,
-            "gitman_config": gitman_config,
-            "pg_profile": pg_profile,
+            "enterprise_source": enterprise_source,
             "remote_path": remote_path,
         }
+        if docker:
+            result.update(
+                odoo_tag=odoo_tag,
+                domain=domain,
+                traefik_email=traefik_email,
+                db_version=db_version,
+                use_gitman=use_gitman,
+                gitman_config=gitman_config,
+                pg_profile=pg_profile,
+            )
+        return result

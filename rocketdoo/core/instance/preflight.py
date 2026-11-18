@@ -16,6 +16,7 @@ from rocketdoo.core.gitman_config import gitman_has_scripts, gitman_repos
 from .config_manager import (
     CRON_THREADS,
     DEBIAN_PG_SHARED_BUFFERS,
+    DEFAULT_GITMAN_FILE,
     MEMORY_BY_ENV,
     PG_PROFILES,
     WORKERS_BY_ENV,
@@ -47,7 +48,7 @@ def _remote_path(cfg: dict) -> str:
 
 
 def gitman_file(cfg: dict) -> str:
-    return cfg.get("gitman_config") or "gitman.yml"
+    return cfg.get("gitman_config") or DEFAULT_GITMAN_FILE
 
 
 def local_facts(project_root: Path, cfg: dict) -> dict:
