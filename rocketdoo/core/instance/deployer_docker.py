@@ -17,6 +17,8 @@ from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
 
 from rocketdoo.cli_output import print_checks
+from rocketdoo.core import addons_path as local_addons
+from rocketdoo.core.gitman_config import gitman_module_paths, gitman_ssh_hosts
 from rocketdoo.core.traefik import NETWORK as TRAEFIK_NETWORK
 
 from . import preflight
@@ -151,7 +153,7 @@ class DockerInstanceDeployer:
 
     def _preflight(self) -> bool:
         cfg = {**self.cfg, "remote_path": self.remote_path, "db_user": self.db_user, "db_name": self.db_name}
-        console.print("[dim]Pre-flight checks...[/dim]")
+        console.print("[dim]Pre-flight checks (repository probes can take up to 30 s)...[/dim]")
         checks = preflight.run(self.project_path, self.auth, cfg, env=self.env)
         print_checks(console, checks)
         self._warnings = [c for c in checks if c["level"] == "warn" and not c["ok"]]
@@ -233,7 +235,16 @@ class DockerInstanceDeployer:
 
         use_enterprise = self.cfg.get("use_enterprise", False)
         use_gitman = self.cfg.get("use_gitman", False)
-        gitman_config = self.cfg.get("gitman_config", "gitman.yml")
+        gitman_config = preflight.gitman_file(self.cfg)
+        install_script = (self.project_path / preflight.INSTALL_SCRIPT).is_file()
+        # Enterprise first, as in the local conf (edition_setup): Odoo resolves
+        # a module by the order of the path.
+        addons_path = ["/mnt/enterprise"] if use_enterprise else []
+        addons_path += local_addons.discover(self.project_path, "/mnt/extra-addons")
+        ssh_hosts = ["github.com"]
+        if use_gitman:
+            addons_path += gitman_module_paths(self.project_path / gitman_config, "/opt/odoo/gitman")
+            ssh_hosts += gitman_ssh_hosts(self.project_path / gitman_config)
         admin_passwd = creds["admin_passwd"]
         workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
         mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
@@ -258,6 +269,9 @@ class DockerInstanceDeployer:
             "use_enterprise": use_enterprise,
             "use_gitman": use_gitman,
             "gitman_config_file": gitman_config,
+            "install_script": use_gitman and install_script,
+            "ssh_hosts": list(dict.fromkeys(ssh_hosts)),
+            "addons_path": ",".join(addons_path),
             "pg": self.pg,
             # odoo.conf specific
             "admin_passwd": admin_passwd,
@@ -295,6 +309,8 @@ class DockerInstanceDeployer:
                 shutil.copy(local_gitman, tmp / gitman_config)
             else:
                 console.print(f"[yellow]⚠ Gitman config {gitman_config} not found locally — skipping[/yellow]")
+            if install_script:
+                shutil.copy(self.project_path / preflight.INSTALL_SCRIPT, tmp / preflight.INSTALL_SCRIPT)
 
     def _show_generated_files(self, tmp: Path):
         console.print("\n[bold]Generated files (dry-run):[/bold]")
@@ -365,18 +381,18 @@ class DockerInstanceDeployer:
         self._ssh(f"chmod 600 {self.remote_path}/{self.env}/odoo_pg_pass")
 
         # gitman config (if present in tmp)
-        gitman_config = self.cfg.get("gitman_config", "")
-        if gitman_config:
-            local_gitman = tmp / gitman_config
-            if local_gitman.exists():
-                if not self._rsync(str(local_gitman), f"{self.remote_path}/{gitman_config}"):
-                    console.print("[yellow]⚠ Failed to transfer gitman config[/yellow]")
+        if self.cfg.get("use_gitman"):
+            for name in (preflight.gitman_file(self.cfg), preflight.INSTALL_SCRIPT):
+                local = tmp / name
+                if local.exists() and not self._rsync(str(local), f"{self.remote_path}/{name}"):
+                    console.print(f"[red]✗ Failed to transfer {name}, which the Dockerfile copies[/red]")
+                    return False
 
-        # The build context is remote_path: enterprise is mounted at runtime and
-        # must not travel to the daemon, nor must {env}/ (odoo_pg_pass and the conf). extra-addons is NOT excluded, the
-        # Dockerfile COPYs it.
+        # The build context is remote_path: enterprise and extra-addons are
+        # mounted at runtime and must not travel to the daemon, nor must
+        # both environments' directories (odoo_pg_pass and the conf).
         dockerignore = tmp / ".dockerignore"
-        dockerignore.write_text(f"enterprise/\n{self.env}/\n")
+        dockerignore.write_text("enterprise/\nextra-addons/\nstage/\nprod/\n")
         if not self._rsync(str(dockerignore), f"{self.remote_path}/.dockerignore"):
             console.print("[red]✗ Failed to transfer .dockerignore[/red]")
             return False

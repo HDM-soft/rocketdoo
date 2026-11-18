@@ -23,6 +23,7 @@ import pytest
 pytestmark = pytest.mark.usefixtures("green_preflight")
 
 from rocketdoo.core.instance import config_manager, deployer_docker, secrets_store, ssh_utils
+from tests.conftest import GREEN_REMOTE
 
 
 class _RecordingRun:
@@ -526,7 +527,7 @@ class TestEnterprise:
         mkdir = run.index_of("/opt/odoo-prod/enterprise")
         assert mkdir < run.index_of("rsync")
 
-    def test_the_build_context_excludes_enterprise_but_not_what_the_dockerfile_copies(self, tmp_path, monkeypatch):
+    def test_the_build_context_excludes_what_is_mounted_at_runtime(self, tmp_path, monkeypatch):
         self._local(tmp_path)
         seen = {}
         recording = _RecordingRun()
@@ -542,6 +543,94 @@ class TestEnterprise:
         assert deployer.deploy()
         ignored = seen["content"].split()
         assert "enterprise/" in ignored
+        assert "extra-addons/" in ignored
+        assert "stage/" in ignored and "prod/" in ignored
         dockerfile = (deployer_docker._TEMPLATES_DIR / "Dockerfile.jinja").read_text()
-        assert "COPY extra-addons" in dockerfile
-        assert "extra-addons/" not in ignored and "extra-addons" not in ignored
+        assert "COPY extra-addons" not in dockerfile
+
+
+class TestGitman:
+    GITMAN = (
+        "location: external_addons\nsources:\n"
+        "  - repo: https://github.com/ingadhoc/odoo-argentina.git\n    name: l10n_ar\n"
+        "  - repo: https://github.com/OCA/web.git\n"
+    )
+
+    def _project(self, tmp_path, *, script=True):
+        (tmp_path / "gitman.yml").write_text(self.GITMAN)
+        if script:
+            (tmp_path / "install_dependencies.sh").write_text("#!/bin/sh\n")
+
+    def _render(self, tmp_path, tmp):
+        deployer = deployer_docker.DockerInstanceDeployer(
+            "prod", _config(use_gitman=True, gitman_config="gitman.yml"), tmp_path
+        )
+        deployer._render_templates(tmp)
+        return (
+            (tmp / "Dockerfile.prod").read_text(),
+            (tmp / "prod" / "config" / "odoo.conf").read_text(),
+        )
+
+    def test_every_source_reaches_the_addons_path(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        _, conf = self._render(tmp_path, out)
+        assert (
+            "addons_path = /mnt/extra-addons,/opt/odoo/gitman/external_addons/l10n_ar,/opt/odoo/gitman/external_addons/web\n"
+        ) in conf
+
+    def test_the_dependency_script_is_copied_when_it_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        dockerfile, _ = self._render(tmp_path, out)
+        assert "COPY install_dependencies.sh /usr/lib/python3/dist-packages/odoo/" in dockerfile
+        assert (out / "install_dependencies.sh").exists()
+        assert "/opt/odoo/gitman /etc/odoo" in dockerfile
+        assert "COPY extra-addons" not in dockerfile
+
+    def test_without_the_script_nothing_is_copied(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path, script=False)
+        out = tmp_path / "out"
+        out.mkdir()
+        dockerfile, _ = self._render(tmp_path, out)
+        assert "install_dependencies" not in dockerfile
+        assert not (out / "install_dependencies.sh").exists()
+
+    def test_the_script_travels_with_the_gitman_file(self, tmp_path, monkeypatch):
+        self._project(tmp_path)
+        repos = ["https://github.com/ingadhoc/odoo-argentina.git", "https://github.com/OCA/web.git"]
+        monkeypatch.setattr(deployer_docker.preflight, "remote_facts", lambda *a, **k: {**GREEN_REMOTE, "repo_ok": repos})
+        _, run = _deploy(tmp_path, monkeypatch, use_gitman=True, gitman_config="gitman.yml")
+        assert run.sent_containing("/opt/odoo-prod/install_dependencies.sh")
+        assert run.sent_containing("/opt/odoo-prod/gitman.yml")
+
+    def test_enterprise_leads_and_nested_addons_are_listed(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path)
+        nested = tmp_path / "addons" / "oca" / "mod"
+        nested.mkdir(parents=True)
+        (nested / "__manifest__.py").write_text("{}")
+        out = tmp_path / "out"
+        out.mkdir()
+        deployer = deployer_docker.DockerInstanceDeployer(
+            "prod", _config(use_gitman=True, gitman_config="gitman.yml", use_enterprise=True), tmp_path
+        )
+        deployer._render_templates(out)
+        conf = (out / "prod" / "config" / "odoo.conf").read_text()
+        assert (
+            "addons_path = /mnt/enterprise,/mnt/extra-addons,/mnt/extra-addons/oca,"
+            "/opt/odoo/gitman/external_addons/l10n_ar,/opt/odoo/gitman/external_addons/web\n"
+        ) in conf
+
+    def test_the_host_keys_of_every_ssh_source_are_scanned(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        (tmp_path / "gitman.yml").write_text("sources:\n  - repo: git@gitlab.com:g/a.git\n    name: a\n")
+        out = tmp_path / "out"
+        out.mkdir()
+        dockerfile, _ = self._render(tmp_path, out)
+        assert "ssh-keyscan github.com gitlab.com >>" in dockerfile

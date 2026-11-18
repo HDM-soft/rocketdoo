@@ -25,19 +25,19 @@ _EXCLUDE_PATTERNS = [
 ]
 
 
-def discover(project_root: Path | str) -> list[str]:
+def discover(project_root: Path | str, container_root: str = CONTAINER_ADDONS_ROOT) -> list[str]:
     """Container-side addons_path entries covering every module under addons/.
 
-    Always includes CONTAINER_ADDONS_ROOT, even when addons/ is empty or
+    Always includes `container_root`, even when addons/ is empty or
     missing, so this never degrades the current single-entry behavior.
     """
     addons_dir = Path(project_root) / "addons"
     if not addons_dir.is_dir():
-        return [CONTAINER_ADDONS_ROOT]
+        return [container_root]
 
     scanner = ModuleScanner(addons_dir, exclude_patterns=_EXCLUDE_PATTERNS)
 
-    entries = {CONTAINER_ADDONS_ROOT}
+    entries = {container_root}
     for module in scanner.scan():
         parent = module.relative_path.parent
         if str(parent) == ".":
@@ -47,7 +47,7 @@ def discover(project_root: Path | str) -> list[str]:
         # every run, growing the line without ever converging.
         if any(char in parent.as_posix() for char in ",\n\r"):
             continue
-        entries.add(f"{CONTAINER_ADDONS_ROOT}/{parent.as_posix()}")
+        entries.add(f"{container_root}/{parent.as_posix()}")
 
     return sorted(entries)
 

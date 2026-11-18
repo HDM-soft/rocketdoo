@@ -11,6 +11,8 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from rocketdoo.core.gitman_config import gitman_has_scripts, gitman_repos
+
 from .config_manager import (
     CRON_THREADS,
     DEBIAN_PG_SHARED_BUFFERS,
@@ -28,6 +30,7 @@ _REMOTE_TIMEOUT = 90
 _MIN_FREE_KB = 5 * 1024 * 1024
 _MIB = 1024 * 1024
 _GIT_PROBE_SECONDS = 30
+INSTALL_SCRIPT = "install_dependencies.sh"
 _TRAEFIK_NETWORK = "traefik-public"
 _SENTINEL = "done"
 
@@ -43,12 +46,21 @@ def _remote_path(cfg: dict) -> str:
     return cfg.get("remote_path", "/")
 
 
+def gitman_file(cfg: dict) -> str:
+    return cfg.get("gitman_config") or "gitman.yml"
+
+
 def local_facts(project_root: Path, cfg: dict) -> dict:
     root = Path(project_root)
     vps = cfg.get("vps", {})
+    docker_gitman = bool(cfg.get("use_gitman")) and cfg.get("type", "docker") == "docker"
     key = vps.get("ssh_key", "~/.ssh/id_rsa") if vps.get("auth_method", "ssh_key") == "ssh_key" else None
     return {
         "enterprise_dir": (root / "enterprise").is_dir(),
+        "gitman_file": (root / gitman_file(cfg)).is_file(),
+        "gitman_urls": list(dict.fromkeys(gitman_repos(root / gitman_file(cfg)))) if docker_gitman else [],
+        "gitman_scripts": docker_gitman and gitman_has_scripts(root / gitman_file(cfg)),
+        "install_script": (root / INSTALL_SCRIPT).is_file(),
         "agent_has_keys": _agent_has_keys(),
         "key_file": None if key is None else os.path.exists(os.path.expanduser(key)),
         "invalid_identifiers": invalid_identifiers(cfg.get("db_user", ""), cfg.get("db_name", "")),
@@ -83,10 +95,12 @@ def _remote_script(cfg: dict, repos: list[str]) -> str:
     for url in repos:
         quoted = shlex.quote(url)
         lines.append(
-            "GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=no'"
+            "(GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=no'"
             f" timeout {_GIT_PROBE_SECONDS} git ls-remote --exit-code {quoted} HEAD >/dev/null 2>&1"
-            f" && echo repo_ok={quoted} || echo repo_fail={quoted}"
+            f" && echo repo_ok={quoted} || echo repo_fail={quoted}) &"
         )
+    if repos:
+        lines.append("wait")
     lines += [f"echo {_SENTINEL}=yes", "exit 0", "}"]
     return "\n".join(lines) + "\n"
 
@@ -112,12 +126,13 @@ def remote_facts(auth: dict, cfg: dict, *, extra_repos: list[str] = ()) -> dict:
     vps = cfg["vps"]
     repos = [*_enterprise_urls(cfg), *extra_repos]
     cmd, env = build_ssh_cmd(auth, vps.get("port", 22), vps["user"], vps["host"], "bash -s", agent_forward=True)
+    timeout = _REMOTE_TIMEOUT + (_GIT_PROBE_SECONDS if repos else 0)
     try:
         result = subprocess.run(
-            cmd, input=_remote_script(cfg, repos), capture_output=True, text=True, timeout=_REMOTE_TIMEOUT, env=env
+            cmd, input=_remote_script(cfg, repos), capture_output=True, text=True, timeout=timeout, env=env
         )
     except subprocess.TimeoutExpired:
-        return _unreachable("timeout", f"no answer after {_REMOTE_TIMEOUT}s")
+        return _unreachable("timeout", f"no answer after {timeout}s")
     except (subprocess.SubprocessError, OSError) as error:
         return _unreachable("transport", str(error))
     if result.returncode != 0:
@@ -173,7 +188,7 @@ def _memory_check(cfg: dict, remote: dict, env: str) -> Check:
     )
 
 
-def _remote_checks(cfg: dict, remote: dict, env: str) -> list[Check]:
+def _remote_checks(cfg: dict, remote: dict, env: str, local: dict) -> list[Check]:
     docker = cfg.get("type", "docker") == "docker"
     path = _remote_path(cfg)
     user = remote.get("whoami")
@@ -232,6 +247,33 @@ def _remote_checks(cfg: dict, remote: dict, env: str) -> list[Check]:
                 "(ssh-add -l), or use enterprise_source: rsync.",
             )
         )
+    gitman_urls = local.get("gitman_urls", [])
+    if gitman_urls:
+        failed = [url for url in gitman_urls if url not in remote.get("repo_ok", [])]
+        if remote.get("git") != "yes":
+            checks.append(
+                _check(
+                    "gitman repositories",
+                    "warn",
+                    False,
+                    "git is not installed on the VPS host, so the repositories were not probed",
+                    "The build clones them inside the image with its own git, so this does not stop the deploy; "
+                    "install git on the host to have them checked first.",
+                )
+            )
+        else:
+            checks.append(
+                _check(
+                    "gitman repositories",
+                    "block",
+                    not failed,
+                    "every gitman repository is readable from the VPS"
+                    if not failed
+                    else f"git ls-remote failed: {', '.join(failed)}",
+                    "Load a key with access to those repositories in the local SSH agent (ssh-add -l): "
+                    "the build clones them with your forwarded key.",
+                )
+            )
     checks.append(_memory_check(cfg, remote, env))
     free = _int(remote.get("free_kb"))
     checks.append(
@@ -266,6 +308,53 @@ _CONNECTION_HINTS = {
 _CONNECTION_DEFAULT_HINT = "ssh failed: check host, port, user and key (or password) in .rkd/instance.yaml."
 
 
+def _gitman_checks(cfg: dict, local: dict) -> list[Check]:
+    if cfg.get("type", "docker") != "docker":
+        return [
+            _check(
+                "gitman",
+                "warn",
+                False,
+                "use_gitman is set on a native deploy: the repositories in the gitman file are not installed",
+                "The native deploy has no build step to run gitman in. Put those addons under addons/, "
+                "or deploy with type: docker.",
+            )
+        ]
+    name = gitman_file(cfg)
+    found = bool(local.get("gitman_file"))
+    checks = [
+        _check(
+            "gitman file",
+            "block",
+            found,
+            f"{name} found in the project" if found else f"{name} is missing from the project",
+            "The Dockerfile copies it into the image: create it (rkd init writes gitman.yaml) "
+            "or fix gitman_config in .rkd/instance.yaml.",
+        )
+    ]
+    if found:
+        script = bool(local.get("install_script"))
+        needed = bool(local.get("gitman_scripts"))
+        checks.append(
+            _check(
+                "gitman dependency script",
+                "block" if needed else "warn",
+                script,
+                f"{INSTALL_SCRIPT} found in the project"
+                if script
+                else (
+                    f"{INSTALL_SCRIPT} is missing and the gitman file declares scripts that run it"
+                    if needed
+                    else f"{INSTALL_SCRIPT} is missing from the project"
+                ),
+                "A failed script aborts gitman install (the build passes --force only for stage), and the "
+                "Python dependencies of the cloned repositories are not installed either way. "
+                f"Restore {INSTALL_SCRIPT} in the project root.",
+            )
+        )
+    return checks
+
+
 def _local_checks(cfg: dict, local: dict) -> list[Check]:
     invalid = local.get("invalid_identifiers", [])
     checks = [
@@ -298,6 +387,8 @@ def _local_checks(cfg: dict, local: dict) -> list[Check]:
                 "Copy odoo/enterprise into enterprise/ or set enterprise_source: clone.",
             )
         )
+    if cfg.get("use_gitman"):
+        checks += _gitman_checks(cfg, local)
     if _enterprise_urls(cfg):
         agent = bool(local.get("agent_has_keys"))
         checks.append(
@@ -328,7 +419,7 @@ def evaluate(cfg: dict, local: dict, remote: dict | None = None, *, env: str = "
         )
     )
     if reachable:
-        checks += _remote_checks(cfg, remote, env)
+        checks += _remote_checks(cfg, remote, env, local)
     return checks
 
 
@@ -342,4 +433,4 @@ def run(project_root: Path, auth: dict, cfg: dict, *, env: str) -> list[Check]:
     checks = evaluate(cfg, local, env=env)
     if blocking(checks):
         return checks
-    return evaluate(cfg, local, remote_facts(auth, cfg), env=env)
+    return evaluate(cfg, local, remote_facts(auth, cfg, extra_repos=local["gitman_urls"]), env=env)
