@@ -512,3 +512,70 @@ class TestWarningsSurviveAFailure:
 
         assert deployer.deploy() is False
         assert capsys.readouterr().out.count("memory:") == 2
+
+
+class TestGitman:
+    CFG = {"use_gitman": True, "gitman_config": "gitman.yaml"}
+
+    def test_a_declared_file_that_is_absent_blocks(self):
+        checks = _evaluate(_cfg(**self.CFG), _local(gitman_file=False))
+        assert checks["gitman file"]["ok"] is False
+        assert checks["gitman file"]["level"] == "block"
+
+    def test_a_missing_script_that_the_gitman_file_runs_blocks(self):
+        local = _local(gitman_file=True, install_script=False, gitman_scripts=True)
+        checks = preflight.evaluate(_cfg(**self.CFG), local)
+        assert [c["name"] for c in preflight.blocking(checks)] == ["gitman dependency script"]
+
+    def test_a_missing_script_that_nothing_runs_only_warns(self):
+        local = _local(gitman_file=True, install_script=False, gitman_scripts=False)
+        checks = preflight.evaluate(_cfg(**self.CFG), local)
+        assert not preflight.blocking(checks)
+        assert _by_name(checks)["gitman dependency script"]["ok"] is False
+
+    def test_no_git_on_the_host_warns_for_docker_because_the_build_has_its_own(self):
+        url = "https://h/a.git"
+        local = _local(gitman_file=True, install_script=True, gitman_urls=[url])
+        checks = preflight.evaluate(_cfg(**self.CFG), local, _remote(git="no", repo_ok=[]), env="prod")
+        assert _by_name(checks)["gitman repositories"]["level"] == "warn"
+        assert not preflight.blocking(checks)
+
+    def test_a_repository_the_vps_cannot_read_blocks(self):
+        url = "https://h/a.git"
+        local = _local(gitman_file=True, install_script=True, gitman_urls=[url])
+        checks = _evaluate(_cfg(**self.CFG), local, _remote(repo_ok=[], repo_fail=[url]))
+        assert checks["gitman repositories"]["level"] == "block"
+        assert url in checks["gitman repositories"]["detail"]
+        assert _evaluate(_cfg(**self.CFG), local, _remote(repo_ok=[url]))["gitman repositories"]["ok"] is True
+
+    def test_gitman_on_a_native_deploy_warns_and_does_not_block(self):
+        cfg = _cfg(type="native", sudo_user="x", **self.CFG)
+        checks = preflight.evaluate(cfg, _local())
+        assert not preflight.blocking(checks)
+        assert _by_name(checks)["gitman"]["level"] == "warn"
+        assert _by_name(checks)["gitman"]["ok"] is False
+
+    def test_the_urls_come_from_the_file_and_are_probed(self, tmp_path, monkeypatch):
+        (tmp_path / "gitman.yaml").write_text("sources:\n  - repo: https://h/a.git\n  - repo: https://h/a.git\n")
+        monkeypatch.setattr(preflight, "_agent_has_keys", lambda: True)
+        seen = {}
+        monkeypatch.setattr(preflight, "remote_facts", lambda *a, **k: seen.update(k) or _remote())
+        preflight.run(tmp_path, {}, _cfg(**self.CFG), env="prod")
+        assert seen["extra_repos"] == ["https://h/a.git"]
+
+    def test_the_probes_run_in_parallel_and_are_waited_for(self, monkeypatch):
+        script = preflight._remote_script(_cfg(), ["a", "b"])
+        assert script.count(") &\n") == 2
+        assert script.index("wait") < script.index("done=yes")
+
+    def test_the_session_timeout_allows_one_probe_not_one_per_repository(self, monkeypatch):
+        seen = {}
+
+        def run(cmd, **kwargs):
+            seen.update(kwargs)
+            return subprocess.CompletedProcess(cmd, 0, stdout="done=yes\n", stderr="")
+
+        monkeypatch.setattr(preflight.subprocess, "run", run)
+        auth = {"method": "ssh_key", "key_path": "/k", "password": None}
+        preflight.remote_facts(auth, _cfg(), extra_repos=["a", "b", "c"])
+        assert seen["timeout"] == preflight._REMOTE_TIMEOUT + preflight._GIT_PROBE_SECONDS

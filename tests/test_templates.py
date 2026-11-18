@@ -63,6 +63,9 @@ INSTANCE_CONTEXT = {
     "use_enterprise": False,
     "use_gitman": False,
     "gitman_config_file": "gitman.stage.yml",
+    "install_script": False,
+    "ssh_hosts": ["github.com"],
+    "addons_path": "/mnt/extra-addons",
     "pg": PG_PROFILES["small"],
 }
 

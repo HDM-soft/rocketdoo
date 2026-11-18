@@ -1,5 +1,5 @@
 [options]
-addons_path = /mnt/extra-addons{% if use_enterprise %},/mnt/enterprise{% endif %}
+addons_path = {{ addons_path }}
 
 data_dir = /var/lib/odoo
 admin_passwd = {{ admin_passwd }}
