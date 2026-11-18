@@ -433,10 +433,10 @@ Deploy a complete Odoo instance (stage and/or production) to a remote VPS. Suppo
 - **Native**: Installs Odoo via official nightly packages (`apt`), configures `/etc/odoo/odoo.conf`, and manages it as a `systemd` service.
 
 ```bash
-rkd instance init                    # Interactive configuration wizard
+rkd instance init                    # Interactive wizard: adds environments, never overwrites (--force starts over)
 rkd instance deploy --env stage      # Deploy to staging environment
 rkd instance deploy --env prod       # Deploy to production environment
-rkd instance deploy --env stage --dry-run  # Preview without executing
+rkd instance deploy --env stage --dry-run  # Pre-flight checks + preview; writes nothing
 rkd instance status                  # Show configured environments
 ```
 
@@ -447,8 +447,12 @@ rkd instance status                  # Show configured environments
 **PostgreSQL resource profiles:** small (<2 GB RAM), medium (4–8 GB), large (16+ GB)
 
 **Odoo tuning by environment:**
-- Stage: 2 workers, `log_level = info`, 1.5 GB memory limit
-- Production: 4 workers, `log_level = warn`, 2.5 GB memory limit, `proxy_mode = True`, `list_db = False`
+- Stage: 1 worker, `log_level = info`, 1 GiB hard / 768 MiB soft memory limit
+- Production: 2 workers, `log_level = warn`, 1.5 GiB hard / 1 GiB soft memory limit, `proxy_mode = True`, `list_db = False`
+
+**Pre-flight:** every deploy (and dry-run) first checks the VPS over SSH (Docker, sudo, disk, memory, repository access) and stops on blocking problems before touching anything.
+
+**Odoo Enterprise:** `enterprise_source: rsync` transfers your local `enterprise/` directory; `clone` clones `odoo/enterprise` on the VPS through your forwarded SSH agent, leaving no credentials on the server.
 
 > **Note:** Docker deployment requires a running SSH agent with the relevant keys loaded (`ssh-add -l`). Password authentication requires `sshpass` installed on your local machine; the password itself travels through the `SSHPASS` environment variable (`sshpass -e`), never as a command-line argument visible to other processes on the same host.
 
