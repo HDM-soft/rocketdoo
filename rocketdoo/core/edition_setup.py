@@ -1,6 +1,7 @@
 # rocketdoo/core/edition_setup.py
-import re
 from pathlib import Path
+
+from rocketdoo.core.odoo_conf import read_addons_path, write_addons_path
 
 
 def enable_enterprise_in_compose(compose_path: Path):
@@ -25,31 +26,13 @@ def add_enterprise_to_odoo_conf(odoo_conf_path: Path):
     if not odoo_conf_path.exists():
         raise FileNotFoundError(f"File not found: {odoo_conf_path}")
 
-    text = odoo_conf_path.read_text()
     enterprise_path = "/usr/lib/python3/dist-packages/odoo/enterprise"
 
-    # Search for the addons_path line and add enterprise
-    if "addons_path" in text:
-        # If addons_path already exists, add enterprise
-        pattern = r"(addons_path\s*=\s*)([^\n]+)"
+    current_paths = read_addons_path(odoo_conf_path)
+    if enterprise_path not in current_paths:
+        # Enterprise goes first: Odoo resolves a module by the order of the path.
+        write_addons_path(odoo_conf_path, [enterprise_path, *current_paths])
 
-        def replace_addons(match):
-            prefix = match.group(1)
-            current_paths = match.group(2).strip()
-
-            # Avoid duplicates
-            if enterprise_path in current_paths:
-                return match.group(0)
-
-            # Add enterprise to the beginning of the addons_path
-            return f"{prefix}{enterprise_path},{current_paths}"
-
-        text = re.sub(pattern, replace_addons, text)
-    else:
-        # If addons_path does not exist, add it
-        text += f"\naddons_path = {enterprise_path}\n"
-
-    odoo_conf_path.write_text(text)
     print(f"✅ Enterprise path added to {odoo_conf_path.name}")
 
 

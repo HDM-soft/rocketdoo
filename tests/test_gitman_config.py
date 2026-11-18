@@ -1,0 +1,81 @@
+"""Tests for core/gitman_config.py's addons_path merge.
+
+The gitman paths are appended to whatever addons_path already lists. `rkd
+gitman init` runs this over a project's live config/odoo.conf, so the option
+it edits may be a value spread over several indented lines (#267).
+"""
+
+import configparser
+
+from rocketdoo.core.gitman_config import update_odoo_conf_with_gitman
+
+SOURCES = [{"name": "odoo-argentina"}, {"name": "account-payment"}]
+EXTERNAL = "/usr/lib/python3/dist-packages/odoo/external_addons"
+
+
+def _entries(conf):
+    parser = configparser.ConfigParser()
+    parser.read(conf)
+    return [path.strip() for path in parser["options"]["addons_path"].split(",")]
+
+
+def test_appends_the_gitman_paths(tmp_path):
+    conf = tmp_path / "odoo.conf"
+    conf.write_text("[options]\naddons_path = /mnt/extra-addons\n")
+
+    update_odoo_conf_with_gitman(conf, SOURCES)
+
+    assert _entries(conf) == ["/mnt/extra-addons", f"{EXTERNAL}/odoo-argentina", f"{EXTERNAL}/account-payment"]
+
+
+def test_does_not_duplicate_a_path_already_listed(tmp_path):
+    conf = tmp_path / "odoo.conf"
+    conf.write_text("[options]\naddons_path = /mnt/extra-addons\n")
+
+    update_odoo_conf_with_gitman(conf, SOURCES)
+    update_odoo_conf_with_gitman(conf, SOURCES)
+
+    assert _entries(conf) == ["/mnt/extra-addons", f"{EXTERNAL}/odoo-argentina", f"{EXTERNAL}/account-payment"]
+
+
+def test_a_multi_line_addons_path_keeps_every_entry(tmp_path):
+    conf = tmp_path / "odoo.conf"
+    conf.write_text("[options]\naddons_path = /mnt/a,\n              /mnt/b\ndb_host = db\n")
+
+    update_odoo_conf_with_gitman(conf, SOURCES)
+
+    assert _entries(conf) == ["/mnt/a", "/mnt/b", f"{EXTERNAL}/odoo-argentina", f"{EXTERNAL}/account-payment"]
+    assert "db_host = db" in conf.read_text()
+
+
+def test_another_option_sharing_the_prefix_is_not_the_addons_path(tmp_path):
+    """`addons_path_backup` used to match, and got the gitman paths appended."""
+    conf = tmp_path / "odoo.conf"
+    conf.write_text("[options]\naddons_path_backup = /mnt/old\naddons_path = /mnt/extra-addons\n")
+
+    update_odoo_conf_with_gitman(conf, SOURCES)
+
+    assert "addons_path_backup = /mnt/old\n" in conf.read_text()
+    assert _entries(conf) == ["/mnt/extra-addons", f"{EXTERNAL}/odoo-argentina", f"{EXTERNAL}/account-payment"]
+
+
+def test_adds_the_option_when_absent(tmp_path):
+    conf = tmp_path / "odoo.conf"
+    conf.write_text("[options]\ndb_host = db\n")
+
+    update_odoo_conf_with_gitman(conf, SOURCES)
+
+    assert _entries(conf) == [f"{EXTERNAL}/odoo-argentina", f"{EXTERNAL}/account-payment"]
+
+
+def test_keeps_crlf_line_endings(tmp_path):
+    conf = tmp_path / "odoo.conf"
+    conf.write_bytes(b"[options]\r\naddons_path = /mnt/a\r\ndb_host = db\r\n")
+
+    update_odoo_conf_with_gitman(conf, [{"name": "odoo-argentina"}])
+
+    assert conf.read_bytes() == (
+        b"[options]\r\n"
+        b"addons_path = /mnt/a,/usr/lib/python3/dist-packages/odoo/external_addons/odoo-argentina\r\n"
+        b"db_host = db\r\n"
+    )
