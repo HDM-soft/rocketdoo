@@ -126,17 +126,19 @@ class DeployRequest(BaseModel):
 
 
 @router.post("/deploy")
-async def deploy_instance(body: DeployRequest):
+def deploy_instance(body: DeployRequest):
+    result = {"ok": False, "dry_run": body.dry_run, "env": body.env}
     try:
         from rocketdoo.core.instance.config_manager import InstanceConfigManager
 
-        manager = InstanceConfigManager()
-        if not manager.exists():
-            return {"ok": False, "error": "No instance.yaml found. Run rkd instance init first."}
-        env_cfg = manager.get_env(body.env)
         project_path = Path.cwd()
-        deploy_type = env_cfg.get("type", "docker")
-        if deploy_type == "docker":
+        manager = InstanceConfigManager(project_path)
+        if not manager.exists():
+            return {**result, "error": "No instance.yaml found. Run rkd instance init first."}
+        env_cfg = manager.get_env(body.env)
+        if not env_cfg:
+            return {**result, "error": f"Environment '{body.env}' is not configured in instance.yaml."}
+        if env_cfg.get("type", "docker") == "docker":
             from rocketdoo.core.instance.deployer_docker import DockerInstanceDeployer
 
             deployer = DockerInstanceDeployer(body.env, env_cfg, project_path)
@@ -145,6 +147,10 @@ async def deploy_instance(body: DeployRequest):
 
             deployer = NativeInstanceDeployer(body.env, env_cfg, project_path)
         ok = deployer.deploy(dry_run=body.dry_run)
-        return {"ok": ok}
+        blocking = [c for c in deployer.checks if c["level"] == "block" and not c["ok"]]
+        result.update(ok=ok, checks=deployer.checks)
+        if not ok and blocking:
+            result["error"] = "; ".join(f"{c['name']}: {c['detail']}" for c in blocking)
+        return result
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {**result, "error": str(e)}
