@@ -323,6 +323,16 @@ class TestTheConf:
         assert "proxy_mode = True\n" in run.stdin_of("tee /etc/odoo/odoo.conf")
 
 
+class TestTheConnectionBudget:
+    def test_the_pool_fits_a_stock_debian_cluster(self, tmp_path, monkeypatch):
+        _, run = _deploy(tmp_path, monkeypatch)
+        conf = run.stdin_of("tee /etc/odoo/odoo.conf")
+
+        assert "workers = 2\n" in conf
+        assert "db_maxconn = 23\n" in conf
+        assert "max_cron_threads = 1\n" in conf
+
+
 class TestTheSequence:
     def test_each_step_runs_after_the_one_it_depends_on(self, tmp_path, monkeypatch):
         _, run = _deploy(tmp_path, monkeypatch)

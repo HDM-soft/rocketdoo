@@ -20,7 +20,7 @@ import subprocess
 
 import pytest
 
-from rocketdoo.core.instance import deployer_docker, secrets_store, ssh_utils
+from rocketdoo.core.instance import config_manager, deployer_docker, secrets_store, ssh_utils
 
 
 class _RecordingRun:
@@ -220,6 +220,26 @@ class TestTheRenderedConf:
         rendered.mkdir()
         deployer._render_templates(rendered, allow_remote_lookup=False)
         return (rendered / "prod" / "config" / "odoo.conf").read_text()
+
+    def test_prod_defaults_fit_a_small_vps(self, tmp_path, monkeypatch):
+        conf = self._conf(tmp_path, monkeypatch)
+
+        assert "workers = 2\n" in conf
+        assert "limit_memory_hard = 1610612736\n" in conf
+        assert "db_maxconn = 11\n" in conf
+        assert "max_cron_threads = 1\n" in conf
+
+    def test_an_unlisted_environment_falls_back_to_the_stage_limits(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        deployer = deployer_docker.DockerInstanceDeployer("qa", _config(), tmp_path)
+        rendered = tmp_path / "rendered"
+        rendered.mkdir()
+        deployer._render_templates(rendered, allow_remote_lookup=False)
+
+        conf = (rendered / "qa" / "config" / "odoo.conf").read_text()
+        assert "workers = 1\n" in conf
+        assert "limit_memory_hard = 1073741824\n" in conf
+        assert "db_maxconn = 15\n" in conf
 
     def test_the_conf_declares_the_password_the_compose_mounts(self, tmp_path, monkeypatch):
         conf = self._conf(tmp_path, monkeypatch)
@@ -447,3 +467,12 @@ class TestTheScriptsRun:
 
         assert code == 1
         assert any("compose logs" in line for line in log), "the operator is left without the reason"
+
+
+class TestTheConnectionBudget:
+    @pytest.mark.parametrize(
+        ("max_connections", "workers", "expected"),
+        [(50, 1, 15), (50, 2, 11), (200, 1, 65), (200, 2, 48), (100, 2, 23), (10, 4, 8)],
+    )
+    def test_each_process_gets_an_equal_share_with_a_floor(self, max_connections, workers, expected):
+        assert config_manager.db_maxconn(max_connections, workers) == expected

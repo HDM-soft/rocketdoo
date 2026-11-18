@@ -23,6 +23,7 @@ from .config_manager import (
     MEMORY_BY_ENV,
     PG_PROFILES,
     WORKERS_BY_ENV,
+    db_maxconn,
     invalid_identifiers,
 )
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
@@ -73,7 +74,7 @@ class DockerInstanceDeployer:
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
 
-        self.pg = PG_PROFILES[env_config.get("pg_profile", "medium")]
+        self.pg = PG_PROFILES.get(env_config.get("pg_profile"), PG_PROFILES["small"])
         self.project_name = self._detect_project_name()
         self.slug = self.project_name.replace("-", "_").replace(" ", "_")
 
@@ -209,6 +210,8 @@ class DockerInstanceDeployer:
         use_gitman = self.cfg.get("use_gitman", False)
         gitman_config = self.cfg.get("gitman_config", "gitman.yml")
         admin_passwd = creds["admin_passwd"]
+        workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
+        mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
 
         ctx = {
             "environment": self.env,
@@ -233,10 +236,11 @@ class DockerInstanceDeployer:
             "pg": self.pg,
             # odoo.conf specific
             "admin_passwd": admin_passwd,
-            "workers": WORKERS_BY_ENV.get(self.env, 2),
+            "workers": workers,
             "log_level": LOG_LEVEL_BY_ENV.get(self.env, "info"),
-            "limit_memory_hard": MEMORY_BY_ENV[self.env]["hard"],
-            "limit_memory_soft": MEMORY_BY_ENV[self.env]["soft"],
+            "limit_memory_hard": mem["hard"],
+            "limit_memory_soft": mem["soft"],
+            "db_maxconn": db_maxconn(self.pg["max_connections"], workers),
         }
 
         # Dockerfile.{env}
