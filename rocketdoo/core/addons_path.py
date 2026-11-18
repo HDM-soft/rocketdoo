@@ -4,14 +4,17 @@ Odoo's addons_path is a static, comma-separated list of directories that each
 hold modules directly; a nested addons/oca/mod is invisible to Odoo unless
 .../extra-addons/oca is listed too. discover() finds those directories and
 ensure_addons_path() merges them into an existing config/odoo.conf without
-touching anything else in the file.
+touching any other option in the file.
 """
 
 from pathlib import Path
 
 from rocketdoo.core.module_scanner import ModuleScanner
+from rocketdoo.core.odoo_conf import read_addons_path, write_addons_path
 
 CONTAINER_ADDONS_ROOT = "/usr/lib/python3/dist-packages/odoo/extra-addons"
+
+COLLAPSED = "collapsed to a single line"
 
 _EXCLUDE_PATTERNS = [
     "*/tests/*",
@@ -59,16 +62,6 @@ def _is_managed(path: str) -> bool:
     return path == CONTAINER_ADDONS_ROOT or path.startswith(f"{CONTAINER_ADDONS_ROOT}/")
 
 
-def _parse_addons_path(lines: list[str]) -> tuple[int | None, list[str]]:
-    for index, line in enumerate(lines):
-        key, sep, _ = line.partition("=")
-        if sep and key.strip() == "addons_path":
-            _, _, value = line.partition("=")
-            return index, [path.strip() for path in value.split(",") if path.strip()]
-
-    return None, []
-
-
 def missing_entries(project_root: Path | str) -> list[str]:
     """Discovered directories the project's addons_path does not list yet.
 
@@ -79,24 +72,26 @@ def missing_entries(project_root: Path | str) -> list[str]:
     if not odoo_conf.exists():
         return []
 
-    _, current_paths = _parse_addons_path(odoo_conf.read_text().splitlines())
+    current_paths = read_addons_path(odoo_conf)
     return [path for path in discover(project_root) if path not in current_paths]
 
 
 def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
-    """Merge discover() into config/odoo.conf's addons_path line.
+    """Merge discover() into config/odoo.conf's addons_path option.
 
     Returns (action, changes):
         "missing" - config/odoo.conf does not exist, nothing written.
-        "ok"      - addons_path already covers discover() exactly, nothing written.
-        "updated" - the addons_path line was rewritten; changes lists the
-                    entries added ("+path") and removed ("-path").
+        "ok"      - addons_path already said exactly this, nothing written.
+        "updated" - the addons_path option was rewritten; changes lists the
+                    entries added ("+path") and removed ("-path"), or
+                    COLLAPSED when only the option's layout changed.
         "failed"  - the file could not be written; changes holds the reason.
 
     Entries outside CONTAINER_ADDONS_ROOT (Odoo's default, enterprise,
     Gitman's external_addons, user paths) are kept as-is, in their original
-    order and position. Only the managed block is replaced,
-    and only the addons_path line is touched.
+    order and position. Only the managed block is replaced, and only the
+    addons_path option is touched -- a value spread over several lines is
+    rewritten as one, which is also what repairs a value an older rkd broke.
     """
     project_root = Path(project_root)
     odoo_conf = project_root / "config" / "odoo.conf"
@@ -104,47 +99,41 @@ def ensure_addons_path(project_root: Path | str) -> tuple[str, list[str]]:
         return "missing", []
 
     discovered = discover(project_root)
-    # newline="" keeps \r\n intact: rewriting one line must not convert the
-    # line endings of a config written on Windows.
-    with odoo_conf.open(encoding="utf-8", newline="") as handle:
-        text = handle.read()
-    ends_with_newline = text.endswith(("\n", "\r"))
-    newline = "\r\n" if "\r\n" in text else "\n"
-    lines = text.splitlines()
-
-    line_index, current_paths = _parse_addons_path(lines)
+    current_paths = read_addons_path(odoo_conf)
     managed = [path for path in current_paths if _is_managed(path)]
-    kept = [path for path in current_paths if not _is_managed(path)]
 
-    if managed == discovered:
-        return "ok", []
-
-    insert_at = 0
+    # A managed entry that is still discovered stays exactly where it is, so a
+    # foreign path listed between two of ours keeps its place in the order Odoo
+    # resolves modules by. What is new goes behind the last managed entry, or
+    # at the end when the option lists none of ours yet.
+    new_paths: list[str] = []
+    pending = list(discovered)
+    insert_at = None
     for path in current_paths:
-        if _is_managed(path):
-            break
-        insert_at += 1
-    new_paths = kept[:insert_at] + discovered + kept[insert_at:]
+        if not _is_managed(path):
+            new_paths.append(path)
+            continue
+        if insert_at is None:
+            insert_at = len(new_paths)
+        if path in pending:
+            new_paths.append(path)
+            pending.remove(path)
+            insert_at = len(new_paths)
+    if insert_at is None:
+        insert_at = len(new_paths)
+    new_paths[insert_at:insert_at] = pending
 
     changes = [f"+{path}" for path in discovered if path not in managed]
     changes += [f"-{path}" for path in managed if path not in discovered]
 
-    new_line = f"addons_path = {','.join(new_paths)}"
-    if line_index is None:
-        lines.append(new_line)
-    else:
-        lines[line_index] = new_line
-
-    new_text = newline.join(lines)
-    if ends_with_newline or line_index is None:
-        new_text += newline
-
     try:
-        with odoo_conf.open("w", encoding="utf-8", newline="") as handle:
-            handle.write(new_text)
+        written = write_addons_path(odoo_conf, new_paths)
     except OSError as error:
         # Called from `rkd up` and from the GUI: a config we cannot write is
         # a reason to warn, never a reason to leave the project down.
         return "failed", [str(error)]
 
-    return "updated", changes
+    if not written:
+        return "ok", []
+
+    return "updated", changes or [COLLAPSED]

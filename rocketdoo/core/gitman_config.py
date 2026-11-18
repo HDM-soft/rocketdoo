@@ -2,6 +2,8 @@ from pathlib import Path
 
 import yaml
 
+from rocketdoo.core.odoo_conf import read_addons_path, write_addons_path
+
 
 def generate_gitman_yaml(sources=None, output_path=None):
     """
@@ -50,35 +52,11 @@ def update_odoo_conf_with_gitman(odoo_conf_path, gitman_sources):
     if not odoo_conf_path.exists():
         raise FileNotFoundError(f"File not found: {odoo_conf_path}")
 
-    lines = odoo_conf_path.read_text().splitlines()
-
     # Generate external_addons paths
     new_paths = [f"/usr/lib/python3/dist-packages/odoo/external_addons/{source['name']}" for source in gitman_sources]
 
-    # Find and update the addons_path line
-    updated = False
-    for i, line in enumerate(lines):
-        if line.strip().startswith("addons_path"):
-            # Extract current value
-            current_value = line.split("=", 1)[1].strip()
-            current_paths = [p.strip() for p in current_value.split(",")]
-
-            # Add only paths that don't already exist
-            for new_path in new_paths:
-                if new_path not in current_paths:
-                    current_paths.append(new_path)
-
-            # Rebuild the line
-            lines[i] = f"addons_path = {','.join(current_paths)}"
-            updated = True
-            break
-
-    # If addons_path didn't exist, add it
-    if not updated:
-        lines.append(f"addons_path = {','.join(new_paths)}")
-
-    # Save the file
-    odoo_conf_path.write_text("\n".join(lines) + "\n")
+    current_paths = read_addons_path(odoo_conf_path)
+    write_addons_path(odoo_conf_path, current_paths + [path for path in new_paths if path not in current_paths])
 
 
 def extract_repo_name_from_url(url):
