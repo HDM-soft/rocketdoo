@@ -41,6 +41,7 @@ PURE_CORE = [
     "core/pack.py",
     "core/unpack.py",
     "core/instance/enterprise.py",
+    "core/instance/preflight.py",
 ]
 
 NO_CWD: list[str] = [
@@ -51,6 +52,7 @@ NO_CWD: list[str] = [
     "core/pack.py",
     "core/unpack.py",
     "core/instance/enterprise.py",
+    "core/instance/preflight.py",
 ]
 
 _FORBIDDEN_IMPORTS = {"click", "questionary", "rich", "typer"}

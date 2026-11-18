@@ -20,6 +20,8 @@ import subprocess
 
 import pytest
 
+pytestmark = pytest.mark.usefixtures("green_preflight")
+
 from rocketdoo.core.instance import config_manager, deployer_docker, secrets_store, ssh_utils
 
 
@@ -218,7 +220,8 @@ class TestTheRenderedConf:
         deployer = deployer_docker.DockerInstanceDeployer("prod", _config(**overrides), tmp_path)
         rendered = tmp_path / "rendered"
         rendered.mkdir()
-        deployer._render_templates(rendered, allow_remote_lookup=False)
+        monkeypatch.setattr(deployer, "_read_remote_pg_pass", lambda: None)
+        deployer._render_templates(rendered)
         return (rendered / "prod" / "config" / "odoo.conf").read_text()
 
     def test_prod_defaults_fit_a_small_vps(self, tmp_path, monkeypatch):
@@ -234,7 +237,8 @@ class TestTheRenderedConf:
         deployer = deployer_docker.DockerInstanceDeployer("qa", _config(), tmp_path)
         rendered = tmp_path / "rendered"
         rendered.mkdir()
-        deployer._render_templates(rendered, allow_remote_lookup=False)
+        monkeypatch.setattr(deployer, "_read_remote_pg_pass", lambda: None)
+        deployer._render_templates(rendered)
 
         conf = (rendered / "qa" / "config" / "odoo.conf").read_text()
         assert "workers = 1\n" in conf

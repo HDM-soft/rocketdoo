@@ -55,6 +55,7 @@ INSTANCE_CONTEXT = {
     "db_version": "15",
     "admin_passwd": "s3cr3t-admin",
     "workers": 1,
+    "max_cron_threads": 1,
     "db_maxconn": 15,
     "log_level": "info",
     "limit_memory_hard": 1073741824,

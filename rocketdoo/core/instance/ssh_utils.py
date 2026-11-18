@@ -8,7 +8,6 @@ Mirrors the auth pattern from core/deploy/vps.py:
 """
 
 import os
-import stat
 from getpass import getpass
 from pathlib import Path
 
@@ -61,13 +60,7 @@ def resolve_auth(vps_cfg: dict, env: str, project_path: Path) -> dict:
         if not password:
             raise ValueError("Password authentication selected but no password provided.")
 
-        # Persist securely for this session
-        secrets_dir = project_path / ".rkd" / "secrets"
-        secrets_dir.mkdir(parents=True, exist_ok=True)
-        secret_file = secrets_dir / f"instance_{env}.env"
-        secret_file.write_text(f"INSTANCE_{env.upper()}_PASSWORD={password}\n")
-        secret_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
-        console.print(f"[green]✔[/green] Password stored in {secret_file}")
+        console.print(f"[dim]To skip this prompt next time: export INSTANCE_{env.upper()}_PASSWORD=...[/dim]")
 
     if not check_sshpass():
         raise RuntimeError("Password authentication requires 'sshpass'.\nInstall it with: sudo apt install sshpass")

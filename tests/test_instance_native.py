@@ -21,6 +21,8 @@ import time
 import uuid
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("green_preflight")
 import yaml
 from click.testing import CliRunner
 
