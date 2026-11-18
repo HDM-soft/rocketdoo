@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 AuthMethod = Literal["ssh_key", "password"]
 DeploymentType = Literal["docker", "native"]
+EnterpriseSource = Literal["rsync", "clone"]
 PGProfileName = Literal["small", "medium", "large"]
 
 # Flat keys the GUI used, mapped onto the canonical names.
@@ -98,6 +99,7 @@ class InstanceEnvironment(BaseModel):
     proxy_mode: bool = False
 
     use_enterprise: bool = False
+    enterprise_source: EnterpriseSource = "rsync"
     use_gitman: bool = False
     gitman_config: str = ""
 
@@ -146,7 +148,7 @@ class InstanceEnvironment(BaseModel):
     @property
     def is_deployable(self) -> bool:
         """Whether a deploy could be attempted with what is configured."""
-        return self.vps.is_complete and bool(self.domain)
+        return self.vps.is_complete and (self.type == "native" or bool(self.domain))
 
     def missing_fields(self) -> list[str]:
         """Which required values are still empty, for actionable errors."""
@@ -157,7 +159,7 @@ class InstanceEnvironment(BaseModel):
             missing.append("vps.ssh_key")
         if self.vps.auth_method == "password" and not self.vps.password:
             missing.append("vps.password")
-        if not self.domain:
+        if self.type != "native" and not self.domain:
             missing.append("domain")
         return missing
 
