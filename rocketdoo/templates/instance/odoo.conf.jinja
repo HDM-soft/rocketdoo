@@ -9,12 +9,13 @@ db_port = 5432
 db_user = {{ db_user }}
 db_password = {{ db_password }}
 db_name = {{ db_name }}
-db_maxconn = 64
+db_maxconn = {{ db_maxconn }}
 
 log_level = {{ log_level }}
 logfile = /var/log/odoo/odoo-server.log
 
 workers = {{ workers }}
+max_cron_threads = 1
 gevent_port = 8072
 
 limit_memory_hard = {{ limit_memory_hard }}

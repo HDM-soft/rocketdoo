@@ -62,12 +62,26 @@ PG_PROFILES: dict[str, dict] = {
     },
 }
 
-WORKERS_BY_ENV = {"stage": 2, "prod": 4}
+WORKERS_BY_ENV = {"stage": 1, "prod": 2}
 LOG_LEVEL_BY_ENV = {"stage": "info", "prod": "warn"}
+# Odoo applies limit_memory_* to each worker, not to the whole server, so
+# the totals are roughly workers x hard limit plus PostgreSQL's own share.
 MEMORY_BY_ENV = {
-    "stage": {"hard": 1_610_612_736, "soft": 1_073_741_824},  # 1.5 / 1 GB
-    "prod": {"hard": 2_684_354_560, "soft": 2_147_483_648},  # 2.5 / 2 GB
+    "stage": {"hard": 1_073_741_824, "soft": 805_306_368},  # 1 GiB / 768 MiB
+    "prod": {"hard": 1_610_612_736, "soft": 1_073_741_824},  # 1.5 GiB / 1 GiB
 }
+
+# The native deployer does not tune postgresql.conf, so this is what a stock
+# Debian cluster allows.
+DEBIAN_PG_MAX_CONNECTIONS = 100
+
+
+def db_maxconn(pg_max_connections: int, workers: int) -> int:
+    """Connections each Odoo process may open without exhausting PostgreSQL.
+
+    The extra 2 are the cron and gevent processes; 5 are left for admin use.
+    """
+    return max(8, (pg_max_connections - 5) // (workers + 2))
 
 
 def _random_password(length: int = 24) -> str:

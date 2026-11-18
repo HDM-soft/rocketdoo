@@ -20,7 +20,14 @@ from pathlib import Path
 
 from rich.console import Console
 
-from .config_manager import LOG_LEVEL_BY_ENV, MEMORY_BY_ENV, WORKERS_BY_ENV, invalid_identifiers
+from .config_manager import (
+    DEBIAN_PG_MAX_CONNECTIONS,
+    LOG_LEVEL_BY_ENV,
+    MEMORY_BY_ENV,
+    WORKERS_BY_ENV,
+    db_maxconn,
+    invalid_identifiers,
+)
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
@@ -205,9 +212,9 @@ class NativeInstanceDeployer:
     def _configure_odoo(self) -> bool:
         admin_passwd = self._resolve_admin_passwd()
         db_password = self._resolve_db_password()
-        workers = WORKERS_BY_ENV.get(self.env, 2)
+        workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
         log_level = LOG_LEVEL_BY_ENV.get(self.env, "info")
-        mem = MEMORY_BY_ENV[self.env]
+        mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
         use_enterprise = self.cfg.get("use_enterprise", False)
         # Nothing stands in front of a native deploy today (Traefik for this
         # path is #211), and with proxy_mode on Odoo trusts the X-Forwarded-*
@@ -228,10 +235,11 @@ class NativeInstanceDeployer:
             f"db_user = {self.db_user}\n"
             f"db_password = {db_password}\n"
             f"db_name = {self.db_name}\n"
-            "db_maxconn = 64\n"
+            f"db_maxconn = {db_maxconn(DEBIAN_PG_MAX_CONNECTIONS, workers)}\n"
             f"log_level = {log_level}\n"
             "logfile = /var/log/odoo/odoo-server.log\n"
             f"workers = {workers}\n"
+            "max_cron_threads = 1\n"
             "gevent_port = 8072\n"
             f"limit_memory_hard = {mem['hard']}\n"
             f"limit_memory_soft = {mem['soft']}\n"
