@@ -81,6 +81,7 @@ class NativeInstanceDeployer:
 
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
+        self.checks: list[dict] = []
         self._warnings: list[dict] = []
 
     # ─── public API ──────────────────────────────────────────────────────────
@@ -116,6 +117,7 @@ class NativeInstanceDeployer:
         console.print("[dim]Pre-flight checks...[/dim]")
         checks = preflight.run(self.project_path, self.auth, cfg, env=self.env)
         print_checks(console, checks)
+        self.checks = checks
         self._warnings = [c for c in checks if c["level"] == "warn" and not c["ok"]]
         return not preflight.blocking(checks)
 

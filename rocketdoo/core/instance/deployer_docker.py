@@ -85,6 +85,7 @@ class DockerInstanceDeployer:
         self.pg = PG_PROFILES.get(env_config.get("pg_profile"), PG_PROFILES["small"])
         self.project_name = self._detect_project_name()
         self.slug = self.project_name.replace("-", "_").replace(" ", "_")
+        self.checks: list[dict] = []
         self._warnings: list[dict] = []
 
     # ─── public API ──────────────────────────────────────────────────────────
@@ -156,6 +157,7 @@ class DockerInstanceDeployer:
         console.print("[dim]Pre-flight checks (repository probes can take up to 30 s)...[/dim]")
         checks = preflight.run(self.project_path, self.auth, cfg, env=self.env)
         print_checks(console, checks)
+        self.checks = checks
         self._warnings = [c for c in checks if c["level"] == "warn" and not c["ok"]]
         return not preflight.blocking(checks)
 
