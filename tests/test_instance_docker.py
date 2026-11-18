@@ -476,3 +476,68 @@ class TestTheConnectionBudget:
     )
     def test_each_process_gets_an_equal_share_with_a_floor(self, max_connections, workers, expected):
         assert config_manager.db_maxconn(max_connections, workers) == expected
+
+
+class TestEnterprise:
+    def _local(self, tmp_path):
+        (tmp_path / "enterprise").mkdir()
+
+    def test_rsync_sends_the_local_checkout_without_its_git_history(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        assert ok
+        calls = [a for a, _ in run.calls if a[0] == "rsync" and a[-1].endswith("/opt/odoo-prod/enterprise/")]
+        assert calls
+        assert "--exclude" in calls[0] and ".git/" in calls[0]
+        assert calls[0][-2] == f"{tmp_path}/enterprise/"
+
+    def test_clone_forwards_the_agent_and_pins_the_series(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone")
+        assert ok
+        args, kwargs = run.calls[run.index_of("git clone")]
+        assert "-A" in args
+        assert "git clone --depth 1 --branch 18.0 git@github.com:odoo/enterprise.git" in kwargs["input"]
+
+    def test_a_series_written_without_the_minor_is_still_a_branch(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone", odoo_version="19")
+        assert ok
+        assert "--branch 19.0 " in run.script_with("git clone")
+
+    def test_rsync_without_a_local_checkout_stops_before_touching_the_vps(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        assert not ok
+        assert not run.calls
+        assert not [a for a, _ in run.calls if a[0] == "rsync" and a[-1].endswith("/opt/odoo-prod/enterprise/")]
+
+    def test_nothing_is_synced_without_use_enterprise(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        ok, run = _deploy(tmp_path, monkeypatch, enterprise_source="clone")
+        assert ok
+        assert not run.sent_containing("git clone")
+        assert not run.sent_containing("enterprise/")
+
+    def test_the_destination_is_created_before_anything_is_written_to_it(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        _, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        mkdir = run.index_of("/opt/odoo-prod/enterprise")
+        assert mkdir < run.index_of("rsync")
+
+    def test_the_build_context_excludes_enterprise_but_not_what_the_dockerfile_copies(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        seen = {}
+        recording = _RecordingRun()
+
+        def run(args, **kwargs):
+            if args[0] == "rsync" and args[-1].endswith("/.dockerignore"):
+                seen["content"] = open(args[-2]).read()
+            return recording(args, **kwargs)
+
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        monkeypatch.setattr(deployer_docker.subprocess, "run", run)
+        deployer = deployer_docker.DockerInstanceDeployer("prod", _config(use_enterprise=True), tmp_path)
+        assert deployer.deploy()
+        ignored = seen["content"].split()
+        assert "enterprise/" in ignored
+        dockerfile = (deployer_docker._TEMPLATES_DIR / "Dockerfile.jinja").read_text()
+        assert "COPY extra-addons" in dockerfile
+        assert "extra-addons/" not in ignored and "extra-addons" not in ignored

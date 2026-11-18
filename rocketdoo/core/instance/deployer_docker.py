@@ -26,6 +26,7 @@ from .config_manager import (
     db_maxconn,
     invalid_identifiers,
 )
+from .enterprise import branch, clone_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
@@ -70,6 +71,7 @@ class DockerInstanceDeployer:
         self.user = vps["user"]
         self.remote_path = env_config.get("remote_path", f"/opt/odoo-{env}")
         self.auth = resolve_auth(vps, env, project_path)
+        self.enterprise_path = f"{self.remote_path}/enterprise"
 
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
@@ -91,6 +93,9 @@ class DockerInstanceDeployer:
                 "[dim]db_user and db_name may hold up to 63 letters, digits and underscores, "
                 "and cannot start with a digit.[/dim]"
             )
+            return False
+
+        if self._enterprise_missing_locally():
             return False
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -303,6 +308,8 @@ class DockerInstanceDeployer:
             f"{self.remote_path}/extra-addons",
             f"{self.remote_path}/{self.env}/config",
         ]
+        if self.cfg.get("use_enterprise", False):
+            dirs.append(self.enterprise_path)
         if not self._ssh(ensure_dirs_command(dirs, self.remote_path, '"$(id -u):$(id -g)"')):
             console.print(f"[red]✗ Could not create {self.remote_path} on the VPS[/red]")
             return False
@@ -344,6 +351,18 @@ class DockerInstanceDeployer:
                 if not self._rsync(str(local_gitman), f"{self.remote_path}/{gitman_config}"):
                     console.print("[yellow]⚠ Failed to transfer gitman config[/yellow]")
 
+        # The build context is remote_path: enterprise is mounted at runtime and
+        # must not travel to the daemon, nor must {env}/ (odoo_pg_pass and the conf). extra-addons is NOT excluded, the
+        # Dockerfile COPYs it.
+        dockerignore = tmp / ".dockerignore"
+        dockerignore.write_text(f"enterprise/\n{self.env}/\n")
+        if not self._rsync(str(dockerignore), f"{self.remote_path}/.dockerignore"):
+            console.print("[red]✗ Failed to transfer .dockerignore[/red]")
+            return False
+
+        if not self._sync_enterprise():
+            return False
+
         # extra-addons (from project's addons/ dir)
         addons_dir = self.project_path / "addons"
         if addons_dir.exists():
@@ -351,6 +370,45 @@ class DockerInstanceDeployer:
             if not self._rsync(f"{addons_dir}/", f"{self.remote_path}/extra-addons/"):
                 console.print("[yellow]⚠ Failed to sync extra-addons[/yellow]")
 
+        return True
+
+    def _enterprise_missing_locally(self) -> bool:
+        if not self.cfg.get("use_enterprise", False) or self.cfg.get("enterprise_source", "rsync") != "rsync":
+            return False
+        local = self.project_path / "enterprise"
+        # Continuing would start an Odoo whose addons_path points at an empty
+        # directory, which is the defect this step exists to close.
+        if local.is_dir():
+            return False
+        console.print(
+            f"[red]✗ use_enterprise is on but {local} does not exist. "
+            "Copy odoo/enterprise there or set enterprise_source: clone.[/red]"
+        )
+        return True
+
+    def _sync_enterprise(self) -> bool:
+        if not self.cfg.get("use_enterprise", False):
+            return True
+
+        if self.cfg.get("enterprise_source", "rsync") == "clone":
+            console.print("[dim]  Cloning odoo/enterprise on the VPS...[/dim]")
+            try:
+                script = clone_script(self.enterprise_path, branch(self.cfg.get("odoo_version", "17.0")))
+            except ValueError as error:
+                console.print(f"[red]✗ {error}[/red]")
+                return False
+            if not self._ssh("bash -s", agent_forward=True, timeout=1800, input=script):
+                console.print(
+                    "[red]✗ The odoo/enterprise clone failed; see the remote output above. If it is access, the SSH agent must hold a key with access to the repository (ssh-add -l).[/red]"
+                )
+                return False
+            return True
+
+        local = self.project_path / "enterprise"
+        console.print("[dim]  Syncing enterprise (the first run transfers hundreds of MB)...[/dim]")
+        if not self._rsync(f"{local}/", f"{self.enterprise_path}/", ["--exclude", ".git/"]):
+            console.print("[red]✗ Failed to sync enterprise[/red]")
+            return False
         return True
 
     def _build(self) -> bool:

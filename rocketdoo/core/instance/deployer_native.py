@@ -8,7 +8,7 @@ Install flow:
   3. apt install odoo
   4. Create the PostgreSQL role Odoo authenticates as
   5. Configure /etc/odoo/odoo.conf
-  6. rsync extra-addons to remote addons path
+  6. rsync extra-addons to remote addons path, and sync Enterprise
   7. Create and initialise the database Odoo serves, and set the admin password
   8. Enable + start odoo systemd service
   9. Verify Odoo answers
@@ -28,6 +28,7 @@ from .config_manager import (
     db_maxconn,
     invalid_identifiers,
 )
+from .enterprise import branch, clone_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
@@ -70,6 +71,7 @@ class NativeInstanceDeployer:
 
         self.odoo_version = env_config.get("odoo_version", "17.0")
         self.remote_addons = env_config.get("remote_path", "/opt/odoo/extra-addons")
+        self.enterprise_path = "/opt/odoo/enterprise"
         self.odoo_conf_path = "/etc/odoo/odoo.conf"
         self.service_name = "odoo"
 
@@ -88,6 +90,9 @@ class NativeInstanceDeployer:
             console.print(
                 "[dim]db_user and db_name may hold up to 63 letters, digits and underscores, and cannot start with a digit.[/dim]"
             )
+            return False
+
+        if self._enterprise_missing_locally():
             return False
 
         if dry_run:
@@ -109,6 +114,11 @@ class NativeInstanceDeployer:
         `deploy()` runs this list and `_show_plan()` prints it, so a dry run
         cannot describe a sequence other than the one that would execute.
         """
+        enterprise = (
+            [(f"Syncing Enterprise → {self.enterprise_path}", self._sync_enterprise)]
+            if self.cfg.get("use_enterprise", False)
+            else []
+        )
         return [
             ("Installing system dependencies + PostgreSQL", self._install_system_deps),
             (f"Adding Odoo {self.odoo_version} nightly repository", self._add_odoo_repo),
@@ -116,6 +126,7 @@ class NativeInstanceDeployer:
             (f"Ensuring PostgreSQL role {self.db_user}", self._ensure_db_role),
             (f"Writing {self.odoo_conf_path}", self._configure_odoo),
             (f"Syncing extra-addons → {self.remote_addons}", self._sync_addons),
+            *enterprise,
             (f"Ensuring database {self.db_name}", self._ensure_database),
             (f"Enabling Odoo service ({self.service_name})", self._enable_service),
             ("Verifying Odoo answers", self._verify_odoo_answers),
@@ -223,7 +234,7 @@ class NativeInstanceDeployer:
 
         addons_path = self.remote_addons
         if use_enterprise:
-            addons_path += ",/opt/odoo/enterprise"
+            addons_path += f",{self.enterprise_path}"
 
         conf = (
             "[options]\n"
@@ -269,9 +280,47 @@ class NativeInstanceDeployer:
         if not self._ssh(ensure_dirs_command([self.remote_addons], self.remote_addons, self.user)):
             console.print(f"[red]✗ Could not create {self.remote_addons} on the VPS[/red]")
             return False
-        cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, f"{addons_dir}/", f"{self.remote_addons}/")
-        result = subprocess.run(cmd, env=env)
-        return result.returncode == 0
+        return self._rsync(f"{addons_dir}/", f"{self.remote_addons}/")
+
+    def _enterprise_missing_locally(self) -> bool:
+        if not self.cfg.get("use_enterprise", False) or self.cfg.get("enterprise_source", "rsync") != "rsync":
+            return False
+        local = self.project_path / "enterprise"
+        # Continuing would start an Odoo whose addons_path points at an empty
+        # directory, which is the defect this step exists to close.
+        if local.is_dir():
+            return False
+        console.print(
+            f"[red]✗ use_enterprise is on but {local} does not exist. "
+            "Copy odoo/enterprise there or set enterprise_source: clone.[/red]"
+        )
+        return True
+
+    def _sync_enterprise(self) -> bool:
+        if not self.cfg.get("use_enterprise", False):
+            return True
+
+        dest = self.enterprise_path
+        if not self._ssh(ensure_dirs_command([dest], dest, self.user)):
+            console.print(f"[red]✗ Could not create {dest} on the VPS[/red]")
+            return False
+
+        if self.cfg.get("enterprise_source", "rsync") == "clone":
+            try:
+                script = clone_script(dest, branch(self.odoo_version))
+            except ValueError as error:
+                console.print(f"[red]✗ {error}[/red]")
+                return False
+            if not self._ssh("bash -s", agent_forward=True, timeout=1800, input=script):
+                console.print(
+                    "[red]✗ The odoo/enterprise clone failed; see the remote output above. If it is access, the SSH agent must hold a key with access to the repository (ssh-add -l).[/red]"
+                )
+                return False
+            return True
+
+        local = self.project_path / "enterprise"
+        console.print("[dim]  The first run transfers hundreds of MB.[/dim]")
+        return self._rsync(f"{local}/", f"{dest}/", ["--exclude", ".git/"])
 
     def _resolve_admin_login_password(self) -> str:
         """
@@ -398,8 +447,12 @@ class NativeInstanceDeployer:
 
     # ─── helpers ─────────────────────────────────────────────────────────────
 
-    def _ssh(self, command: str, timeout: int = 300, input: str | None = None) -> bool:
-        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
+    def _rsync(self, local: str, remote: str, extra_opts: list[str] | None = None) -> bool:
+        cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, local, remote, extra_opts)
+        return subprocess.run(cmd, env=env).returncode == 0
+
+    def _ssh(self, command: str, timeout: int = 300, input: str | None = None, agent_forward: bool = False) -> bool:
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command, agent_forward=agent_forward)
         try:
             return subprocess.run(cmd, timeout=timeout, env=env, input=input, text=True).returncode == 0
         except subprocess.TimeoutExpired:

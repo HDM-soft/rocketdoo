@@ -134,6 +134,32 @@ class TestDeployability:
         assert env.missing_fields() == ["vps.password"]
 
 
+class TestNativeWithoutDomain:
+    def test_a_native_environment_does_not_need_a_domain(self):
+        env = InstanceEnvironment.model_validate({**NESTED, "type": "native", "domain": ""})
+        assert env.is_deployable is True
+        assert env.missing_fields() == []
+
+    def test_a_docker_environment_still_needs_one(self):
+        env = InstanceEnvironment.model_validate({**NESTED, "domain": ""})
+        assert env.is_deployable is False
+        assert env.missing_fields() == ["domain"]
+
+
+class TestEnterpriseSource:
+    def test_it_defaults_to_rsync(self):
+        assert InstanceEnvironment.model_validate(NESTED).enterprise_source == "rsync"
+
+    def test_clone_survives_a_round_trip(self):
+        config = InstanceConfig.model_validate({"environments": {"stage": {**NESTED, "enterprise_source": "clone"}}})
+        again = InstanceConfig.model_validate(config.to_yaml_dict())
+        assert again.environments["stage"].enterprise_source == "clone"
+
+    def test_an_unknown_source_is_rejected(self):
+        with pytest.raises(ValidationError):
+            InstanceEnvironment.model_validate({**NESTED, "enterprise_source": "ftp"})
+
+
 class TestDatabaseNaming:
     """Two environments that share a role also share a database (#248).
 

@@ -256,6 +256,11 @@ class TestInstanceTemplates:
         raw = render("instance/docker-compose.jinja", **{**INSTANCE_CONTEXT, "pg": PG_PROFILES[profile]})
         assert yaml.safe_load(raw)["services"]
 
+    def test_enterprise_is_mounted_from_next_to_the_compose_directory(self):
+        raw = render("instance/docker-compose.jinja", **{**INSTANCE_CONTEXT, "use_enterprise": True})
+        volumes = yaml.safe_load(raw)["services"]["web"]["volumes"]
+        assert "../enterprise:/mnt/enterprise" in volumes
+
     def test_traefik_routes_to_the_domain(self, compose):
         assert "stage.example.com" in yaml.dump(compose)
 

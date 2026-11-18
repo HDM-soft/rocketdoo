@@ -22,7 +22,7 @@ services:
       - {{ project_name }}-{{ environment }}-data:/var/lib/odoo
       - ../extra-addons:/mnt/extra-addons
 {% if use_enterprise %}
-      - /opt/odoo/enterprise:/mnt/enterprise
+      - ../enterprise:/mnt/enterprise
 {% endif %}
       - ./config/odoo.conf:/etc/odoo/odoo.conf
     networks:
