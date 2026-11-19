@@ -8,6 +8,7 @@ Build flow (requires SSH agent for gitman private repos):
   VPS   → docker compose up -d
 """
 
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -149,6 +150,8 @@ class DockerInstanceDeployer:
                 console.print("[red]✗ Odoo did not answer after the deploy[/red]")
                 return False
             console.print("[green]✓[/green] Odoo answers")
+
+            self._probe_public_url()
 
         return True
 
@@ -589,6 +592,35 @@ class DockerInstanceDeployer:
                 "}\n"
             ),
         )
+
+    def _probe_public_url(self) -> None:
+        """
+        Ask the VPS itself whether the public URL answers. Never fatal: a
+        correct deploy can finish before Let's Encrypt has issued anything.
+
+        Step 7 stays as it is: it proves Odoo works, this proves the proxy
+        does, and only the first survives a redeploy with no domain.
+        """
+        domain = self.cfg.get("domain", "")
+        if not domain:
+            return
+        script = (
+            "{\n"
+            "for scheme in http https; do\n"
+            f"  code=$(curl -s -o /dev/null -w '%{{http_code}}' --max-time 10 \"$scheme://\"{shlex.quote(domain)})\n"
+            '  echo "$scheme=$code:$?"\n'
+            "done\n"
+            "exit 0\n"
+            "}\n"
+        )
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, "bash -s")
+        try:
+            out = subprocess.run(cmd, input=script, text=True, capture_output=True, timeout=60, env=env).stdout
+        except subprocess.TimeoutExpired:
+            out = ""
+        check = preflight.public_url_check(domain, out or "", env=self.env)
+        self.checks.append(check)
+        print_checks(console, [check])
 
     # ─── utils ───────────────────────────────────────────────────────────────
 

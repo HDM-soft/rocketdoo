@@ -253,12 +253,23 @@ def instance_deploy(env, dry_run, yes):
                 "[dim]Plain HTTP on port 8069: a native deploy has no reverse proxy yet.[/dim]"
             )
         else:
+            unanswered = [c for c in getattr(deployer, "checks", []) if c["name"] in ("traefik", "public url") and not c["ok"]]
+            if unanswered:
+                url_line = (
+                    f"[dim]URL (not answering yet):[/dim] [cyan underline]https://{domain}[/cyan underline]\n"
+                    f"[dim]Why        :[/dim] {unanswered[-1]['detail']}\n"
+                    f"[dim]Fix        :[/dim] [cyan]rkd instance traefik --env {env}[/cyan]\n"
+                )
+                note = "[dim]Odoo itself is running; the URL depends on Traefik, DNS and the certificate.[/dim]"
+            else:
+                url_line = f"[dim]URL        :[/dim] [cyan underline]https://{domain}[/cyan underline]\n"
+                note = "[dim]It may take a few minutes for Let's Encrypt to issue the certificate.[/dim]"
             body = (
                 f"[bold green]Deployment successful![/bold green]\n\n"
                 f"[dim]Environment:[/dim] {env}\n"
-                f"[dim]URL        :[/dim] [cyan underline]https://{domain}[/cyan underline]\n"
+                f"{url_line}"
                 f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env\n\n"
-                "[dim]It may take a few minutes for Let's Encrypt to issue the certificate.[/dim]"
+                f"{note}"
             )
         console.print(Panel(body, border_style="green", box=box.DOUBLE))
     else:

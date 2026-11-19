@@ -97,7 +97,7 @@ GREEN_REMOTE = {
     "git": "yes",
     "docker_ok": "yes",
     "compose": "2.29.0",
-    "traefik_network": "yes",
+    "traefik_attached": "yes",
     "traefik_running": "yes",
     "systemd": "yes",
     "repo_ok": ["git@github.com:odoo/enterprise.git"],

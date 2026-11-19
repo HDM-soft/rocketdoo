@@ -651,3 +651,57 @@ class TestGitman:
         auth = {"method": "ssh_key", "key_path": "/k", "password": None}
         preflight.remote_facts(auth, _cfg(), extra_repos=["a", "b", "c"])
         assert seen["timeout"] == preflight._REMOTE_TIMEOUT + preflight._GIT_PROBE_SECONDS
+
+
+class TestTheTraefikCheck:
+    def test_a_traefik_the_container_cannot_reach_is_told_apart_from_no_traefik(self):
+        absent = _evaluate(_cfg(domain="erp.example.com"), remote=_remote(traefik_running="no", traefik_attached="no"))
+        stranger = _evaluate(_cfg(domain="erp.example.com"), remote=_remote(traefik_attached="no"))
+
+        assert "no Traefik container" in absent["traefik"]["detail"]
+        assert "not attached" in stranger["traefik"]["detail"]
+        assert stranger["traefik"]["ok"] is False
+
+    def test_the_hint_names_the_command(self):
+        checks = _evaluate(_cfg(domain="erp.example.com"), remote=_remote(traefik_running="no"))
+
+        assert "rkd instance traefik --env prod" in checks["traefik"]["hint"]
+
+    def test_the_remote_script_asks_whether_traefik_is_on_the_network(self):
+        assert "traefik_attached=" in preflight._remote_script(_cfg(domain="erp.example.com"), [])
+
+    def test_the_attachment_probe_recognises_a_proxy_the_same_way_as_the_running_one(self):
+        """By image and case-insensitively, not by container name: docker's
+        `name` filter is case-sensitive, so a foreign proxy called `edge` read
+        as "not attached" while it was sitting on the network."""
+        script = preflight._remote_script(_cfg(domain="erp.example.com"), [])
+        probe = next(line for line in script.splitlines() if "traefik_attached=" in line)
+
+        assert "--filter name=" not in probe
+        assert f"--filter network={preflight._TRAEFIK_NETWORK}" in probe
+
+
+class TestThePublicUrlProbe:
+    @pytest.mark.parametrize(
+        "output, ok, fragment",
+        [
+            ("http=301:0\nhttps=200:0\n", True, "answers"),
+            ("http=301:0\nhttps=000:60\n", False, "certificate"),
+            ("http=301:0\nhttps=000:35\n", False, "certificate"),
+            ("http=404:0\nhttps=404:0\n", False, "does not reach Odoo"),
+            ("http=301:0\nhttps=502:0\n", False, "does not reach Odoo"),
+            ("http=000:7\nhttps=000:7\n", False, "nothing answers"),
+            ("", False, "nothing answers"),
+        ],
+    )
+    def test_the_four_states_are_told_apart(self, output, ok, fragment):
+        check = preflight.public_url_check("erp.example.com", output, env="prod")
+
+        assert check["ok"] is ok
+        assert fragment in check["detail"]
+        assert check["level"] == "warn"
+
+    def test_a_failure_points_at_the_command(self):
+        check = preflight.public_url_check("erp.example.com", "http=000:7\nhttps=000:7\n", env="stage")
+
+        assert "rkd instance traefik --env stage" in check["hint"]
