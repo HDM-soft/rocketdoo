@@ -670,6 +670,16 @@ class TestTheTraefikCheck:
     def test_the_remote_script_asks_whether_traefik_is_on_the_network(self):
         assert "traefik_attached=" in preflight._remote_script(_cfg(domain="erp.example.com"), [])
 
+    def test_the_attachment_probe_recognises_a_proxy_the_same_way_as_the_running_one(self):
+        """By image and case-insensitively, not by container name: docker's
+        `name` filter is case-sensitive, so a foreign proxy called `edge` read
+        as "not attached" while it was sitting on the network."""
+        script = preflight._remote_script(_cfg(domain="erp.example.com"), [])
+        probe = next(line for line in script.splitlines() if "traefik_attached=" in line)
+
+        assert "--filter name=" not in probe
+        assert f"--filter network={preflight._TRAEFIK_NETWORK}" in probe
+
 
 class TestThePublicUrlProbe:
     @pytest.mark.parametrize(

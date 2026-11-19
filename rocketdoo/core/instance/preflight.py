@@ -107,8 +107,8 @@ def _remote_script(cfg: dict, repos: list[str]) -> str:
             "echo docker_ok=$(docker info >/dev/null 2>&1 && echo yes || echo no)",
             "echo compose=$(docker compose version --short 2>/dev/null </dev/null)",
             "echo traefik_running=$(docker ps 2>/dev/null | grep -qi traefik && echo yes || echo no)",
-            f"echo traefik_attached=$(docker ps -q --filter network={_TRAEFIK_NETWORK} --filter name=traefik"
-            " 2>/dev/null | grep -q . && echo yes || echo no)",
+            f"echo traefik_attached=$(docker ps --filter network={_TRAEFIK_NETWORK} 2>/dev/null"
+            " | grep -qi traefik && echo yes || echo no)",
         ]
     for url in repos:
         quoted = shlex.quote(url)
