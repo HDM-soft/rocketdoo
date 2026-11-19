@@ -960,3 +960,42 @@ def test_the_mailpit_card_does_not_offer_a_link_to_a_stopped_container():
     assert "mail.enabled && mail.smtp_port" in html
     assert "mail.enabled && mail.web_port" in html
     assert 'v-if="mail.running && mail.web_port"' in html
+
+
+# ── Offline rendering (#296) ──────────────────────────────────────────────────
+# The SPA drew nothing at all when the browser could not fetch Vue: it was the
+# page's only hard dependency and `app.mount()` never ran, so not even the
+# built-in "paste your token" card appeared. A local dashboard served from
+# 127.0.0.1 must not need the internet to render, and an unpinned CDN range
+# could change the runtime under a release nobody touched.
+
+VUE_RUNTIME = INDEX_HTML.parent / "vue.global.prod.js"
+
+SCRIPT_SRC_RE = re.compile(r'<script[^>]*\bsrc="([^"]+)"')
+STYLESHEET_HREF_RE = re.compile(r'<link[^>]*\brel="stylesheet"[^>]*\bhref="([^"]+)"')
+
+
+def test_no_script_is_loaded_over_the_network():
+    for src in SCRIPT_SRC_RE.findall(_text()):
+        assert not src.startswith(("http://", "https://", "//")), src
+
+
+def test_no_stylesheet_is_loaded_over_the_network():
+    for href in STYLESHEET_HREF_RE.findall(_text()):
+        assert not href.startswith(("http://", "https://", "//")), href
+
+
+def test_every_local_script_exists_in_the_package():
+    for src in SCRIPT_SRC_RE.findall(_text()):
+        name = src.removeprefix("/static/")
+        assert (INDEX_HTML.parent / name).is_file(), src
+
+
+def test_the_vendored_vue_declares_an_exact_version():
+    """A range like `vue@3` lets the runtime change without a commit."""
+    banner = VUE_RUNTIME.read_text(errors="replace")[:200]
+    assert re.search(r"^\* vue v\d+\.\d+\.\d+$", banner, re.M), banner[:120]
+
+
+def test_the_vendored_vue_keeps_its_license_banner():
+    assert "@license MIT" in VUE_RUNTIME.read_text(errors="replace")[:400]

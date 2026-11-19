@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import Headers, QueryParams
 from starlette.routing import get_route_path
 
@@ -245,6 +246,11 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT, token: str | N
                 await websocket.close()
             except Exception:
                 pass
+
+    # Mounted before the catch-all below, which answers index.html for every
+    # path it sees: without this route an asset request would come back as
+    # HTML with a text/html content type, and the browser would refuse it.
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     # The SPA is one file with a fixed name, so without this the browser keeps
     # serving its stored copy across upgrades — a user on a new version saw the

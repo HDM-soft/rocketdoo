@@ -63,9 +63,24 @@ def local_facts(project_root: Path, cfg: dict) -> dict:
         "gitman_scripts": docker_gitman and gitman_has_scripts(root / gitman_file(cfg)),
         "install_script": (root / INSTALL_SCRIPT).is_file(),
         "agent_has_keys": _agent_has_keys(),
+        "ssh_auth_sock": bool(os.environ.get("SSH_AUTH_SOCK")),
+        "build_needs_ssh": build_needs_ssh(root, cfg),
         "key_file": None if key is None else os.path.exists(os.path.expanduser(key)),
         "invalid_identifiers": invalid_identifiers(cfg.get("db_user", ""), cfg.get("db_name", "")),
     }
+
+
+def build_needs_ssh(project_root: Path, cfg: dict) -> bool:
+    """Whether the Docker build has to forward an agent.
+
+    Derived by exclusion: a scp-style `github.com:org/repo` carries no user and
+    no scheme, so matching the SSH forms would miss it and strip a flag the
+    build needs. A false positive only keeps today's behaviour.
+    """
+    if not cfg.get("use_gitman"):
+        return False
+    repos = gitman_repos(Path(project_root) / gitman_file(cfg))
+    return any(not url.startswith(("http://", "https://")) for url in repos)
 
 
 def _enterprise_urls(cfg: dict) -> list[str]:
@@ -92,6 +107,8 @@ def _remote_script(cfg: dict, repos: list[str]) -> str:
             "echo docker_ok=$(docker info >/dev/null 2>&1 && echo yes || echo no)",
             "echo compose=$(docker compose version --short 2>/dev/null </dev/null)",
             "echo traefik_running=$(docker ps 2>/dev/null | grep -qi traefik && echo yes || echo no)",
+            f"echo traefik_attached=$(docker ps --filter network={_TRAEFIK_NETWORK} 2>/dev/null"
+            " | grep -qi traefik && echo yes || echo no)",
         ]
     for url in repos:
         quoted = shlex.quote(url)
@@ -288,17 +305,75 @@ def _remote_checks(cfg: dict, remote: dict, env: str, local: dict) -> list[Check
     )
     if docker and cfg.get("domain"):
         running = remote.get("traefik_running") == "yes"
+        attached = remote.get("traefik_attached") == "yes"
+        if not running:
+            detail = "no Traefik container found on the VPS"
+        elif not attached:
+            detail = f"a Traefik runs on the VPS but is not attached to the {_TRAEFIK_NETWORK} network"
+        else:
+            detail = "Traefik is running on the VPS"
         checks.append(
             _check(
                 "traefik",
                 "warn",
-                running,
-                "Traefik is running on the VPS" if running else "no Traefik container found on the VPS",
-                f"rkd does not install Traefik: without it {cfg['domain']} will not answer. "
-                f"Run Traefik on the VPS, attached to the {_TRAEFIK_NETWORK} network.",
+                running and attached,
+                detail,
+                f"Without Traefik on {_TRAEFIK_NETWORK}, {cfg['domain']} will not answer. "
+                f"Run: rkd instance traefik --env {env}",
             )
         )
     return checks
+
+
+_PROXY_ERROR_CODES = {"404", "502", "503", "504"}
+
+
+def public_url_check(domain: str, output: str, *, env: str) -> Check:
+    """
+    Classify what the VPS saw when it requested the public URL of the deploy.
+
+    `output` holds `http=<code>:<curl exit>` and `https=<code>:<curl exit>`.
+    Two requests because one cannot tell apart "nothing listens" from
+    "Traefik routes but the certificate is not there yet": a 3xx on plain
+    HTTP proves the router matched before Let's Encrypt has issued anything,
+    while curl exits 60/35 on https for the same reason.
+    """
+    seen = {}
+    for line in output.splitlines():
+        scheme, _, value = line.partition("=")
+        code, _, rc = value.partition(":")
+        if scheme in ("http", "https"):
+            seen[scheme] = (code.strip(), rc.strip())
+    http_code, _ = seen.get("http", ("000", ""))
+    https_code, https_rc = seen.get("https", ("000", ""))
+    fix = f"Run: rkd instance traefik --env {env}"
+
+    if https_rc == "0" and https_code not in _PROXY_ERROR_CODES and https_code != "000":
+        return _check("public url", "warn", True, f"https://{domain} answers ({https_code})")
+    if https_code in _PROXY_ERROR_CODES or http_code in _PROXY_ERROR_CODES:
+        return _check(
+            "public url",
+            "warn",
+            False,
+            f"Traefik answers {https_code if https_code in _PROXY_ERROR_CODES else http_code} but does not reach Odoo",
+            f"The labels or the {_TRAEFIK_NETWORK} network do not match this Traefik: check its entrypoints "
+            f"and certificate resolver names, or {fix.lower()}",
+        )
+    if http_code.startswith("3"):
+        return _check(
+            "public url",
+            "warn",
+            False,
+            f"Traefik routes {domain} but the certificate is not available yet",
+            "Let's Encrypt can take a few minutes, and needs DNS pointing at this VPS and ports 80 and 443 open.",
+        )
+    return _check(
+        "public url",
+        "warn",
+        False,
+        f"nothing answers for {domain} on the VPS",
+        f"No proxy is routing this domain. {fix}",
+    )
 
 
 _CONNECTION_HINTS = {
@@ -390,6 +465,20 @@ def _local_checks(cfg: dict, local: dict) -> list[Check]:
         )
     if cfg.get("use_gitman"):
         checks += _gitman_checks(cfg, local)
+    # Only when the build will actually pass `--ssh default`: that flag is what
+    # aborts without a socket, and it is now conditional on the same predicate.
+    if cfg.get("type", "docker") == "docker" and local.get("build_needs_ssh"):
+        sock = bool(local.get("ssh_auth_sock"))
+        checks.append(
+            _check(
+                "ssh agent socket",
+                "block",
+                sock,
+                "SSH_AUTH_SOCK is set" if sock else "SSH_AUTH_SOCK is not set",
+                "docker compose build --ssh needs an agent socket. An agent with no keys loaded is enough: "
+                "run eval $(ssh-agent) in this shell.",
+            )
+        )
     if _enterprise_urls(cfg):
         agent = bool(local.get("agent_has_keys"))
         checks.append(

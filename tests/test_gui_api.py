@@ -12,6 +12,7 @@ missing helper is not.
 
 import ast
 import asyncio
+import re
 import socket
 import subprocess
 import sys
@@ -1215,3 +1216,38 @@ class TestInstanceDeployEndpoint:
         assert body["ok"] is False
         assert "is not configured in instance.yaml" in body["error"]
         assert "project_path" not in fake_deployer
+
+
+class TestStaticAssets:
+    """The SPA's own assets are served by the app, not fetched from a CDN (#296).
+
+    The catch-all route answers `index.html` for every path it sees, so without
+    a route of their own these come back as HTML with a `text/html` content
+    type and the browser refuses to execute them. That failure is silent: the
+    page loads and draws nothing.
+    """
+
+    @pytest.fixture
+    def app(self, project_dir):
+        return create_app()
+
+    @pytest.fixture
+    def client(self, app):
+        return fastapi_testclient.TestClient(app)
+
+    def test_the_vue_runtime_is_served_as_javascript(self, client):
+        response = client.get("/static/vue.global.prod.js")
+
+        assert response.status_code == 200
+        assert "javascript" in response.headers["content-type"]
+
+    def test_every_script_the_page_asks_for_is_served(self, client):
+        page = client.get("/").text
+
+        for src in re.findall(r'<script[^>]*\bsrc="([^"]+)"', page):
+            response = client.get(src)
+            assert response.status_code == 200, src
+            assert "javascript" in response.headers["content-type"], src
+
+    def test_an_unknown_static_path_is_not_answered_with_the_page(self, client):
+        assert client.get("/static/no-such-asset.js").status_code == 404
