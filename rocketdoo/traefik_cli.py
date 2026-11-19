@@ -242,6 +242,8 @@ def traefik_status():
     console.print(
         Panel(table, title="[bold cyan]Traefik Status[/bold cyan]", border_style="cyan", box=box.ROUNDED, padding=(1, 2))
     )
+    if (Path.cwd() / ".rkd" / "instance.yaml").is_file():
+        console.print("[dim]This is the local one. For a VPS: rkd instance traefik --env stage|prod[/dim]")
     console.print()
 
 

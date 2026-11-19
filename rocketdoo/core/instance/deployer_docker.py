@@ -8,6 +8,7 @@ Build flow (requires SSH agent for gitman private repos):
   VPS   → docker compose up -d
 """
 
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -150,6 +151,8 @@ class DockerInstanceDeployer:
                 return False
             console.print("[green]✓[/green] Odoo answers")
 
+            self._probe_public_url()
+
         return True
 
     def _preflight(self) -> bool:
@@ -272,6 +275,7 @@ class DockerInstanceDeployer:
             "use_gitman": use_gitman,
             "gitman_config_file": gitman_config,
             "install_script": use_gitman and install_script,
+            "needs_ssh": self._needs_ssh(),
             "ssh_hosts": list(dict.fromkeys(ssh_hosts)),
             "addons_path": ",".join(addons_path),
             "pg": self.pg,
@@ -436,8 +440,15 @@ class DockerInstanceDeployer:
             return False
         return True
 
+    def _needs_ssh(self) -> bool:
+        # Same predicate the pre-flight blocker reads, defined once: a build
+        # that drops the flag while the check still demands a socket would
+        # block exactly the projects the flag was made conditional for.
+        return preflight.build_needs_ssh(self.project_path, self.cfg)
+
     def _build(self) -> bool:
-        build_cmd = f"cd {self.remote_path}/{self.env} && DOCKER_BUILDKIT=1 docker compose build --ssh default"
+        ssh_flag = " --ssh default" if self._needs_ssh() else ""
+        build_cmd = f"cd {self.remote_path}/{self.env} && DOCKER_BUILDKIT=1 docker compose build{ssh_flag}"
         ok = self._ssh(build_cmd, agent_forward=True, timeout=1800)
         if not ok:
             console.print("[red]✗ Docker build failed.[/red]")
@@ -581,6 +592,35 @@ class DockerInstanceDeployer:
                 "}\n"
             ),
         )
+
+    def _probe_public_url(self) -> None:
+        """
+        Ask the VPS itself whether the public URL answers. Never fatal: a
+        correct deploy can finish before Let's Encrypt has issued anything.
+
+        Step 7 stays as it is: it proves Odoo works, this proves the proxy
+        does, and only the first survives a redeploy with no domain.
+        """
+        domain = self.cfg.get("domain", "")
+        if not domain:
+            return
+        script = (
+            "{\n"
+            "for scheme in http https; do\n"
+            f"  code=$(curl -s -o /dev/null -w '%{{http_code}}' --max-time 10 \"$scheme://\"{shlex.quote(domain)})\n"
+            '  echo "$scheme=$code:$?"\n'
+            "done\n"
+            "exit 0\n"
+            "}\n"
+        )
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, "bash -s")
+        try:
+            out = subprocess.run(cmd, input=script, text=True, capture_output=True, timeout=60, env=env).stdout
+        except subprocess.TimeoutExpired:
+            out = ""
+        check = preflight.public_url_check(domain, out or "", env=self.env)
+        self.checks.append(check)
+        print_checks(console, [check])
 
     # ─── utils ───────────────────────────────────────────────────────────────
 

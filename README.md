@@ -15,7 +15,7 @@ Odoo Development Framework
    - "Horacio Montaño"
 
 ## Version: 
-   - "3.11.0"
+   - "3.12.0"
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -423,6 +423,8 @@ Traefik is configured via a generated `docker-compose.override.yml` (Docker Comp
 
 Enabling Traefik starts the proxy and restarts your project so the new override takes effect — from the CLI and, since 3.6.0, from the web GUI too. To reconfigure an already-enabled project, run `rkd traefik off` first.
 
+> `rkd traefik` is about **this machine**. For the Traefik that serves a deployed instance on a VPS, use `rkd instance traefik --env <stage|prod>` — it reads the server and the Let's Encrypt address from `.rkd/instance.yaml` and installs the very same configuration there.
+
 ---
 
 #### `rkd instance` — Full Odoo Instance Deployment to VPS
@@ -434,6 +436,7 @@ Deploy a complete Odoo instance (stage and/or production) to a remote VPS. Suppo
 
 ```bash
 rkd instance init                    # Interactive wizard: adds environments, never overwrites (--force starts over)
+rkd instance traefik --env stage     # Install Traefik on that VPS (once per host)
 rkd instance deploy --env stage      # Deploy to staging environment
 rkd instance deploy --env prod       # Deploy to production environment
 rkd instance deploy --env stage --dry-run  # Pre-flight checks + preview; writes nothing
@@ -452,9 +455,22 @@ rkd instance status                  # Show configured environments
 
 **Pre-flight:** every deploy (and dry-run) first checks the VPS over SSH (Docker, sudo, disk, memory, repository access) and stops on blocking problems before touching anything.
 
+**The reverse proxy (3.12.0):** the deployed compose only *exposes* Odoo's port and labels it for Traefik — nothing is published to the host. Without a Traefik on the `traefik-public` network your domain answers nothing, even though the deploy finishes green. `rkd instance traefik --env <stage|prod>` installs it, once per host, from the same configuration `rkd traefik` renders locally:
+
+```bash
+rkd instance traefik --env prod      # reads host, user and traefik_email from .rkd/instance.yaml
+curl -I http://your.domain           # a 3xx means Traefik is routing, before any certificate exists
+```
+
+It is safe to run again: files you tuned are kept, certificates already issued are never truncated, and an existing install of your own converges instead of aborting on its own ports. A Traefik you installed yourself is left untouched and reported. It is **not** run automatically by the deploy: ports 80 and 443 belong to the host, not to one project, and quietly taking them over on a server that already runs something else is not a deploy's call. The native path still has no proxy.
+
+**What the final panel promises (3.12.0):** after starting, the deploy probes your public domain from the VPS — over HTTP and HTTPS, read-only, never fatal. It tells apart four states: Odoo answers, Traefik answers but cannot reach Odoo, the certificate is not issued yet, or nothing answers. When the domain does not answer, the panel says so and names the command that fixes it, instead of printing an URL nobody tested.
+
 **Odoo Enterprise:** `enterprise_source: rsync` transfers your local `enterprise/` directory; `clone` clones `odoo/enterprise` on the VPS through your forwarded SSH agent, leaving no credentials on the server.
 
-> **Note:** Docker deployment requires a running SSH agent with the relevant keys loaded (`ssh-add -l`). Password authentication requires `sshpass` installed on your local machine; the password itself travels through the `SSHPASS` environment variable (`sshpass -e`), never as a command-line argument visible to other processes on the same host.
+> **Note:** a Docker deploy needs a running SSH agent only when it actually forwards one — that is, when your gitman file has at least one source that is not plain HTTPS. Projects whose external repositories are all public HTTPS now build with no agent at all (3.12.0). When one *is* needed, an **empty** agent is enough for the build itself (`eval $(ssh-agent)`): BuildKit needs the socket, not the keys. Cloning `odoo/enterprise` on the VPS does need a loaded key, and the pre-flight tells the two cases apart.
+>
+> Password authentication requires `sshpass` installed on your local machine; the password itself travels through the `SSHPASS` environment variable (`sshpass -e`), never as a command-line argument visible to other processes on the same host.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -463,6 +479,8 @@ rkd instance status                  # Show configured environments
 #### `rkd gui` — Web GUI Interface
 
 Rocketdoo v3 includes a professional web-based management interface, accessible from your browser just like Odoo — no installation of additional tools required.
+
+Since 3.12.0 the interface **works with no internet connection**: its Vue runtime ships inside the package instead of being fetched from a CDN at page load. A local dashboard that draws nothing behind a corporate proxy, on a plane, or on the day a CDN is down was not much of a local tool.
 
 ```bash
 rkd gui                  # Launch GUI, prints a tokenized URL to open
