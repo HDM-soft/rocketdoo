@@ -634,3 +634,54 @@ class TestGitman:
         out.mkdir()
         dockerfile, _ = self._render(tmp_path, out)
         assert "ssh-keyscan github.com gitlab.com >>" in dockerfile
+
+
+class TestTheBuildSshFlag:
+    @staticmethod
+    def _build_call(run):
+        return run.sent_containing("docker compose build")[0]
+
+    def _built(self, tmp_path, monkeypatch, gitman: str | None):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        run = _RecordingRun()
+        monkeypatch.setattr(deployer_docker.subprocess, "run", run)
+        if gitman is not None:
+            (tmp_path / "gitman.yml").write_text(gitman)
+        deployer = deployer_docker.DockerInstanceDeployer(
+            "prod", _config(use_gitman=gitman is not None, gitman_config="gitman.yml"), tmp_path
+        )
+        deployer._build()
+        return self._build_call(run)
+
+    def test_without_gitman_there_is_no_ssh_flag(self, tmp_path, monkeypatch):
+        assert "--ssh" not in self._built(tmp_path, monkeypatch, None)
+
+    def test_https_sources_need_no_ssh_flag(self, tmp_path, monkeypatch):
+        gitman = "sources:\n  - repo: https://github.com/OCA/web.git\n"
+        assert "--ssh" not in self._built(tmp_path, monkeypatch, gitman)
+
+    def test_an_ssh_source_keeps_the_flag(self, tmp_path, monkeypatch):
+        gitman = "sources:\n  - repo: git@github.com:org/repo.git\n"
+        assert "--ssh default" in self._built(tmp_path, monkeypatch, gitman)
+
+    def test_a_scp_style_source_without_a_user_needs_ssh(self, tmp_path):
+        (tmp_path / "gitman.yml").write_text("sources:\n  - repo: github.com:org/repo\n")
+        deployer = deployer_docker.DockerInstanceDeployer(
+            "prod", _config(use_gitman=True, gitman_config="gitman.yml"), tmp_path
+        )
+
+        assert deployer._needs_ssh() is True
+
+    def test_the_mount_follows_the_flag(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        for repo, mounted in (("https://github.com/OCA/web.git", False), ("git@github.com:o/r.git", True)):
+            project = tmp_path / ("ssh" if mounted else "https")
+            out = project / "out"
+            out.mkdir(parents=True)
+            (project / "gitman.yml").write_text(f"sources:\n  - repo: {repo}\n")
+            deployer = deployer_docker.DockerInstanceDeployer(
+                "prod", _config(use_gitman=True, gitman_config="gitman.yml"), project
+            )
+            deployer._render_templates(out)
+
+            assert ("--mount=type=ssh" in (out / "Dockerfile.prod").read_text()) is mounted

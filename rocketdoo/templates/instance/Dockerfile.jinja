@@ -39,10 +39,15 @@ COPY install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
 {% endif %}
 WORKDIR /opt/odoo/gitman
 
+{% if needs_ssh %}
 # Requires SSH agent forwarding: docker build --ssh default
 RUN --mount=type=ssh \
     /opt/odoo/gitman-venv/bin/gitman install{% if environment == 'stage' %} --force{% endif %} && \
     echo "gitman install OK"
+{% else %}
+RUN /opt/odoo/gitman-venv/bin/gitman install{% if environment == 'stage' %} --force{% endif %} && \
+    echo "gitman install OK"
+{% endif %}
 {% endif %}
 
 RUN chown -R odoo:odoo /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %}{% if use_gitman %} /opt/odoo/gitman{% endif %} /etc/odoo

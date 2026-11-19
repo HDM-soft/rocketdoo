@@ -32,6 +32,7 @@ def _local(**overrides) -> dict:
     local = {
         "enterprise_dir": True,
         "agent_has_keys": True,
+        "ssh_auth_sock": True,
         "key_file": True,
         "invalid_identifiers": [],
     }
@@ -123,6 +124,29 @@ class TestBlockers:
         )
 
         assert not preflight.blocking(checks)
+
+
+class TestTheSshAgentSocket:
+    def test_a_docker_deploy_without_a_socket_is_blocked(self):
+        check = _evaluate(_cfg(), _local(ssh_auth_sock=False))["ssh agent socket"]
+
+        assert check["level"] == "block"
+        assert check["ok"] is False
+        assert "eval $(ssh-agent)" in check["hint"]
+
+    def test_with_a_socket_it_passes_even_if_the_agent_is_empty(self):
+        check = _evaluate(_cfg(), _local(ssh_auth_sock=True, agent_has_keys=False))["ssh agent socket"]
+
+        assert check["ok"] is True
+
+    def test_a_native_deploy_is_not_asked(self):
+        assert "ssh agent socket" not in _evaluate(_cfg(type="native"), _local(ssh_auth_sock=False))
+
+    def test_the_fact_reads_the_environment(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
+        assert preflight.local_facts(tmp_path, _cfg())["ssh_auth_sock"] is True
+        monkeypatch.delenv("SSH_AUTH_SOCK")
+        assert preflight.local_facts(tmp_path, _cfg())["ssh_auth_sock"] is False
 
 
 class TestWarnings:

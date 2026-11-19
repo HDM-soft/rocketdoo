@@ -18,7 +18,7 @@ from rich.console import Console
 
 from rocketdoo.cli_output import print_checks
 from rocketdoo.core import addons_path as local_addons
-from rocketdoo.core.gitman_config import gitman_module_paths, gitman_ssh_hosts
+from rocketdoo.core.gitman_config import gitman_module_paths, gitman_repos, gitman_ssh_hosts
 from rocketdoo.core.traefik import NETWORK as TRAEFIK_NETWORK
 
 from . import preflight
@@ -272,6 +272,7 @@ class DockerInstanceDeployer:
             "use_gitman": use_gitman,
             "gitman_config_file": gitman_config,
             "install_script": use_gitman and install_script,
+            "needs_ssh": self._needs_ssh(),
             "ssh_hosts": list(dict.fromkeys(ssh_hosts)),
             "addons_path": ",".join(addons_path),
             "pg": self.pg,
@@ -436,8 +437,17 @@ class DockerInstanceDeployer:
             return False
         return True
 
+    def _needs_ssh(self) -> bool:
+        # Derived by exclusion: a scp-style `github.com:org/repo` has no user
+        # or scheme, so matching SSH forms would miss it and break the build.
+        if not self.cfg.get("use_gitman"):
+            return False
+        repos = gitman_repos(self.project_path / preflight.gitman_file(self.cfg))
+        return any(not url.startswith(("http://", "https://")) for url in repos)
+
     def _build(self) -> bool:
-        build_cmd = f"cd {self.remote_path}/{self.env} && DOCKER_BUILDKIT=1 docker compose build --ssh default"
+        ssh_flag = " --ssh default" if self._needs_ssh() else ""
+        build_cmd = f"cd {self.remote_path}/{self.env} && DOCKER_BUILDKIT=1 docker compose build{ssh_flag}"
         ok = self._ssh(build_cmd, agent_forward=True, timeout=1800)
         if not ok:
             console.print("[red]✗ Docker build failed.[/red]")

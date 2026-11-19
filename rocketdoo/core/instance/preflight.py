@@ -63,6 +63,7 @@ def local_facts(project_root: Path, cfg: dict) -> dict:
         "gitman_scripts": docker_gitman and gitman_has_scripts(root / gitman_file(cfg)),
         "install_script": (root / INSTALL_SCRIPT).is_file(),
         "agent_has_keys": _agent_has_keys(),
+        "ssh_auth_sock": bool(os.environ.get("SSH_AUTH_SOCK")),
         "key_file": None if key is None else os.path.exists(os.path.expanduser(key)),
         "invalid_identifiers": invalid_identifiers(cfg.get("db_user", ""), cfg.get("db_name", "")),
     }
@@ -390,6 +391,18 @@ def _local_checks(cfg: dict, local: dict) -> list[Check]:
         )
     if cfg.get("use_gitman"):
         checks += _gitman_checks(cfg, local)
+    if cfg.get("type", "docker") == "docker":
+        sock = bool(local.get("ssh_auth_sock"))
+        checks.append(
+            _check(
+                "ssh agent socket",
+                "block",
+                sock,
+                "SSH_AUTH_SOCK is set" if sock else "SSH_AUTH_SOCK is not set",
+                "docker compose build --ssh needs an agent socket. An agent with no keys loaded is enough: "
+                "run eval $(ssh-agent) in this shell.",
+            )
+        )
     if _enterprise_urls(cfg):
         agent = bool(local.get("agent_has_keys"))
         checks.append(
