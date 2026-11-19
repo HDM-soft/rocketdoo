@@ -1,3 +1,5 @@
+import posixpath
+import re
 from pathlib import Path
 
 import yaml
@@ -57,6 +59,68 @@ def update_odoo_conf_with_gitman(odoo_conf_path, gitman_sources):
 
     current_paths = read_addons_path(odoo_conf_path)
     write_addons_path(odoo_conf_path, current_paths + [path for path in new_paths if path not in current_paths])
+
+
+GITMAN_DEFAULT_LOCATION = "gitman_sources"
+
+
+def _read_gitman(config_path):
+    try:
+        data = yaml.safe_load(Path(config_path).read_text())
+    except (OSError, ValueError, yaml.YAMLError):
+        return GITMAN_DEFAULT_LOCATION, []
+    if not isinstance(data, dict):
+        return GITMAN_DEFAULT_LOCATION, []
+    sources = data.get("sources")
+    sources = [s for s in sources if isinstance(s, dict)] if isinstance(sources, list) else []
+    return data.get("location") or GITMAN_DEFAULT_LOCATION, sources
+
+
+def gitman_repos(config_path):
+    """Repository URLs declared by a gitman file; [] if it is unreadable."""
+    return [s["repo"] for s in _read_gitman(config_path)[1] if isinstance(s.get("repo"), str) and s["repo"]]
+
+
+def gitman_has_scripts(config_path):
+    """True when any source declares `scripts:`."""
+    return any(s.get("scripts") for s in _read_gitman(config_path)[1])
+
+
+_SSH_HOST = re.compile(r"^(?:ssh://(?:[^@/]+@)?|[^@/:]+@)([A-Za-z0-9.-]+)[:/]")
+
+
+def gitman_ssh_hosts(config_path):
+    """Hosts reached over SSH, whose keys the build must know in advance."""
+    hosts = (_SSH_HOST.match(url) for url in gitman_repos(config_path))
+    return list(dict.fromkeys(m.group(1) for m in hosts if m))
+
+
+def _gitman_name(repo):
+    return repo.split("/")[-1].split(".")[0]
+
+
+def gitman_module_paths(config_path, root):
+    """
+    Addons paths that `gitman install` leaves under `root`, one per source.
+
+    `location` falls back to "gitman_sources", the default of gitman 1.4.0
+    (the version the instance Dockerfile pins; Config.__init__), and not to
+    the "external_addons" that rkd writes: the file belongs to the user. A
+    source without `name` is named as gitman does (Source._infer_name: what
+    precedes the first dot of the last path segment), which is not what
+    extract_repo_name_from_url returns for `addons.v2.git`. A name with a
+    comma or a line break is dropped: addons_path is one line of
+    comma-separated entries. A missing, unreadable or source-less file gives [].
+    """
+    location, sources = _read_gitman(config_path)
+    paths = []
+    for source in sources:
+        repo = source.get("repo")
+        name = source.get("name") or (_gitman_name(repo) if isinstance(repo, str) else "")
+        if not isinstance(name, str) or not name or any(c in name for c in ",\r\n"):
+            continue
+        paths.append(posixpath.normpath(posixpath.join(root, str(location), name)))
+    return paths
 
 
 def extract_repo_name_from_url(url):

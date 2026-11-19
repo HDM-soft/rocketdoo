@@ -1136,3 +1136,82 @@ class TestUnpackProjectName:
         monkeypatch.setattr(pack_ops.core_unpack, "inspect", lambda root: info)
 
         assert client.get("/api/pack/unpack-info").json()["project"] == info["project"]
+
+
+def test_instances_init_adds_an_environment_without_dropping_the_others(client, project_dir):
+    import yaml
+
+    (project_dir / "Dockerfile").write_text("FROM odoo:19.0\n")
+    (project_dir / "docker-compose.yaml").write_text("services: {}\n")
+    env = {"host": "h", "auth_method": "password", "password_ref": "${P}", "domain": "d.example.com"}
+
+    assert client.post("/api/instances/init", json={"environments": {"prod": env}}).json()["ok"]
+    assert client.post("/api/instances/init", json={"environments": {"stage": env}}).json()["ok"]
+
+    saved = yaml.safe_load((project_dir / ".rkd" / "instance.yaml").read_text())
+    assert set(saved["environments"]) == {"stage", "prod"}
+
+
+class TestInstanceDeployEndpoint:
+    """POST /api/instances/deploy built InstanceConfigManager() with no
+    project_path and failed with TypeError on every call (#279)."""
+
+    @pytest.fixture(autouse=True)
+    def _configured_project(self, project_dir):
+        (project_dir / ".rkd").mkdir()
+        (project_dir / ".rkd" / "instance.yaml").write_text(
+            "environments:\n  stage:\n    type: docker\n    vps:\n      host: vps.example.com\n"
+        )
+
+    @pytest.fixture
+    def fake_deployer(self, monkeypatch):
+        from rocketdoo.core.instance import deployer_docker
+
+        seen = {}
+
+        class Fake:
+            def __init__(self, env, env_config, project_path):
+                seen["project_path"] = project_path
+                self.checks = []
+
+            def deploy(self, dry_run=False):
+                seen["dry_run"] = dry_run
+                return True
+
+        monkeypatch.setattr(deployer_docker, "DockerInstanceDeployer", Fake)
+        return seen
+
+    def test_dry_run_reaches_the_deployer_with_the_project_path(self, client, project_dir, fake_deployer):
+        body = client.post("/api/instances/deploy", json={"env": "stage", "dry_run": True}).json()
+
+        assert body["ok"] is True
+        assert body["dry_run"] is True
+        assert body["env"] == "stage"
+        assert fake_deployer["project_path"] == project_dir
+        assert fake_deployer["dry_run"] is True
+
+    def test_failed_preflight_travels_in_the_response(self, client, monkeypatch):
+        from rocketdoo.core.instance import deployer_docker
+
+        class Blocked:
+            def __init__(self, env, env_config, project_path):
+                self.checks = [
+                    {"name": "ssh", "level": "block", "ok": False, "detail": "unreachable", "hint": ""},
+                ]
+
+            def deploy(self, dry_run=False):
+                return False
+
+        monkeypatch.setattr(deployer_docker, "DockerInstanceDeployer", Blocked)
+        body = client.post("/api/instances/deploy", json={"env": "stage"}).json()
+
+        assert body["ok"] is False
+        assert body["checks"][0]["name"] == "ssh"
+        assert "ssh: unreachable" in body["error"]
+
+    def test_unknown_environment(self, client, fake_deployer):
+        body = client.post("/api/instances/deploy", json={"env": "prod"}).json()
+
+        assert body["ok"] is False
+        assert "is not configured in instance.yaml" in body["error"]
+        assert "project_path" not in fake_deployer

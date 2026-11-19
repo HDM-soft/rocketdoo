@@ -84,3 +84,32 @@ def addons_tree(tmp_path) -> Path:
     (excluded / "__manifest__.py").write_text("{'name': 'should be skipped'}\n")
 
     return addons
+
+
+GREEN_REMOTE = {
+    "reachable": "yes",
+    "whoami": "deploy",
+    "cpus": "4",
+    "mem_kb": str(16 * 1024 * 1024),
+    "path_writable": "yes",
+    "free_kb": str(100 * 1024 * 1024),
+    "sudo": "yes",
+    "git": "yes",
+    "docker_ok": "yes",
+    "compose": "2.29.0",
+    "traefik_network": "yes",
+    "traefik_running": "yes",
+    "systemd": "yes",
+    "repo_ok": ["git@github.com:odoo/enterprise.git"],
+    "repo_fail": [],
+}
+
+
+@pytest.fixture
+def green_preflight(monkeypatch):
+    """A VPS that passes every pre-flight check, so deployer tests that
+    capture subprocess.run see only the deploy's own commands."""
+    from rocketdoo.core.instance import preflight
+
+    monkeypatch.setattr(preflight, "remote_facts", lambda *args, **kwargs: dict(GREEN_REMOTE))
+    monkeypatch.setattr(preflight, "_agent_has_keys", lambda: True)

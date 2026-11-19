@@ -17,7 +17,8 @@ Two explicit allowlists, one entry per module, growing as later tasks of
   #143.
 
 core/deploy/** and core/instance/** are known to import rich/questionary and
-are deliberately left off both lists: that is pre-existing debt out of scope
+are deliberately left off both lists, except the pure modules created since
+(core/instance/enterprise.py): the rest is pre-existing debt out of scope
 for #143, not something this guard should flag.
 """
 
@@ -39,6 +40,8 @@ PURE_CORE = [
     "core/traefik.py",
     "core/pack.py",
     "core/unpack.py",
+    "core/instance/enterprise.py",
+    "core/instance/preflight.py",
 ]
 
 NO_CWD: list[str] = [
@@ -48,6 +51,8 @@ NO_CWD: list[str] = [
     "core/traefik.py",
     "core/pack.py",
     "core/unpack.py",
+    "core/instance/enterprise.py",
+    "core/instance/preflight.py",
 ]
 
 _FORBIDDEN_IMPORTS = {"click", "questionary", "rich", "typer"}

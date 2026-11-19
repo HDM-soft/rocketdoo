@@ -54,13 +54,18 @@ INSTANCE_CONTEXT = {
     "db_password": "s3cr3t-pg",
     "db_version": "15",
     "admin_passwd": "s3cr3t-admin",
-    "workers": 2,
+    "workers": 1,
+    "max_cron_threads": 1,
+    "db_maxconn": 15,
     "log_level": "info",
-    "limit_memory_hard": 1610612736,
-    "limit_memory_soft": 1073741824,
+    "limit_memory_hard": 1073741824,
+    "limit_memory_soft": 805306368,
     "use_enterprise": False,
     "use_gitman": False,
     "gitman_config_file": "gitman.stage.yml",
+    "install_script": False,
+    "ssh_hosts": ["github.com"],
+    "addons_path": "/mnt/extra-addons",
     "pg": PG_PROFILES["small"],
 }
 
@@ -254,6 +259,11 @@ class TestInstanceTemplates:
     def test_every_pg_profile_renders(self, profile):
         raw = render("instance/docker-compose.jinja", **{**INSTANCE_CONTEXT, "pg": PG_PROFILES[profile]})
         assert yaml.safe_load(raw)["services"]
+
+    def test_enterprise_is_mounted_from_next_to_the_compose_directory(self):
+        raw = render("instance/docker-compose.jinja", **{**INSTANCE_CONTEXT, "use_enterprise": True})
+        volumes = yaml.safe_load(raw)["services"]["web"]["volumes"]
+        assert "../enterprise:/mnt/enterprise" in volumes
 
     def test_traefik_routes_to_the_domain(self, compose):
         assert "stage.example.com" in yaml.dump(compose)

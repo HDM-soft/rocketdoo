@@ -16,17 +16,23 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from rich.console import Console
 
+from rocketdoo.cli_output import print_checks
+from rocketdoo.core import addons_path as local_addons
+from rocketdoo.core.gitman_config import gitman_module_paths, gitman_ssh_hosts
 from rocketdoo.core.traefik import NETWORK as TRAEFIK_NETWORK
 
+from . import preflight
 from .config_manager import (
+    CRON_THREADS,
     LOG_LEVEL_BY_ENV,
     MEMORY_BY_ENV,
     PG_PROFILES,
     WORKERS_BY_ENV,
-    invalid_identifiers,
+    db_maxconn,
 )
+from .enterprise import branch, clone_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
-from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
+from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
 console = Console()
 
@@ -41,6 +47,8 @@ _HTTP_RETRIES = 45
 # Written once the admin user's password has been replaced, so a step
 # that failed is retried instead of skipped for good.
 _ADMIN_PASSWORD_MARK = "rkd.admin_password_set"
+
+_PLACEHOLDER = "<generated at deploy time>"
 
 
 class DockerInstanceDeployer:
@@ -69,13 +77,16 @@ class DockerInstanceDeployer:
         self.user = vps["user"]
         self.remote_path = env_config.get("remote_path", f"/opt/odoo-{env}")
         self.auth = resolve_auth(vps, env, project_path)
+        self.enterprise_path = f"{self.remote_path}/enterprise"
 
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
 
-        self.pg = PG_PROFILES[env_config.get("pg_profile", "medium")]
+        self.pg = PG_PROFILES.get(env_config.get("pg_profile"), PG_PROFILES["small"])
         self.project_name = self._detect_project_name()
         self.slug = self.project_name.replace("-", "_").replace(" ", "_")
+        self.checks: list[dict] = []
+        self._warnings: list[dict] = []
 
     # ─── public API ──────────────────────────────────────────────────────────
 
@@ -83,20 +94,20 @@ class DockerInstanceDeployer:
         """Run full deployment. Returns True on success."""
         console.print(f"\n[bold cyan]Deploying {self.env.upper()} to {self.host}[/bold cyan]\n")
 
-        invalid = invalid_identifiers(self.db_user, self.db_name)
-        if invalid:
-            console.print(f"[red]✗ Not a valid PostgreSQL identifier: {', '.join(invalid)}[/red]")
-            console.print(
-                "[dim]db_user and db_name may hold up to 63 letters, digits and underscores, "
-                "and cannot start with a digit.[/dim]"
-            )
+        if not self._preflight():
             return False
 
+        try:
+            return self._run(dry_run)
+        finally:
+            self._repeat_warnings()
+
+    def _run(self, dry_run: bool) -> bool:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
 
             console.print("[dim]Step 1/7 — Rendering configuration files...[/dim]")
-            self._render_templates(tmp_path, allow_remote_lookup=not dry_run)
+            self._render_templates(tmp_path, dry_run=dry_run)
             console.print("[green]✓[/green] Configuration files rendered")
 
             if dry_run:
@@ -141,9 +152,23 @@ class DockerInstanceDeployer:
 
         return True
 
+    def _preflight(self) -> bool:
+        cfg = {**self.cfg, "remote_path": self.remote_path, "db_user": self.db_user, "db_name": self.db_name}
+        console.print("[dim]Pre-flight checks (repository probes can take up to 30 s)...[/dim]")
+        checks = preflight.run(self.project_path, self.auth, cfg, env=self.env)
+        print_checks(console, checks)
+        self.checks = checks
+        self._warnings = [c for c in checks if c["level"] == "warn" and not c["ok"]]
+        return not preflight.blocking(checks)
+
+    def _repeat_warnings(self):
+        if self._warnings:
+            console.print("[yellow]Warnings from the pre-flight:[/yellow]")
+            print_checks(console, self._warnings)
+
     # ─── secrets ─────────────────────────────────────────────────────────────
 
-    def _resolve_secrets(self, allow_remote_lookup: bool = True) -> dict[str, str]:
+    def _resolve_secrets(self, dry_run: bool = False) -> dict[str, str]:
         """
         Resolve this environment's passwords, reusing any that already exist.
 
@@ -152,15 +177,20 @@ class DockerInstanceDeployer:
         a second deploy would lock Odoo out of the database.
 
         Precedence: local secret store → password already on the VPS → new one.
+        In a dry-run nothing is looked up, generated or written: a missing
+        secret is a placeholder.
         """
         stored = load(self.project_path, self.env)
         pg_pass = stored.get(PG_PASS)
         admin_passwd = self.cfg.get("admin_passwd") or stored.get(ADMIN_PASSWD)
 
-        if not pg_pass and allow_remote_lookup:
+        if not pg_pass and not dry_run:
             pg_pass = self._read_remote_pg_pass()
             if pg_pass:
                 console.print("[dim]  Reusing odoo_pg_pass already deployed on the VPS[/dim]")
+
+        if dry_run:
+            return {"pg_pass": pg_pass or _PLACEHOLDER, "admin_passwd": admin_passwd or _PLACEHOLDER}
 
         generated = []
         if not pg_pass:
@@ -195,7 +225,7 @@ class DockerInstanceDeployer:
 
     # ─── template rendering ───────────────────────────────────────────────────
 
-    def _render_templates(self, tmp: Path, allow_remote_lookup: bool = True):
+    def _render_templates(self, tmp: Path, dry_run: bool = False):
         """Render all Jinja2 templates into a temporary directory."""
         jinja_env = Environment(
             loader=FileSystemLoader(str(_TEMPLATES_DIR)),
@@ -203,12 +233,23 @@ class DockerInstanceDeployer:
             lstrip_blocks=True,
         )
 
-        creds = self._resolve_secrets(allow_remote_lookup=allow_remote_lookup)
+        creds = self._resolve_secrets(dry_run=dry_run)
 
         use_enterprise = self.cfg.get("use_enterprise", False)
         use_gitman = self.cfg.get("use_gitman", False)
-        gitman_config = self.cfg.get("gitman_config", "gitman.yml")
+        gitman_config = preflight.gitman_file(self.cfg)
+        install_script = (self.project_path / preflight.INSTALL_SCRIPT).is_file()
+        # Enterprise first, as in the local conf (edition_setup): Odoo resolves
+        # a module by the order of the path.
+        addons_path = ["/mnt/enterprise"] if use_enterprise else []
+        addons_path += local_addons.discover(self.project_path, "/mnt/extra-addons")
+        ssh_hosts = ["github.com"]
+        if use_gitman:
+            addons_path += gitman_module_paths(self.project_path / gitman_config, "/opt/odoo/gitman")
+            ssh_hosts += gitman_ssh_hosts(self.project_path / gitman_config)
         admin_passwd = creds["admin_passwd"]
+        workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
+        mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
 
         ctx = {
             "environment": self.env,
@@ -230,13 +271,18 @@ class DockerInstanceDeployer:
             "use_enterprise": use_enterprise,
             "use_gitman": use_gitman,
             "gitman_config_file": gitman_config,
+            "install_script": use_gitman and install_script,
+            "ssh_hosts": list(dict.fromkeys(ssh_hosts)),
+            "addons_path": ",".join(addons_path),
             "pg": self.pg,
             # odoo.conf specific
             "admin_passwd": admin_passwd,
-            "workers": WORKERS_BY_ENV.get(self.env, 2),
+            "workers": workers,
+            "max_cron_threads": CRON_THREADS,
             "log_level": LOG_LEVEL_BY_ENV.get(self.env, "info"),
-            "limit_memory_hard": MEMORY_BY_ENV[self.env]["hard"],
-            "limit_memory_soft": MEMORY_BY_ENV[self.env]["soft"],
+            "limit_memory_hard": mem["hard"],
+            "limit_memory_soft": mem["soft"],
+            "db_maxconn": db_maxconn(self.pg["max_connections"], workers),
         }
 
         # Dockerfile.{env}
@@ -265,6 +311,8 @@ class DockerInstanceDeployer:
                 shutil.copy(local_gitman, tmp / gitman_config)
             else:
                 console.print(f"[yellow]⚠ Gitman config {gitman_config} not found locally — skipping[/yellow]")
+            if install_script:
+                shutil.copy(self.project_path / preflight.INSTALL_SCRIPT, tmp / preflight.INSTALL_SCRIPT)
 
     def _show_generated_files(self, tmp: Path):
         console.print("\n[bold]Generated files (dry-run):[/bold]")
@@ -299,16 +347,22 @@ class DockerInstanceDeployer:
             f"{self.remote_path}/extra-addons",
             f"{self.remote_path}/{self.env}/config",
         ]
-        if not self._ssh(f"mkdir -p {' '.join(dirs)}"):
+        if self.cfg.get("use_enterprise", False):
+            dirs.append(self.enterprise_path)
+        if not self._ssh(ensure_dirs_command(dirs, self.remote_path, '"$(id -u):$(id -g)"')):
+            console.print(f"[red]✗ Could not create {self.remote_path} on the VPS[/red]")
             return False
 
         # The compose declares this network as external, so Compose refuses to
         # create it: on a VPS that has never run Traefik, every step from the
         # database onwards fails with "network traefik-public declared as
         # external, but could not be found".
-        return self._ssh(
+        if not self._ssh(
             f"docker network inspect {TRAEFIK_NETWORK} >/dev/null 2>&1 || docker network create {TRAEFIK_NETWORK}"
-        )
+        ):
+            console.print(f"[red]✗ Could not create the Docker network {TRAEFIK_NETWORK} on the VPS[/red]")
+            return False
+        return True
 
     def _transfer(self, tmp: Path) -> bool:
         # Dockerfile.{env}
@@ -329,12 +383,24 @@ class DockerInstanceDeployer:
         self._ssh(f"chmod 600 {self.remote_path}/{self.env}/odoo_pg_pass")
 
         # gitman config (if present in tmp)
-        gitman_config = self.cfg.get("gitman_config", "")
-        if gitman_config:
-            local_gitman = tmp / gitman_config
-            if local_gitman.exists():
-                if not self._rsync(str(local_gitman), f"{self.remote_path}/{gitman_config}"):
-                    console.print("[yellow]⚠ Failed to transfer gitman config[/yellow]")
+        if self.cfg.get("use_gitman"):
+            for name in (preflight.gitman_file(self.cfg), preflight.INSTALL_SCRIPT):
+                local = tmp / name
+                if local.exists() and not self._rsync(str(local), f"{self.remote_path}/{name}"):
+                    console.print(f"[red]✗ Failed to transfer {name}, which the Dockerfile copies[/red]")
+                    return False
+
+        # The build context is remote_path: enterprise and extra-addons are
+        # mounted at runtime and must not travel to the daemon, nor must
+        # both environments' directories (odoo_pg_pass and the conf).
+        dockerignore = tmp / ".dockerignore"
+        dockerignore.write_text("enterprise/\nextra-addons/\nstage/\nprod/\n")
+        if not self._rsync(str(dockerignore), f"{self.remote_path}/.dockerignore"):
+            console.print("[red]✗ Failed to transfer .dockerignore[/red]")
+            return False
+
+        if not self._sync_enterprise():
+            return False
 
         # extra-addons (from project's addons/ dir)
         addons_dir = self.project_path / "addons"
@@ -343,6 +409,31 @@ class DockerInstanceDeployer:
             if not self._rsync(f"{addons_dir}/", f"{self.remote_path}/extra-addons/"):
                 console.print("[yellow]⚠ Failed to sync extra-addons[/yellow]")
 
+        return True
+
+    def _sync_enterprise(self) -> bool:
+        if not self.cfg.get("use_enterprise", False):
+            return True
+
+        if self.cfg.get("enterprise_source", "rsync") == "clone":
+            console.print("[dim]  Cloning odoo/enterprise on the VPS...[/dim]")
+            try:
+                script = clone_script(self.enterprise_path, branch(self.cfg.get("odoo_version", "17.0")))
+            except ValueError as error:
+                console.print(f"[red]✗ {error}[/red]")
+                return False
+            if not self._ssh("bash -s", agent_forward=True, timeout=1800, input=script):
+                console.print(
+                    "[red]✗ The odoo/enterprise clone failed; see the remote output above. If it is access, the SSH agent must hold a key with access to the repository (ssh-add -l).[/red]"
+                )
+                return False
+            return True
+
+        local = self.project_path / "enterprise"
+        console.print("[dim]  Syncing enterprise (the first run transfers hundreds of MB)...[/dim]")
+        if not self._rsync(f"{local}/", f"{self.enterprise_path}/", ["--exclude", ".git/"]):
+            console.print("[red]✗ Failed to sync enterprise[/red]")
+            return False
         return True
 
     def _build(self) -> bool:

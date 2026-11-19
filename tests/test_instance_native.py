@@ -21,6 +21,8 @@ import time
 import uuid
 
 import pytest
+
+pytestmark = pytest.mark.usefixtures("green_preflight")
 import yaml
 from click.testing import CliRunner
 
@@ -321,6 +323,16 @@ class TestTheConf:
         _, run = _deploy(tmp_path, monkeypatch, proxy_mode=True)
 
         assert "proxy_mode = True\n" in run.stdin_of("tee /etc/odoo/odoo.conf")
+
+
+class TestTheConnectionBudget:
+    def test_the_pool_fits_a_stock_debian_cluster(self, tmp_path, monkeypatch):
+        _, run = _deploy(tmp_path, monkeypatch)
+        conf = run.stdin_of("tee /etc/odoo/odoo.conf")
+
+        assert "workers = 2\n" in conf
+        assert "db_maxconn = 23\n" in conf
+        assert "max_cron_threads = 1\n" in conf
 
 
 class TestTheSequence:
@@ -803,3 +815,62 @@ class TestTheSuccessPanel:
         output = result.output.replace("\n", "")
         assert "Deployment failed" in output
         assert "8069" not in output
+
+
+class TestEnterprise:
+    def _local(self, tmp_path):
+        (tmp_path / "enterprise").mkdir()
+
+    def test_rsync_sends_the_local_checkout_without_its_git_history(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        assert ok
+        calls = [a for a, _ in run.calls if a[0] == "rsync" and a[-1].endswith("/opt/odoo/enterprise/")]
+        assert calls
+        assert "--exclude" in calls[0] and ".git/" in calls[0]
+        assert calls[0][-2] == f"{tmp_path}/enterprise/"
+
+    def test_clone_forwards_the_agent_and_pins_the_series(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone")
+        assert ok
+        args, kwargs = run.calls[run.index_of("git clone")]
+        assert "-A" in args
+        assert "git clone --depth 1 --branch 18.0 git@github.com:odoo/enterprise.git" in kwargs["input"]
+
+    def test_a_series_written_without_the_minor_is_still_a_branch(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone", odoo_version="19")
+        assert ok
+        assert "--branch 19.0 " in run.stdin_of("git clone")
+
+    def test_rsync_without_a_local_checkout_stops_before_touching_the_vps(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        assert not ok
+        assert not run.calls
+        assert not [a for a, _ in run.calls if a[0] == "rsync" and a[-1].endswith("/opt/odoo/enterprise/")]
+
+    def test_nothing_is_synced_without_use_enterprise(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        ok, run = _deploy(tmp_path, monkeypatch, enterprise_source="clone")
+        assert ok
+        assert not run.sent_containing("git clone")
+        assert not run.sent_containing("enterprise/")
+
+    def test_the_destination_is_created_with_the_helper_that_survives_a_root_parent(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        _, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        command = run.command("mkdir -p /opt/odoo/enterprise")
+        assert "sudo -n mkdir -p /opt/odoo/enterprise" in command
+
+    def test_the_conf_points_at_the_directory_that_was_filled(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        _, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        assert ",/opt/odoo/enterprise" in run.stdin_of("addons_path")
+
+    def test_the_plan_does_not_mention_enterprise_when_it_is_off(self, tmp_path):
+        deployer = deployer_native.NativeInstanceDeployer("prod", _config(), tmp_path)
+        assert not [label for label, _ in deployer._steps() if "Enterprise" in label]
+
+    def test_an_empty_odoo_version_fails_the_step_instead_of_guessing_a_branch(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone", odoo_version="")
+        assert not ok
+        assert not run.sent_containing("git clone")
