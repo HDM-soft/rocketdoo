@@ -113,3 +113,6 @@ def green_preflight(monkeypatch):
 
     monkeypatch.setattr(preflight, "remote_facts", lambda *args, **kwargs: dict(GREEN_REMOTE))
     monkeypatch.setattr(preflight, "_agent_has_keys", lambda: True)
+    # A Docker build runs `--ssh default`, which aborts without an agent
+    # socket, so the blocking check is part of what "green" means here.
+    monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/rkd-test-agent.sock")

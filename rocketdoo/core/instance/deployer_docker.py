@@ -272,6 +272,7 @@ class DockerInstanceDeployer:
             "use_gitman": use_gitman,
             "gitman_config_file": gitman_config,
             "install_script": use_gitman and install_script,
+            "needs_ssh": self._needs_ssh(),
             "ssh_hosts": list(dict.fromkeys(ssh_hosts)),
             "addons_path": ",".join(addons_path),
             "pg": self.pg,
@@ -436,8 +437,15 @@ class DockerInstanceDeployer:
             return False
         return True
 
+    def _needs_ssh(self) -> bool:
+        # Same predicate the pre-flight blocker reads, defined once: a build
+        # that drops the flag while the check still demands a socket would
+        # block exactly the projects the flag was made conditional for.
+        return preflight.build_needs_ssh(self.project_path, self.cfg)
+
     def _build(self) -> bool:
-        build_cmd = f"cd {self.remote_path}/{self.env} && DOCKER_BUILDKIT=1 docker compose build --ssh default"
+        ssh_flag = " --ssh default" if self._needs_ssh() else ""
+        build_cmd = f"cd {self.remote_path}/{self.env} && DOCKER_BUILDKIT=1 docker compose build{ssh_flag}"
         ok = self._ssh(build_cmd, agent_forward=True, timeout=1800)
         if not ok:
             console.print("[red]✗ Docker build failed.[/red]")
