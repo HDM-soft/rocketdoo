@@ -258,3 +258,58 @@ class TestTheCommand:
         assert "Traefik is running" in result.output
         assert "d=/srv/proxy" in run.calls[0][1]["input"]
         assert f"email: {EMAIL}" in run.calls[0][1]["input"]
+
+    def test_a_refusal_exits_non_zero(self, tmp_path, monkeypatch):
+        """The command is meant to be chained before a deploy, and `rkd
+        instance init` next door already exits 1 on its own refusals."""
+        self._project(tmp_path, monkeypatch, type="native")
+
+        assert self._invoke("--email", EMAIL).exit_code == 1
+
+    def test_a_success_exits_zero(self, tmp_path, monkeypatch):
+        self._project(tmp_path, monkeypatch, traefik_email=EMAIL)
+        monkeypatch.setattr(
+            proxy.subprocess,
+            "run",
+            _RecordingRun("wrote= traefik.yml\nkept=\nports_checked=yes\nstarted=yes\ndone=yes\n"),
+        )
+
+        assert self._invoke().exit_code == 0
+
+    def test_a_taken_port_exits_non_zero(self, tmp_path, monkeypatch):
+        self._project(tmp_path, monkeypatch, traefik_email=EMAIL)
+        monkeypatch.setattr(
+            proxy.subprocess,
+            "run",
+            _RecordingRun("ports_taken=80\nports_checked=yes\nstarted=no\ndone=yes\n"),
+        )
+
+        result = self._invoke()
+
+        assert result.exit_code == 1
+        assert "already taken" in result.output
+
+    def test_a_foreign_traefik_off_the_network_exits_non_zero(self, tmp_path, monkeypatch):
+        """Nothing routes this Odoo, so the next step cannot succeed either."""
+        self._project(tmp_path, monkeypatch, traefik_email=EMAIL)
+        monkeypatch.setattr(
+            proxy.subprocess,
+            "run",
+            _RecordingRun("traefik_foreign=edge\nforeign_attached=no\nstarted=no\ndone=yes\n"),
+        )
+
+        result = self._invoke()
+
+        assert result.exit_code == 1
+        assert "is [bold]not[/bold] attached" in result.output or "not" in result.output
+
+    def test_a_foreign_traefik_on_the_network_exits_zero(self, tmp_path, monkeypatch):
+        """Something is serving the network already; rkd just does not own it."""
+        self._project(tmp_path, monkeypatch, traefik_email=EMAIL)
+        monkeypatch.setattr(
+            proxy.subprocess,
+            "run",
+            _RecordingRun("traefik_foreign=edge\nforeign_attached=yes\nstarted=no\ndone=yes\n"),
+        )
+
+        assert self._invoke().exit_code == 0

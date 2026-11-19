@@ -296,25 +296,25 @@ def instance_traefik(env, traefik_dir, email):
     mgr = InstanceConfigManager(project_path)
     if not mgr.exists():
         console.print("\n[red]No instance.yaml found. Run rkd instance init first.[/red]\n")
-        return
+        raise SystemExit(1)
     try:
         env_config = mgr.get_env(env)
     except Exception as e:
         console.print(f"\n[red]Error loading config: {e}[/red]\n")
-        return
+        raise SystemExit(1)
     if not env_config:
         console.print(f'\n[red]Environment "{env}" not found in instance.yaml.[/red]\n')
-        return
+        raise SystemExit(1)
     if env_config.get("type", "docker") == "native":
         console.print(
             f'\n[red]"{env}" is a native deploy.[/red] It has no way to use a reverse proxy yet (#211): '
             "its Odoo answers on port 8069. Use type docker to get Traefik.\n"
         )
-        return
+        raise SystemExit(1)
     email = email or env_config.get("traefik_email", "")
     if not email:
         console.print(f"\n[red]No Let's Encrypt email.[/red] Pass --email, or set traefik_email for {env}.\n")
-        return
+        raise SystemExit(1)
 
     vps = env_config["vps"]
     directory = traefik_dir or proxy.TRAEFIK_DIR
@@ -323,7 +323,7 @@ def instance_traefik(env, traefik_dir, email):
         report = proxy.install(auth, vps, traefik_dir=directory, email=email, on_progress=console_progress(console))
     except (ServiceError, ValueError) as e:
         console.print(f"\n[red]{e}[/red]\n")
-        return
+        raise SystemExit(1)
 
     console.print()
     if report["traefik_foreign"]:
@@ -361,6 +361,10 @@ def instance_traefik(env, traefik_dir, email):
             )
         )
     console.print()
+    # Non-zero when nothing ends up serving this Odoo, so the command can be
+    # chained: a foreign proxy off the network routes nothing either.
+    if report["ports_taken"] or not (report["started"] or report["foreign_attached"] == "yes"):
+        raise SystemExit(1)
 
 
 @instance.command(name="status")
