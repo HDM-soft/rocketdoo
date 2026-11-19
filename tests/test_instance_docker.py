@@ -685,3 +685,34 @@ class TestTheBuildSshFlag:
             deployer._render_templates(out)
 
             assert ("--mount=type=ssh" in (out / "Dockerfile.prod").read_text()) is mounted
+
+
+class TestThePublicUrlProbe:
+    def test_it_runs_from_the_vps_after_the_services_start_with_both_schemes(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch)
+
+        script = run.script_with("--max-time 10")
+        assert ok
+        assert "http https" in script
+        assert "erp.example.com" in script
+        assert run.index_of("--max-time 10") > run.index_of("web/login")
+
+    def test_it_is_braced_like_every_remote_script(self, tmp_path, monkeypatch):
+        _, run = _deploy(tmp_path, monkeypatch)
+
+        script = run.script_with("--max-time 10")
+        assert script.startswith("{\n") and script.endswith("}\n")
+
+    def test_no_domain_means_no_probe(self, tmp_path, monkeypatch):
+        _, run = _deploy(tmp_path, monkeypatch, domain="")
+
+        assert not run.sent_containing("--max-time 10")
+
+    def test_a_silent_url_never_fails_the_deploy_but_is_recorded(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        monkeypatch.setattr(deployer_docker.subprocess, "run", _RecordingRun())
+        deployer = deployer_docker.DockerInstanceDeployer("prod", _config(), tmp_path)
+
+        assert deployer.deploy() is True
+        probe = [c for c in deployer.checks if c["name"] == "public url"]
+        assert probe and probe[0]["ok"] is False
