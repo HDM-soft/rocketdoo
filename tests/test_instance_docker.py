@@ -20,7 +20,10 @@ import subprocess
 
 import pytest
 
-from rocketdoo.core.instance import deployer_docker, secrets_store, ssh_utils
+pytestmark = pytest.mark.usefixtures("green_preflight")
+
+from rocketdoo.core.instance import config_manager, deployer_docker, secrets_store, ssh_utils
+from tests.conftest import GREEN_REMOTE
 
 
 class _RecordingRun:
@@ -218,8 +221,30 @@ class TestTheRenderedConf:
         deployer = deployer_docker.DockerInstanceDeployer("prod", _config(**overrides), tmp_path)
         rendered = tmp_path / "rendered"
         rendered.mkdir()
-        deployer._render_templates(rendered, allow_remote_lookup=False)
+        monkeypatch.setattr(deployer, "_read_remote_pg_pass", lambda: None)
+        deployer._render_templates(rendered)
         return (rendered / "prod" / "config" / "odoo.conf").read_text()
+
+    def test_prod_defaults_fit_a_small_vps(self, tmp_path, monkeypatch):
+        conf = self._conf(tmp_path, monkeypatch)
+
+        assert "workers = 2\n" in conf
+        assert "limit_memory_hard = 1610612736\n" in conf
+        assert "db_maxconn = 11\n" in conf
+        assert "max_cron_threads = 1\n" in conf
+
+    def test_an_unlisted_environment_falls_back_to_the_stage_limits(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        deployer = deployer_docker.DockerInstanceDeployer("qa", _config(), tmp_path)
+        rendered = tmp_path / "rendered"
+        rendered.mkdir()
+        monkeypatch.setattr(deployer, "_read_remote_pg_pass", lambda: None)
+        deployer._render_templates(rendered)
+
+        conf = (rendered / "qa" / "config" / "odoo.conf").read_text()
+        assert "workers = 1\n" in conf
+        assert "limit_memory_hard = 1073741824\n" in conf
+        assert "db_maxconn = 15\n" in conf
 
     def test_the_conf_declares_the_password_the_compose_mounts(self, tmp_path, monkeypatch):
         conf = self._conf(tmp_path, monkeypatch)
@@ -447,3 +472,165 @@ class TestTheScriptsRun:
 
         assert code == 1
         assert any("compose logs" in line for line in log), "the operator is left without the reason"
+
+
+class TestTheConnectionBudget:
+    @pytest.mark.parametrize(
+        ("max_connections", "workers", "expected"),
+        [(50, 1, 15), (50, 2, 11), (200, 1, 65), (200, 2, 48), (100, 2, 23), (10, 4, 8)],
+    )
+    def test_each_process_gets_an_equal_share_with_a_floor(self, max_connections, workers, expected):
+        assert config_manager.db_maxconn(max_connections, workers) == expected
+
+
+class TestEnterprise:
+    def _local(self, tmp_path):
+        (tmp_path / "enterprise").mkdir()
+
+    def test_rsync_sends_the_local_checkout_without_its_git_history(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        assert ok
+        calls = [a for a, _ in run.calls if a[0] == "rsync" and a[-1].endswith("/opt/odoo-prod/enterprise/")]
+        assert calls
+        assert "--exclude" in calls[0] and ".git/" in calls[0]
+        assert calls[0][-2] == f"{tmp_path}/enterprise/"
+
+    def test_clone_forwards_the_agent_and_pins_the_series(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone")
+        assert ok
+        args, kwargs = run.calls[run.index_of("git clone")]
+        assert "-A" in args
+        assert "git clone --depth 1 --branch 18.0 git@github.com:odoo/enterprise.git" in kwargs["input"]
+
+    def test_a_series_written_without_the_minor_is_still_a_branch(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone", odoo_version="19")
+        assert ok
+        assert "--branch 19.0 " in run.script_with("git clone")
+
+    def test_rsync_without_a_local_checkout_stops_before_touching_the_vps(self, tmp_path, monkeypatch):
+        ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        assert not ok
+        assert not run.calls
+        assert not [a for a, _ in run.calls if a[0] == "rsync" and a[-1].endswith("/opt/odoo-prod/enterprise/")]
+
+    def test_nothing_is_synced_without_use_enterprise(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        ok, run = _deploy(tmp_path, monkeypatch, enterprise_source="clone")
+        assert ok
+        assert not run.sent_containing("git clone")
+        assert not run.sent_containing("enterprise/")
+
+    def test_the_destination_is_created_before_anything_is_written_to_it(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        _, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
+        mkdir = run.index_of("/opt/odoo-prod/enterprise")
+        assert mkdir < run.index_of("rsync")
+
+    def test_the_build_context_excludes_what_is_mounted_at_runtime(self, tmp_path, monkeypatch):
+        self._local(tmp_path)
+        seen = {}
+        recording = _RecordingRun()
+
+        def run(args, **kwargs):
+            if args[0] == "rsync" and args[-1].endswith("/.dockerignore"):
+                seen["content"] = open(args[-2]).read()
+            return recording(args, **kwargs)
+
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        monkeypatch.setattr(deployer_docker.subprocess, "run", run)
+        deployer = deployer_docker.DockerInstanceDeployer("prod", _config(use_enterprise=True), tmp_path)
+        assert deployer.deploy()
+        ignored = seen["content"].split()
+        assert "enterprise/" in ignored
+        assert "extra-addons/" in ignored
+        assert "stage/" in ignored and "prod/" in ignored
+        dockerfile = (deployer_docker._TEMPLATES_DIR / "Dockerfile.jinja").read_text()
+        assert "COPY extra-addons" not in dockerfile
+
+
+class TestGitman:
+    GITMAN = (
+        "location: external_addons\nsources:\n"
+        "  - repo: https://github.com/ingadhoc/odoo-argentina.git\n    name: l10n_ar\n"
+        "  - repo: https://github.com/OCA/web.git\n"
+    )
+
+    def _project(self, tmp_path, *, script=True):
+        (tmp_path / "gitman.yml").write_text(self.GITMAN)
+        if script:
+            (tmp_path / "install_dependencies.sh").write_text("#!/bin/sh\n")
+
+    def _render(self, tmp_path, tmp):
+        deployer = deployer_docker.DockerInstanceDeployer(
+            "prod", _config(use_gitman=True, gitman_config="gitman.yml"), tmp_path
+        )
+        deployer._render_templates(tmp)
+        return (
+            (tmp / "Dockerfile.prod").read_text(),
+            (tmp / "prod" / "config" / "odoo.conf").read_text(),
+        )
+
+    def test_every_source_reaches_the_addons_path(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        _, conf = self._render(tmp_path, out)
+        assert (
+            "addons_path = /mnt/extra-addons,/opt/odoo/gitman/external_addons/l10n_ar,/opt/odoo/gitman/external_addons/web\n"
+        ) in conf
+
+    def test_the_dependency_script_is_copied_when_it_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path)
+        out = tmp_path / "out"
+        out.mkdir()
+        dockerfile, _ = self._render(tmp_path, out)
+        assert "COPY install_dependencies.sh /usr/lib/python3/dist-packages/odoo/" in dockerfile
+        assert (out / "install_dependencies.sh").exists()
+        assert "/opt/odoo/gitman /etc/odoo" in dockerfile
+        assert "COPY extra-addons" not in dockerfile
+
+    def test_without_the_script_nothing_is_copied(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path, script=False)
+        out = tmp_path / "out"
+        out.mkdir()
+        dockerfile, _ = self._render(tmp_path, out)
+        assert "install_dependencies" not in dockerfile
+        assert not (out / "install_dependencies.sh").exists()
+
+    def test_the_script_travels_with_the_gitman_file(self, tmp_path, monkeypatch):
+        self._project(tmp_path)
+        repos = ["https://github.com/ingadhoc/odoo-argentina.git", "https://github.com/OCA/web.git"]
+        monkeypatch.setattr(deployer_docker.preflight, "remote_facts", lambda *a, **k: {**GREEN_REMOTE, "repo_ok": repos})
+        _, run = _deploy(tmp_path, monkeypatch, use_gitman=True, gitman_config="gitman.yml")
+        assert run.sent_containing("/opt/odoo-prod/install_dependencies.sh")
+        assert run.sent_containing("/opt/odoo-prod/gitman.yml")
+
+    def test_enterprise_leads_and_nested_addons_are_listed(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        self._project(tmp_path)
+        nested = tmp_path / "addons" / "oca" / "mod"
+        nested.mkdir(parents=True)
+        (nested / "__manifest__.py").write_text("{}")
+        out = tmp_path / "out"
+        out.mkdir()
+        deployer = deployer_docker.DockerInstanceDeployer(
+            "prod", _config(use_gitman=True, gitman_config="gitman.yml", use_enterprise=True), tmp_path
+        )
+        deployer._render_templates(out)
+        conf = (out / "prod" / "config" / "odoo.conf").read_text()
+        assert (
+            "addons_path = /mnt/enterprise,/mnt/extra-addons,/mnt/extra-addons/oca,"
+            "/opt/odoo/gitman/external_addons/l10n_ar,/opt/odoo/gitman/external_addons/web\n"
+        ) in conf
+
+    def test_the_host_keys_of_every_ssh_source_are_scanned(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ssh_utils, "check_sshpass", lambda: True)
+        (tmp_path / "gitman.yml").write_text("sources:\n  - repo: git@gitlab.com:g/a.git\n    name: a\n")
+        out = tmp_path / "out"
+        out.mkdir()
+        dockerfile, _ = self._render(tmp_path, out)
+        assert "ssh-keyscan github.com gitlab.com >>" in dockerfile

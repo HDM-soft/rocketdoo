@@ -30,10 +30,13 @@ ENV GITMAN_CACHE=0
 {% endif %}
 
 RUN mkdir -p /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %} /root/.ssh
-RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
+RUN ssh-keyscan {{ ssh_hosts | join(' ') }} >> /root/.ssh/known_hosts
 
 {% if use_gitman %}
 COPY {{ gitman_config_file }} /opt/odoo/gitman/gitman.yml
+{% if install_script %}
+COPY install_dependencies.sh /usr/lib/python3/dist-packages/odoo/
+{% endif %}
 WORKDIR /opt/odoo/gitman
 
 # Requires SSH agent forwarding: docker build --ssh default
@@ -42,9 +45,7 @@ RUN --mount=type=ssh \
     echo "gitman install OK"
 {% endif %}
 
-COPY extra-addons /mnt/extra-addons
-
-RUN chown -R odoo:odoo /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %} /etc/odoo
+RUN chown -R odoo:odoo /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %}{% if use_gitman %} /opt/odoo/gitman{% endif %} /etc/odoo
 
 USER odoo
 

@@ -1,5 +1,5 @@
 [options]
-addons_path = /mnt/extra-addons{% if use_enterprise %},/mnt/enterprise{% endif %}
+addons_path = {{ addons_path }}
 
 data_dir = /var/lib/odoo
 admin_passwd = {{ admin_passwd }}
@@ -9,12 +9,13 @@ db_port = 5432
 db_user = {{ db_user }}
 db_password = {{ db_password }}
 db_name = {{ db_name }}
-db_maxconn = 64
+db_maxconn = {{ db_maxconn }}
 
 log_level = {{ log_level }}
 logfile = /var/log/odoo/odoo-server.log
 
 workers = {{ workers }}
+max_cron_threads = {{ max_cron_threads }}
 gevent_port = 8072
 
 limit_memory_hard = {{ limit_memory_hard }}

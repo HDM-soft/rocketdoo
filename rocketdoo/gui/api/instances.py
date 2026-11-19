@@ -87,7 +87,7 @@ class InstanceInitRequest(BaseModel):
 async def init_instances(body: InstanceInitRequest):
     """Save instance configuration (.rkd/instance.yaml) from GUI form data."""
     try:
-        from rocketdoo.core.instance.config_manager import InstanceConfigManager
+        from rocketdoo.core.instance.config_manager import InstanceConfigManager, merge_environments
         from rocketdoo.core.instance.secrets_store import random_password
         from rocketdoo.core.project_info import project_exists
 
@@ -105,13 +105,12 @@ async def init_instances(body: InstanceInitRequest):
             # would ship an empty admin_passwd.
             if not values.get("admin_passwd"):
                 values["admin_passwd"] = random_password()
-            values.setdefault("remote_path", "")
-            if not values["remote_path"]:
-                values["remote_path"] = f"/opt/odoo-{env}"
             raw[env] = values
 
         config = InstanceConfig.model_validate({"environments": raw})
-        InstanceConfigManager(Path.cwd()).save(config.to_yaml_dict())
+        manager = InstanceConfigManager(Path.cwd())
+        existing = manager.load() if manager.exists() else {}
+        manager.save(merge_environments(existing, config.to_yaml_dict()["environments"]))
         return {
             "ok": True,
             "environments": list(config.environments),
@@ -127,17 +126,19 @@ class DeployRequest(BaseModel):
 
 
 @router.post("/deploy")
-async def deploy_instance(body: DeployRequest):
+def deploy_instance(body: DeployRequest):
+    result = {"ok": False, "dry_run": body.dry_run, "env": body.env}
     try:
         from rocketdoo.core.instance.config_manager import InstanceConfigManager
 
-        manager = InstanceConfigManager()
-        if not manager.exists():
-            return {"ok": False, "error": "No instance.yaml found. Run rkd instance init first."}
-        env_cfg = manager.get_env(body.env)
         project_path = Path.cwd()
-        deploy_type = env_cfg.get("type", "docker")
-        if deploy_type == "docker":
+        manager = InstanceConfigManager(project_path)
+        if not manager.exists():
+            return {**result, "error": "No instance.yaml found. Run rkd instance init first."}
+        env_cfg = manager.get_env(body.env)
+        if not env_cfg:
+            return {**result, "error": f"Environment '{body.env}' is not configured in instance.yaml."}
+        if env_cfg.get("type", "docker") == "docker":
             from rocketdoo.core.instance.deployer_docker import DockerInstanceDeployer
 
             deployer = DockerInstanceDeployer(body.env, env_cfg, project_path)
@@ -146,6 +147,10 @@ async def deploy_instance(body: DeployRequest):
 
             deployer = NativeInstanceDeployer(body.env, env_cfg, project_path)
         ok = deployer.deploy(dry_run=body.dry_run)
-        return {"ok": ok}
+        blocking = [c for c in deployer.checks if c["level"] == "block" and not c["ok"]]
+        result.update(ok=ok, checks=deployer.checks)
+        if not ok and blocking:
+            result["error"] = "; ".join(f"{c['name']}: {c['detail']}" for c in blocking)
+        return result
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {**result, "error": str(e)}

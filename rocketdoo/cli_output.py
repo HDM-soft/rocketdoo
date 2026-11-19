@@ -31,3 +31,17 @@ def console_progress(console: Console) -> ProgressCallback:
         console.print(_STYLES.get(level, _STYLES["info"]).format(message=escape(message)))
 
     return report
+
+
+def print_checks(console: Console, checks: list[dict]) -> None:
+    """One line per pre-flight check, with the hint under each one that failed."""
+    for check in checks:
+        if check["ok"]:
+            mark, style = "✓", "green"
+        elif check["level"] == "block":
+            mark, style = "✗", "red"
+        else:
+            mark, style = "⚠", "yellow"
+        console.print(f"[{style}]{mark}[/{style}] {escape(check['name'])}: {escape(check['detail'])}")
+        if check["hint"] and style != "green":
+            console.print(f"    [dim]{escape(check['hint'])}[/dim]")

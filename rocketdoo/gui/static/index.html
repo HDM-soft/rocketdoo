@@ -1958,7 +1958,7 @@ const Instances = {
       dep.value[env] = true
       try {
         const r = await api.post('/instances/deploy', { env, dry_run: !!dry.value[env] })
-        if (r.ok) notify(dry.value[env] ? t('instanceDryRunCompleted', { env: env }) : t('instanceDeployCompleted', { env: env }))
+        if (r.ok) notify(r.dry_run ? t('instanceDryRunCompleted', { env: env }) : t('instanceDeployCompleted', { env: env }))
         else notify(r.error||t('deployFailed'),'err')
       } catch(e) { notify(e.message,'err') }
       finally { dep.value[env] = false }

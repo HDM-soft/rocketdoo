@@ -9,16 +9,17 @@ db_port = 5432
 db_user = odoo
 db_password = s3cr3t-pg
 db_name = demo_stage
-db_maxconn = 64
+db_maxconn = 15
 
 log_level = info
 logfile = /var/log/odoo/odoo-server.log
 
-workers = 2
+workers = 1
+max_cron_threads = 1
 gevent_port = 8072
 
-limit_memory_hard = 1610612736
-limit_memory_soft = 1073741824
+limit_memory_hard = 1073741824
+limit_memory_soft = 805306368
 limit_request = 8192
 limit_time_cpu = 60
 limit_time_real = 120

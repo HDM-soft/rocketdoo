@@ -8,7 +8,7 @@ Install flow:
   3. apt install odoo
   4. Create the PostgreSQL role Odoo authenticates as
   5. Configure /etc/odoo/odoo.conf
-  6. rsync extra-addons to remote addons path
+  6. rsync extra-addons to remote addons path, and sync Enterprise
   7. Create and initialise the database Odoo serves, and set the admin password
   8. Enable + start odoo systemd service
   9. Verify Odoo answers
@@ -20,9 +20,21 @@ from pathlib import Path
 
 from rich.console import Console
 
-from .config_manager import LOG_LEVEL_BY_ENV, MEMORY_BY_ENV, WORKERS_BY_ENV, invalid_identifiers
+from rocketdoo.cli_output import print_checks
+
+from . import preflight
+from .config_manager import (
+    CRON_THREADS,
+    DEBIAN_PG_MAX_CONNECTIONS,
+    LOG_LEVEL_BY_ENV,
+    MEMORY_BY_ENV,
+    NATIVE_ADDONS_PATH,
+    WORKERS_BY_ENV,
+    db_maxconn,
+)
+from .enterprise import branch, clone_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
-from .ssh_utils import build_rsync_cmd, build_ssh_cmd, resolve_auth
+from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
 console = Console()
 
@@ -62,12 +74,15 @@ class NativeInstanceDeployer:
         self.auth = resolve_auth(vps, env, project_path)
 
         self.odoo_version = env_config.get("odoo_version", "17.0")
-        self.remote_addons = env_config.get("remote_path", "/opt/odoo/extra-addons")
+        self.remote_addons = env_config.get("remote_path", NATIVE_ADDONS_PATH)
+        self.enterprise_path = "/opt/odoo/enterprise"
         self.odoo_conf_path = "/etc/odoo/odoo.conf"
         self.service_name = "odoo"
 
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
+        self.checks: list[dict] = []
+        self._warnings: list[dict] = []
 
     # ─── public API ──────────────────────────────────────────────────────────
 
@@ -75,14 +90,15 @@ class NativeInstanceDeployer:
         """Run full native deployment. Returns True on success."""
         console.print(f"\n[bold cyan]Native deploy {self.env.upper()} → {self.host}[/bold cyan]\n")
 
-        invalid = invalid_identifiers(self.db_user, self.db_name)
-        if invalid:
-            console.print(f"[red]✗ Not a valid PostgreSQL identifier: {', '.join(invalid)}[/red]")
-            console.print(
-                "[dim]db_user and db_name may hold up to 63 letters, digits and underscores, and cannot start with a digit.[/dim]"
-            )
+        if not self._preflight():
             return False
 
+        try:
+            return self._run(dry_run)
+        finally:
+            self._repeat_warnings()
+
+    def _run(self, dry_run: bool) -> bool:
         if dry_run:
             self._show_plan()
             return True
@@ -96,12 +112,31 @@ class NativeInstanceDeployer:
 
         return True
 
+    def _preflight(self) -> bool:
+        cfg = {**self.cfg, "remote_path": self.remote_addons, "db_user": self.db_user, "db_name": self.db_name}
+        console.print("[dim]Pre-flight checks...[/dim]")
+        checks = preflight.run(self.project_path, self.auth, cfg, env=self.env)
+        print_checks(console, checks)
+        self.checks = checks
+        self._warnings = [c for c in checks if c["level"] == "warn" and not c["ok"]]
+        return not preflight.blocking(checks)
+
+    def _repeat_warnings(self):
+        if self._warnings:
+            console.print("[yellow]Warnings from the pre-flight:[/yellow]")
+            print_checks(console, self._warnings)
+
     def _steps(self) -> list[tuple[str, Callable[[], bool]]]:
         """The deployment, in order.
 
         `deploy()` runs this list and `_show_plan()` prints it, so a dry run
         cannot describe a sequence other than the one that would execute.
         """
+        enterprise = (
+            [(f"Syncing Enterprise → {self.enterprise_path}", self._sync_enterprise)]
+            if self.cfg.get("use_enterprise", False)
+            else []
+        )
         return [
             ("Installing system dependencies + PostgreSQL", self._install_system_deps),
             (f"Adding Odoo {self.odoo_version} nightly repository", self._add_odoo_repo),
@@ -109,6 +144,7 @@ class NativeInstanceDeployer:
             (f"Ensuring PostgreSQL role {self.db_user}", self._ensure_db_role),
             (f"Writing {self.odoo_conf_path}", self._configure_odoo),
             (f"Syncing extra-addons → {self.remote_addons}", self._sync_addons),
+            *enterprise,
             (f"Ensuring database {self.db_name}", self._ensure_database),
             (f"Enabling Odoo service ({self.service_name})", self._enable_service),
             ("Verifying Odoo answers", self._verify_odoo_answers),
@@ -205,9 +241,9 @@ class NativeInstanceDeployer:
     def _configure_odoo(self) -> bool:
         admin_passwd = self._resolve_admin_passwd()
         db_password = self._resolve_db_password()
-        workers = WORKERS_BY_ENV.get(self.env, 2)
+        workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
         log_level = LOG_LEVEL_BY_ENV.get(self.env, "info")
-        mem = MEMORY_BY_ENV[self.env]
+        mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
         use_enterprise = self.cfg.get("use_enterprise", False)
         # Nothing stands in front of a native deploy today (Traefik for this
         # path is #211), and with proxy_mode on Odoo trusts the X-Forwarded-*
@@ -216,7 +252,7 @@ class NativeInstanceDeployer:
 
         addons_path = self.remote_addons
         if use_enterprise:
-            addons_path += ",/opt/odoo/enterprise"
+            addons_path += f",{self.enterprise_path}"
 
         conf = (
             "[options]\n"
@@ -228,10 +264,11 @@ class NativeInstanceDeployer:
             f"db_user = {self.db_user}\n"
             f"db_password = {db_password}\n"
             f"db_name = {self.db_name}\n"
-            "db_maxconn = 64\n"
+            f"db_maxconn = {db_maxconn(DEBIAN_PG_MAX_CONNECTIONS, workers)}\n"
             f"log_level = {log_level}\n"
             "logfile = /var/log/odoo/odoo-server.log\n"
             f"workers = {workers}\n"
+            f"max_cron_threads = {CRON_THREADS}\n"
             "gevent_port = 8072\n"
             f"limit_memory_hard = {mem['hard']}\n"
             f"limit_memory_soft = {mem['soft']}\n"
@@ -258,10 +295,36 @@ class NativeInstanceDeployer:
             console.print("[yellow]  No local addons/ directory found — skipping sync[/yellow]")
             return True
 
-        self._ssh(f"sudo mkdir -p {self.remote_addons} && sudo chown {self.user} {self.remote_addons}")
-        cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, f"{addons_dir}/", f"{self.remote_addons}/")
-        result = subprocess.run(cmd, env=env)
-        return result.returncode == 0
+        if not self._ssh(ensure_dirs_command([self.remote_addons], self.remote_addons, self.user)):
+            console.print(f"[red]✗ Could not create {self.remote_addons} on the VPS[/red]")
+            return False
+        return self._rsync(f"{addons_dir}/", f"{self.remote_addons}/")
+
+    def _sync_enterprise(self) -> bool:
+        if not self.cfg.get("use_enterprise", False):
+            return True
+
+        dest = self.enterprise_path
+        if not self._ssh(ensure_dirs_command([dest], dest, self.user)):
+            console.print(f"[red]✗ Could not create {dest} on the VPS[/red]")
+            return False
+
+        if self.cfg.get("enterprise_source", "rsync") == "clone":
+            try:
+                script = clone_script(dest, branch(self.odoo_version))
+            except ValueError as error:
+                console.print(f"[red]✗ {error}[/red]")
+                return False
+            if not self._ssh("bash -s", agent_forward=True, timeout=1800, input=script):
+                console.print(
+                    "[red]✗ The odoo/enterprise clone failed; see the remote output above. If it is access, the SSH agent must hold a key with access to the repository (ssh-add -l).[/red]"
+                )
+                return False
+            return True
+
+        local = self.project_path / "enterprise"
+        console.print("[dim]  The first run transfers hundreds of MB.[/dim]")
+        return self._rsync(f"{local}/", f"{dest}/", ["--exclude", ".git/"])
 
     def _resolve_admin_login_password(self) -> str:
         """
@@ -388,8 +451,12 @@ class NativeInstanceDeployer:
 
     # ─── helpers ─────────────────────────────────────────────────────────────
 
-    def _ssh(self, command: str, timeout: int = 300, input: str | None = None) -> bool:
-        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
+    def _rsync(self, local: str, remote: str, extra_opts: list[str] | None = None) -> bool:
+        cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, local, remote, extra_opts)
+        return subprocess.run(cmd, env=env).returncode == 0
+
+    def _ssh(self, command: str, timeout: int = 300, input: str | None = None, agent_forward: bool = False) -> bool:
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command, agent_forward=agent_forward)
         try:
             return subprocess.run(cmd, timeout=timeout, env=env, input=input, text=True).returncode == 0
         except subprocess.TimeoutExpired:
