@@ -33,6 +33,7 @@ def _local(**overrides) -> dict:
         "enterprise_dir": True,
         "agent_has_keys": True,
         "ssh_auth_sock": True,
+        "build_needs_ssh": False,
         "key_file": True,
         "invalid_identifiers": [],
     }
@@ -127,26 +128,70 @@ class TestBlockers:
 
 
 class TestTheSshAgentSocket:
-    def test_a_docker_deploy_without_a_socket_is_blocked(self):
-        check = _evaluate(_cfg(), _local(ssh_auth_sock=False))["ssh agent socket"]
+    """`docker compose build --ssh default` aborts with no agent socket, even
+    when the Dockerfile mounts none. The check is asked exactly when the build
+    passes that flag: demanding a socket from a build that dropped it would
+    block the very projects the flag was made conditional for.
+    """
+
+    def test_a_build_that_forwards_an_agent_is_blocked_without_a_socket(self):
+        check = _evaluate(_cfg(), _local(ssh_auth_sock=False, build_needs_ssh=True))["ssh agent socket"]
 
         assert check["level"] == "block"
         assert check["ok"] is False
         assert "eval $(ssh-agent)" in check["hint"]
 
     def test_with_a_socket_it_passes_even_if_the_agent_is_empty(self):
-        check = _evaluate(_cfg(), _local(ssh_auth_sock=True, agent_has_keys=False))["ssh agent socket"]
+        local = _local(ssh_auth_sock=True, agent_has_keys=False, build_needs_ssh=True)
 
-        assert check["ok"] is True
+        assert _evaluate(_cfg(), local)["ssh agent socket"]["ok"] is True
+
+    def test_a_build_without_the_flag_is_not_asked(self):
+        local = _local(ssh_auth_sock=False, build_needs_ssh=False)
+
+        assert "ssh agent socket" not in _evaluate(_cfg(), local)
 
     def test_a_native_deploy_is_not_asked(self):
-        assert "ssh agent socket" not in _evaluate(_cfg(type="native"), _local(ssh_auth_sock=False))
+        local = _local(ssh_auth_sock=False, build_needs_ssh=True)
+
+        assert "ssh agent socket" not in _evaluate(_cfg(type="native"), local)
 
     def test_the_fact_reads_the_environment(self, tmp_path, monkeypatch):
         monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
         assert preflight.local_facts(tmp_path, _cfg())["ssh_auth_sock"] is True
         monkeypatch.delenv("SSH_AUTH_SOCK")
         assert preflight.local_facts(tmp_path, _cfg())["ssh_auth_sock"] is False
+
+
+class TestWhetherTheBuildForwardsAnAgent:
+    """One definition, read by the pre-flight check and by the build flag."""
+
+    def _needs(self, tmp_path, sources, **over):
+        (tmp_path / "gitman.yaml").write_text("sources:\n" + "".join(f"- repo: {s}\n" for s in sources))
+        return preflight.build_needs_ssh(tmp_path, _cfg(use_gitman=True, **over))
+
+    def test_https_sources_do_not(self, tmp_path):
+        assert self._needs(tmp_path, ["https://github.com/OCA/web.git"]) is False
+
+    def test_an_ssh_source_does(self, tmp_path):
+        assert self._needs(tmp_path, ["git@github.com:org/repo.git"]) is True
+
+    def test_a_scp_style_source_without_a_user_does(self, tmp_path):
+        """It carries no user and no scheme: matching SSH forms would miss it
+        and strip a flag the build needs."""
+        assert self._needs(tmp_path, ["github.com:org/repo"]) is True
+
+    def test_without_gitman_it_does_not(self, tmp_path):
+        assert preflight.build_needs_ssh(tmp_path, _cfg(use_gitman=False)) is False
+
+    def test_the_deployer_reads_the_same_predicate(self, tmp_path):
+        from rocketdoo.core.instance import deployer_docker
+
+        (tmp_path / "gitman.yaml").write_text("sources:\n  - repo: git@github.com:org/repo.git\n")
+        cfg = _cfg(use_gitman=True)
+        deployer = deployer_docker.DockerInstanceDeployer("prod", cfg, tmp_path)
+
+        assert deployer._needs_ssh() == preflight.build_needs_ssh(tmp_path, cfg)
 
 
 class TestWarnings:
@@ -227,6 +272,7 @@ class TestTheNativeSudo:
 class TestLocalChecksComeFirst:
     def test_a_known_failure_does_not_open_the_ssh_session(self, tmp_path, monkeypatch):
         monkeypatch.setattr(preflight, "_agent_has_keys", lambda: True)
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/rkd-test-agent.sock")
         monkeypatch.setattr(preflight, "remote_facts", lambda *a, **k: pytest.fail("the session was opened"))
 
         checks = preflight.run(tmp_path, {}, _cfg(use_enterprise=True, enterprise_source="rsync"), env="prod")
@@ -235,6 +281,7 @@ class TestLocalChecksComeFirst:
 
     def test_without_local_blockers_the_vps_is_asked(self, tmp_path, monkeypatch):
         monkeypatch.setattr(preflight, "_agent_has_keys", lambda: True)
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/rkd-test-agent.sock")
         monkeypatch.setattr(preflight, "remote_facts", lambda *a, **k: _remote())
 
         checks = preflight.run(tmp_path, {}, _cfg(), env="prod")
@@ -582,6 +629,7 @@ class TestGitman:
     def test_the_urls_come_from_the_file_and_are_probed(self, tmp_path, monkeypatch):
         (tmp_path / "gitman.yaml").write_text("sources:\n  - repo: https://h/a.git\n  - repo: https://h/a.git\n")
         monkeypatch.setattr(preflight, "_agent_has_keys", lambda: True)
+        monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/rkd-test-agent.sock")
         seen = {}
         monkeypatch.setattr(preflight, "remote_facts", lambda *a, **k: seen.update(k) or _remote())
         preflight.run(tmp_path, {}, _cfg(**self.CFG), env="prod")

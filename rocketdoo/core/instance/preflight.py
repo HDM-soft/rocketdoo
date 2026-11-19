@@ -64,9 +64,23 @@ def local_facts(project_root: Path, cfg: dict) -> dict:
         "install_script": (root / INSTALL_SCRIPT).is_file(),
         "agent_has_keys": _agent_has_keys(),
         "ssh_auth_sock": bool(os.environ.get("SSH_AUTH_SOCK")),
+        "build_needs_ssh": build_needs_ssh(root, cfg),
         "key_file": None if key is None else os.path.exists(os.path.expanduser(key)),
         "invalid_identifiers": invalid_identifiers(cfg.get("db_user", ""), cfg.get("db_name", "")),
     }
+
+
+def build_needs_ssh(project_root: Path, cfg: dict) -> bool:
+    """Whether the Docker build has to forward an agent.
+
+    Derived by exclusion: a scp-style `github.com:org/repo` carries no user and
+    no scheme, so matching the SSH forms would miss it and strip a flag the
+    build needs. A false positive only keeps today's behaviour.
+    """
+    if not cfg.get("use_gitman"):
+        return False
+    repos = gitman_repos(Path(project_root) / gitman_file(cfg))
+    return any(not url.startswith(("http://", "https://")) for url in repos)
 
 
 def _enterprise_urls(cfg: dict) -> list[str]:
@@ -391,7 +405,9 @@ def _local_checks(cfg: dict, local: dict) -> list[Check]:
         )
     if cfg.get("use_gitman"):
         checks += _gitman_checks(cfg, local)
-    if cfg.get("type", "docker") == "docker":
+    # Only when the build will actually pass `--ssh default`: that flag is what
+    # aborts without a socket, and it is now conditional on the same predicate.
+    if cfg.get("type", "docker") == "docker" and local.get("build_needs_ssh"):
         sock = bool(local.get("ssh_auth_sock"))
         checks.append(
             _check(

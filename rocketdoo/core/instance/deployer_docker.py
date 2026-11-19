@@ -18,7 +18,7 @@ from rich.console import Console
 
 from rocketdoo.cli_output import print_checks
 from rocketdoo.core import addons_path as local_addons
-from rocketdoo.core.gitman_config import gitman_module_paths, gitman_repos, gitman_ssh_hosts
+from rocketdoo.core.gitman_config import gitman_module_paths, gitman_ssh_hosts
 from rocketdoo.core.traefik import NETWORK as TRAEFIK_NETWORK
 
 from . import preflight
@@ -438,12 +438,10 @@ class DockerInstanceDeployer:
         return True
 
     def _needs_ssh(self) -> bool:
-        # Derived by exclusion: a scp-style `github.com:org/repo` has no user
-        # or scheme, so matching SSH forms would miss it and break the build.
-        if not self.cfg.get("use_gitman"):
-            return False
-        repos = gitman_repos(self.project_path / preflight.gitman_file(self.cfg))
-        return any(not url.startswith(("http://", "https://")) for url in repos)
+        # Same predicate the pre-flight blocker reads, defined once: a build
+        # that drops the flag while the check still demands a socket would
+        # block exactly the projects the flag was made conditional for.
+        return preflight.build_needs_ssh(self.project_path, self.cfg)
 
     def _build(self) -> bool:
         ssh_flag = " --ssh default" if self._needs_ssh() else ""
