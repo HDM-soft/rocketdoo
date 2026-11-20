@@ -108,3 +108,84 @@ def test_unknown_environment_is_rejected():
 def test_multiline_values_cannot_break_the_heredoc():
     with pytest.raises(ValueError):
         db_seed.neutralize_sql("prod", "dev", "a.com\nRKD_SQL_EOF")
+
+
+class TestTheGuardRunsForReal:
+    """The guard decides whether a client's production gets overwritten, so it
+    is exercised by running the script against fake binaries rather than by
+    reading it: a `psql` that answers, a `createdb`/`pg_restore`/`dropdb` that
+    record whether they were reached.
+    """
+
+    def _run(self, tmp_path, *, exists, marked, initialised):
+        """Run the native script with a psql whose answers are scripted."""
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        log = tmp_path / "calls.log"
+        answers = {
+            "pg_database": "1" if exists else "",
+            "ir_config_parameter": "1" if marked else "",
+            "ir_module_module": "1" if initialised else "",
+        }
+        psql = '#!/bin/sh\necho psql >> %s\nfor a in "$@"; do\n' % log
+        for needle, answer in answers.items():
+            psql += f'  case "$a" in *{needle}*) echo "{answer}"; exit 0;; esac\n'
+        psql += "done\nexit 0\n"
+        (bin_dir / "psql").write_text(psql)
+        for name in ("createdb", "pg_restore", "dropdb", "sudo", "tar", "sh"):
+            if name == "sudo":
+                body = (
+                    '#!/bin/sh\necho sudo >> %s\nwhile [ "${1#-}" != "$1" ] || [ "$1" = postgres ] || [ "$1" = odoo ]; do shift; done\nexec "$@"\n'
+                    % log
+                )
+            elif name == "sh":
+                continue
+            else:
+                body = f"#!/bin/sh\necho {name} >> {log}\nexit 0\n"
+            (bin_dir / name).write_text(body)
+        for f in bin_dir.iterdir():
+            f.chmod(0o755)
+
+        (tmp_path / "db.dump").write_text("")
+        script = db_seed.native_restore_script(str(tmp_path), env="prod", has_filestore=False, **ARGS)
+        result = subprocess.run(
+            ["bash", "-s"],
+            input=script,
+            text=True,
+            capture_output=True,
+            env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)},
+        )
+        calls = log.read_text().split() if log.exists() else []
+        return result, calls
+
+    def test_an_initialised_database_that_was_not_seeded_is_refused(self, tmp_path):
+        """Someone else's production: the one case that must never be dropped."""
+        result, calls = self._run(tmp_path, exists=True, marked=False, initialised=True)
+
+        assert result.returncode == 3
+        assert "refusing to overwrite" in result.stderr
+        assert "dropdb" not in calls
+        assert "pg_restore" not in calls
+
+    def test_an_already_seeded_database_is_left_alone(self, tmp_path):
+        """The second deploy: no transfer, no restore, no neutralization."""
+        result, calls = self._run(tmp_path, exists=True, marked=True, initialised=True)
+
+        assert result.returncode == 0
+        assert "dropdb" not in calls
+        assert "pg_restore" not in calls
+
+    def test_an_empty_leftover_database_is_dropped_and_restored(self, tmp_path):
+        """A first attempt that died before installing anything."""
+        result, calls = self._run(tmp_path, exists=True, marked=False, initialised=False)
+
+        assert result.returncode == 0
+        assert "dropdb" in calls
+        assert "pg_restore" in calls
+
+    def test_a_fresh_server_restores_without_dropping_anything(self, tmp_path):
+        result, calls = self._run(tmp_path, exists=False, marked=False, initialised=False)
+
+        assert result.returncode == 0
+        assert "createdb" in calls
+        assert "pg_restore" in calls
