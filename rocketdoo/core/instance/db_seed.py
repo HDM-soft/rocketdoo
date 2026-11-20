@@ -24,6 +24,8 @@ DUMP_FILE = "db.dump"
 FILESTORE_FILE = "filestore.tar.gz"
 FILESTORE_ROOT = "/var/lib/odoo/filestore"
 SEEDED_MARK = "rkd.seeded_from"
+RESTORE_WARNING = "warning: pg_restore ignored some statements"
+STATE_PREFIX = "rkd_seed_state="
 
 _SQL_HEREDOC = "RKD_SQL_EOF"
 _ENVIRONMENTS = ("stage", "prod")
@@ -173,13 +175,70 @@ def _script(
         "rc=$?",
         "set -e",
         'if [ "$rc" -gt 1 ]; then echo "pg_restore failed" >&2; fail "$rc"; fi',
-        'if [ "$rc" -eq 1 ]; then echo "warning: pg_restore ignored some statements" >&2; fi',
+        f'if [ "$rc" -eq 1 ]; then echo "{RESTORE_WARNING}" >&2; fi',
         f"{psql} -d {db} -v ON_ERROR_STOP=1 -1 -q -f - <<'{_SQL_HEREDOC}' || fail 1",
         sql.rstrip("\n"),
         _SQL_HEREDOC,
         "}",
     ]
     return "\n".join(lines) + "\n"
+
+
+def _state_script(*, prefix: str, auth: str, prologue: str, db_name: str) -> str:
+    db = shlex.quote(db_name)
+    psql = f"{prefix} psql{auth}"
+    in_db = f"{psql} -d {db} -tAc"
+    exists_sql = shlex.quote(f"SELECT 1 FROM pg_database WHERE datname = {_literal(db_name)}")
+    marked = shlex.quote(f"SELECT 1 FROM ir_config_parameter WHERE key = {_literal(SEEDED_MARK)}")
+    initialised = shlex.quote("SELECT 1 FROM ir_module_module WHERE name = 'base' AND state = 'installed'")
+    return "\n".join(
+        [
+            "{",
+            "set -e",
+            prologue,
+            f"exists=$({psql} -d postgres -tAc {exists_sql})",
+            "state=absent",
+            'if [ -n "$exists" ]; then',
+            "  state=empty",
+            f'  if [ -n "$({in_db} {marked} 2>/dev/null)" ]; then state=seeded',
+            f'  elif [ -n "$({in_db} {initialised} 2>/dev/null)" ]; then state=initialised',
+            "  fi",
+            "fi",
+            f'echo "{STATE_PREFIX}$state"',
+            "}",
+            "",
+        ]
+    )
+
+
+def parse_state(stdout: str) -> str:
+    """`absent`, `empty`, `seeded` or `initialised`; `` if the script did not answer."""
+    for line in stdout.splitlines():
+        if line.startswith(STATE_PREFIX):
+            return line[len(STATE_PREFIX) :].strip()
+    return ""
+
+
+def docker_state_script(compose_dir: str, *, db_name: str, db_user: str, ready_retries: int = 60) -> str:
+    """Start the `db` service, wait for it, and say what state `db_name` is in.
+
+    Asked before anything is dumped or shipped, so that a redeploy of an
+    already seeded instance costs one SSH round trip instead of a transfer.
+    """
+    wait = (
+        f"for _ in $(seq 1 {ready_retries}); do "
+        f"if docker compose exec -T db pg_isready -U {shlex.quote(db_user)} -q; then break; fi; sleep 2; done"
+    )
+    return _state_script(
+        prefix="docker compose exec -T db",
+        auth=f" -U {shlex.quote(db_user)}",
+        prologue=f"cd {shlex.quote(compose_dir)}\ndocker compose up -d db\n{wait}",
+        db_name=db_name,
+    )
+
+
+def native_state_script(*, db_name: str) -> str:
+    return _state_script(prefix="sudo -u postgres", auth="", prologue=":", db_name=db_name)
 
 
 def docker_restore_script(
