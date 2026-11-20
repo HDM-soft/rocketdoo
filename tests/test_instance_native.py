@@ -864,7 +864,7 @@ class TestEnterprise:
     def test_the_conf_points_at_the_directory_that_was_filled(self, tmp_path, monkeypatch):
         self._local(tmp_path)
         _, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
-        assert ",/opt/odoo/enterprise" in run.stdin_of("addons_path")
+        assert "addons_path = /opt/odoo/enterprise,/opt/odoo-prod" in run.stdin_of("addons_path")
 
     def test_the_plan_does_not_mention_enterprise_when_it_is_off(self, tmp_path):
         deployer = deployer_native.NativeInstanceDeployer("prod", _config(), tmp_path)
