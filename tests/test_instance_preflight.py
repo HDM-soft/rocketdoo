@@ -619,12 +619,28 @@ class TestGitman:
         assert url in checks["gitman repositories"]["detail"]
         assert _evaluate(_cfg(**self.CFG), local, _remote(repo_ok=[url]))["gitman repositories"]["ok"] is True
 
-    def test_gitman_on_a_native_deploy_warns_and_does_not_block(self):
+    def test_a_native_deploy_is_checked_like_docker_and_no_longer_warns_it_is_ignored(self):
         cfg = _cfg(type="native", sudo_user="x", **self.CFG)
-        checks = preflight.evaluate(cfg, _local())
-        assert not preflight.blocking(checks)
-        assert _by_name(checks)["gitman"]["level"] == "warn"
-        assert _by_name(checks)["gitman"]["ok"] is False
+        checks = preflight.evaluate(cfg, _local(gitman_file=False))
+        names = _by_name(checks)
+        assert "gitman" not in names
+        assert names["gitman file"]["level"] == "block"
+        assert [c["name"] for c in preflight.blocking(checks)] == ["gitman file"]
+
+    def test_a_native_deploy_probes_the_repositories(self):
+        url = "https://h/a.git"
+        cfg = _cfg(type="native", sudo_user="x", **self.CFG)
+        local = _local(gitman_file=True, install_script=True, gitman_urls=[url])
+        checks = _evaluate(cfg, local, _remote(repo_ok=[], repo_fail=[url]))
+        assert checks["gitman repositories"]["level"] == "block"
+
+    def test_local_facts_read_the_gitman_file_for_both_types(self, tmp_path):
+        (tmp_path / "gitman.yaml").write_text("sources:\n  - repo: https://h/a.git\n    scripts: [x]\n")
+        for kind in ("docker", "native"):
+            facts = preflight.local_facts(tmp_path, _cfg(type=kind, **self.CFG))
+            assert facts["gitman_urls"] == ["https://h/a.git"] and facts["gitman_scripts"] is True
+        off = preflight.local_facts(tmp_path, _cfg(type="native", use_gitman=False))
+        assert off["gitman_urls"] == [] and off["gitman_scripts"] is False
 
     def test_the_urls_come_from_the_file_and_are_probed(self, tmp_path, monkeypatch):
         (tmp_path / "gitman.yaml").write_text("sources:\n  - repo: https://h/a.git\n  - repo: https://h/a.git\n")

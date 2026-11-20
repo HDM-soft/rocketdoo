@@ -41,6 +41,7 @@ PURE_CORE = [
     "core/pack.py",
     "core/unpack.py",
     "core/instance/enterprise.py",
+    "core/instance/gitman_remote.py",
     "core/instance/preflight.py",
     "core/instance/proxy.py",
 ]
@@ -53,6 +54,7 @@ NO_CWD: list[str] = [
     "core/pack.py",
     "core/unpack.py",
     "core/instance/enterprise.py",
+    "core/instance/gitman_remote.py",
     "core/instance/preflight.py",
     "core/instance/proxy.py",
 ]

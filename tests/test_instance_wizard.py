@@ -110,12 +110,21 @@ def test_type_is_asked_once_for_a_new_file_and_applies_to_every_environment(wiza
 def test_native_is_not_asked_what_it_does_not_use(wizard):
     _, script, config = wizard({**BASE, "Deployment type": "native"})
 
-    for fragment in ("Domain", "Email", "PostgreSQL version", "Docker image tag", "Gitman", "Resource profile"):
+    for fragment in ("Domain", "Email", "PostgreSQL version", "Docker image tag", "Resource profile"):
         assert not script.asked_about(fragment)
     stage = config["environments"]["stage"]
     assert "domain" not in stage and "pg_profile" not in stage
     assert stage["remote_path"] == "/opt/odoo/extra-addons"
     assert script.asked_about("Remote addons path")
+
+
+def test_native_is_asked_about_gitman_and_saves_it(wizard):
+    _, script, config = wizard({**BASE, "Deployment type": "native", "Use Gitman": True})
+
+    assert script.asked_about("Gitman config file")
+    stage = config["environments"]["stage"]
+    assert stage["use_gitman"] is True and stage["gitman_config"] == "gitman.yaml"
+    assert "pg_profile" not in stage and "db_version" not in stage
 
 
 def test_docker_is_asked_the_full_set(wizard):

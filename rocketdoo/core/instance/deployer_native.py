@@ -9,9 +9,10 @@ Install flow:
   4. Create the PostgreSQL role Odoo authenticates as
   5. Configure /etc/odoo/odoo.conf
   6. rsync extra-addons to remote addons path, and sync Enterprise
-  7. Create and initialise the database Odoo serves, and set the admin password
-  8. Enable + start odoo systemd service
-  9. Verify Odoo answers
+  7. Install the gitman repositories, when used
+  8. Create and initialise the database Odoo serves, and set the admin password
+  9. Enable + start odoo systemd service
+  10. Verify Odoo answers
 """
 
 import subprocess
@@ -21,6 +22,8 @@ from pathlib import Path
 from rich.console import Console
 
 from rocketdoo.cli_output import print_checks
+from rocketdoo.core import addons_path as local_addons
+from rocketdoo.core.gitman_config import gitman_module_paths, gitman_ssh_hosts
 
 from . import preflight
 from .config_manager import (
@@ -33,6 +36,7 @@ from .config_manager import (
     db_maxconn,
 )
 from .enterprise import branch, clone_script
+from .gitman_remote import GITMAN_DIR, install_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
@@ -60,6 +64,7 @@ class NativeInstanceDeployer:
         /etc/odoo/odoo.conf
         /opt/odoo/extra-addons/     ← rsync'd from local
         /opt/odoo/enterprise/       ← if use_enterprise
+        /opt/odoo/gitman/           ← if use_gitman
     """
 
     def __init__(self, env: str, env_config: dict, project_path: Path):
@@ -137,6 +142,11 @@ class NativeInstanceDeployer:
             if self.cfg.get("use_enterprise", False)
             else []
         )
+        gitman = (
+            [(f"Installing gitman repositories → {GITMAN_DIR}", self._install_gitman)]
+            if self.cfg.get("use_gitman", False)
+            else []
+        )
         return [
             ("Installing system dependencies + PostgreSQL", self._install_system_deps),
             (f"Adding Odoo {self.odoo_version} nightly repository", self._add_odoo_repo),
@@ -145,6 +155,7 @@ class NativeInstanceDeployer:
             (f"Writing {self.odoo_conf_path}", self._configure_odoo),
             (f"Syncing extra-addons → {self.remote_addons}", self._sync_addons),
             *enterprise,
+            *gitman,
             (f"Ensuring database {self.db_name}", self._ensure_database),
             (f"Enabling Odoo service ({self.service_name})", self._enable_service),
             ("Verifying Odoo answers", self._verify_odoo_answers),
@@ -153,11 +164,10 @@ class NativeInstanceDeployer:
     # ─── install steps ────────────────────────────────────────────────────────
 
     def _install_system_deps(self) -> bool:
-        cmd = (
-            "apt-get update -qq && "
-            "apt-get install -y --no-install-recommends "
-            "curl wget gnupg2 apt-transport-https postgresql postgresql-client"
-        )
+        packages = "curl wget gnupg2 apt-transport-https postgresql postgresql-client"
+        if self.cfg.get("use_gitman", False):
+            packages += " git python3-venv python3-pip"
+        cmd = f"apt-get update -qq && apt-get install -y --no-install-recommends {packages}"
         return self._ssh(f'sudo bash -c "{cmd}"')
 
     def _add_odoo_repo(self) -> bool:
@@ -244,15 +254,12 @@ class NativeInstanceDeployer:
         workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
         log_level = LOG_LEVEL_BY_ENV.get(self.env, "info")
         mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
-        use_enterprise = self.cfg.get("use_enterprise", False)
         # Nothing stands in front of a native deploy today (Traefik for this
         # path is #211), and with proxy_mode on Odoo trusts the X-Forwarded-*
         # headers of whoever reaches it directly.
         proxy_mode = bool(self.cfg.get("proxy_mode", False))
 
-        addons_path = self.remote_addons
-        if use_enterprise:
-            addons_path += f",{self.enterprise_path}"
+        addons_path = self._addons_path()
 
         conf = (
             "[options]\n"
@@ -288,6 +295,14 @@ class NativeInstanceDeployer:
             f" && sudo chmod 640 {self.odoo_conf_path}"
         )
         return self._ssh(command, input=conf)
+
+    def _addons_path(self) -> str:
+        """Enterprise, extra-addons and its nested directories, then gitman: the order of the local conf."""
+        entries = [self.enterprise_path] if self.cfg.get("use_enterprise", False) else []
+        entries += local_addons.discover(self.project_path, self.remote_addons)
+        if self.cfg.get("use_gitman", False):
+            entries += gitman_module_paths(self.project_path / preflight.gitman_file(self.cfg), GITMAN_DIR)
+        return ",".join(entries)
 
     def _sync_addons(self) -> bool:
         addons_dir = self.project_path / "addons"
@@ -325,6 +340,26 @@ class NativeInstanceDeployer:
         local = self.project_path / "enterprise"
         console.print("[dim]  The first run transfers hundreds of MB.[/dim]")
         return self._rsync(f"{local}/", f"{dest}/", ["--exclude", ".git/"])
+
+    def _install_gitman(self) -> bool:
+        config = self.project_path / preflight.gitman_file(self.cfg)
+        if not config.is_file():
+            console.print(f"[red]✗ {config.name} is missing from the project[/red]")
+            return False
+        dependencies = self.project_path / preflight.INSTALL_SCRIPT
+        script = install_script(
+            self.env,
+            config.read_text(),
+            gitman_ssh_hosts(config),
+            dependencies.read_text() if dependencies.is_file() else "",
+        )
+        if not self._ssh("bash -s", timeout=1800, input=script, agent_forward=True):
+            console.print(
+                "[red]✗ gitman install failed; see the remote output above. For a private repository the "
+                "SSH agent must hold a key with access to it (ssh-add -l).[/red]"
+            )
+            return False
+        return True
 
     def _resolve_admin_login_password(self) -> str:
         """
