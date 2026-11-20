@@ -136,7 +136,7 @@ class TestTheDatabase:
 
         assert "FROM pg_database WHERE datname = 'odoo_prod'" in script
         assert "FROM ir_module_module WHERE name = 'base' AND state = 'installed'" in script
-        assert f"FROM ir_config_parameter WHERE key = '{deployer_docker._ADMIN_PASSWORD_MARK}'" in script
+        assert f"WHERE key IN ('{deployer_docker._ADMIN_PASSWORD_MARK}', '{deployer_docker.SEEDED_MARK}')" in script
 
     def test_the_existence_check_connects_to_a_database_that_exists(self, tmp_path, monkeypatch):
         """psql defaults to a database named after the role, which is the one

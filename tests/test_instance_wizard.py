@@ -35,6 +35,13 @@ class FakeSelect:
         return self.value
 
 
+@pytest.fixture(autouse=True)
+def local_databases(monkeypatch):
+    found = {"result": (["dev_db", "other_db"], "")}
+    monkeypatch.setattr(config_manager, "databases_result", lambda compose: found["result"])
+    return found
+
+
 @pytest.fixture
 def wizard(tmp_path, monkeypatch):
     def run(answers, fresh=False, existing=None):
@@ -305,3 +312,54 @@ def test_a_syntactically_broken_file_is_reported_not_a_traceback(tmp_path, monke
 
     assert result.exit_code == 1
     assert "Cannot read" in result.output
+
+
+class TestSeedDatabase:
+    def test_none_is_the_default_and_the_local_databases_are_offered(self, monkeypatch, tmp_path):
+        offered = {}
+
+        def select(text, **kw):
+            if "Database for" in text:
+                offered["values"] = [c.value for c in kw["choices"]]
+                offered["default"] = kw["default"].value
+            return FakeSelect(Script(BASE), text)
+
+        monkeypatch.setattr(config_manager.questionary, "select", select)
+        monkeypatch.setattr(config_manager.Prompt, "ask", lambda text, default=None, **kw: Script(BASE).answer(text, default))
+        monkeypatch.setattr(config_manager.Confirm, "ask", lambda text, default=False, **kw: default)
+        InstanceConfigManager(tmp_path).interactive_setup()
+
+        assert offered["values"] == ["", "dev_db", "other_db"]
+        assert offered["default"] == ""
+
+    @pytest.mark.parametrize("kind", ["docker", "native"])
+    def test_the_chosen_database_is_saved_for_both_types(self, wizard, kind):
+        _, _, config = wizard({**BASE, "Deployment type": kind, "Database for": "dev_db"})
+
+        assert config["environments"]["stage"]["seed_database"] == "dev_db"
+
+    def test_without_a_choice_the_field_is_empty(self, wizard):
+        _, _, config = wizard({**BASE})
+
+        assert config["environments"]["stage"]["seed_database"] == ""
+
+    def test_without_a_database_container_it_says_why_and_does_not_ask(self, wizard, local_databases, capsys):
+        local_databases["result"] = ([], "no database container configured")
+
+        _, script, config = wizard({**BASE})
+
+        assert not script.asked_about("Database for")
+        assert config["environments"]["stage"]["seed_database"] == ""
+        assert "no database container configured" in capsys.readouterr().out
+
+
+def test_instance_yaml_without_the_field_still_loads_and_the_field_round_trips(tmp_path):
+    from rocketdoo.core.models import InstanceConfig
+
+    old = {"environments": {"prod": {"type": "docker", "vps": {"host": "h"}, "domain": "d.example.com"}}}
+    assert InstanceConfig(**old).environments["prod"].seed_database == ""
+
+    mgr = InstanceConfigManager(tmp_path)
+    old["environments"]["prod"]["seed_database"] = "dev_db"
+    mgr.save(old)
+    assert mgr.load()["environments"]["prod"]["seed_database"] == "dev_db"

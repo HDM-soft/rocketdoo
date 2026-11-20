@@ -721,3 +721,79 @@ class TestThePublicUrlProbe:
         check = preflight.public_url_check("erp.example.com", "http=000:7\nhttps=000:7\n", env="stage")
 
         assert "rkd instance traefik --env stage" in check["hint"]
+
+
+class TestSeeding:
+    SEEDED = {"seed_database": "dev_db", "db_version": "16"}
+
+    def _local_seed(self, **overrides):
+        return _local(seed_exists=True, seed_error="", seed_bytes=0, local_pg_major=16, **overrides)
+
+    def test_neither_check_appears_without_a_seed_database(self):
+        checks = _evaluate()
+
+        assert "seed database" not in checks and "postgresql version" not in checks
+
+    def test_both_appear_with_one_and_pass(self):
+        checks = _evaluate(_cfg(**self.SEEDED), self._local_seed())
+
+        assert checks["seed database"]["ok"] and checks["postgresql version"]["ok"]
+        assert checks["seed database"]["level"] == checks["postgresql version"]["level"] == "block"
+
+    def test_a_database_that_vanished_blocks_with_the_reason(self):
+        local = self._local_seed()
+        local.update(seed_exists=False, seed_error="no database container configured")
+        checks = preflight.evaluate(_cfg(**self.SEEDED), local)
+
+        blocked = _by_name(preflight.blocking(checks))
+        assert "no database container configured" in blocked["seed database"]["detail"]
+        assert "postgresql version" not in _by_name(checks)
+
+    def test_a_newer_dump_into_an_older_docker_server_blocks(self):
+        checks = _evaluate(_cfg(seed_database="dev_db", db_version="15"), self._local_seed())
+
+        assert not checks["postgresql version"]["ok"]
+        assert "db_version" in checks["postgresql version"]["hint"]
+
+    @pytest.mark.parametrize("target", ["16", "17"])
+    def test_an_equal_or_newer_server_does_not_block(self, target):
+        checks = _evaluate(_cfg(seed_database="dev_db", db_version=target), self._local_seed())
+
+        assert checks["postgresql version"]["ok"]
+
+    def test_native_compares_against_the_cluster_the_vps_reports(self):
+        cfg = _cfg(type="native", seed_database="dev_db")
+        old = _evaluate(cfg, self._local_seed(), _remote(pg_major="14"))
+        new = _evaluate(cfg, self._local_seed(), _remote(pg_major="17"))
+
+        assert not old["postgresql version"]["ok"]
+        assert new["postgresql version"]["ok"]
+
+    def test_native_without_a_cluster_yet_is_not_compared(self):
+        checks = _evaluate(_cfg(type="native", seed_database="dev_db"), self._local_seed(), _remote(pg_major=""))
+
+        assert checks["postgresql version"]["ok"] and "not compared" in checks["postgresql version"]["detail"]
+
+    def test_the_remote_script_asks_for_the_cluster_only_when_native_and_seeding(self):
+        assert "pg_major=" in preflight._remote_script(_cfg(type="native", seed_database="x"), [])
+        assert "pg_major=" not in preflight._remote_script(_cfg(type="native"), [])
+        assert "pg_major=" not in preflight._remote_script(_cfg(seed_database="x"), [])
+
+    def test_disk_space_counts_twice_what_is_seeded(self):
+        free = _remote(free_kb=str(8 * GIB))
+        plain = _evaluate(_cfg(), _local(), free)["disk space"]
+        seeded = _evaluate(_cfg(**self.SEEDED), self._local_seed() | {"seed_bytes": 2 * 1024**3}, free)["disk space"]
+
+        assert plain["ok"] and not seeded["ok"]
+        assert "9 GiB recommended" in seeded["detail"]
+
+    def test_local_facts_measure_the_seed_only_when_asked(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(preflight, "databases_result", lambda compose: (["dev_db"], ""))
+        monkeypatch.setattr(preflight, "database_bytes", lambda db, compose: 100)
+        monkeypatch.setattr(preflight, "filestore_bytes", lambda container, db: 50)
+        monkeypatch.setattr(preflight, "pg_major_version", lambda compose: 16)
+
+        facts = preflight.local_facts(tmp_path, _cfg(**self.SEEDED))
+
+        assert facts["seed_exists"] and facts["seed_bytes"] == 150 and facts["local_pg_major"] == 16
+        assert "seed_exists" not in preflight.local_facts(tmp_path, _cfg())

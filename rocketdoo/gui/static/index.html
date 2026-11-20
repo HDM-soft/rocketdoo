@@ -624,6 +624,11 @@ const L = {
     deployFailed: `Error al desplegar`,
     instanceDeployCompleted: `Despliegue de {env} completado`,
     instanceDryRunCompleted: `Simulación de despliegue de {env} completada`,
+    seedDatabase: `Base de datos de origen`,
+    seedNone: `Ninguna — base nueva de cero (recomendado)`,
+    seedSaved: `Origen de {env} guardado`,
+    seedConfirmTyped: `Esto restaura la base local "{db}" como la base de {env} en el servidor.\n\nPara confirmar, escribí el nombre del entorno: {env}`,
+    seedWarning: `Aviso del despliegue: {detail}`,
     dryRunPrefixOutput: `[simulación] `,
     deployDoneOutput: `Despliegue realizado.\n`,
     dryRunTargetDone: `Simulación de {target} realizada`,
@@ -1001,6 +1006,11 @@ const L = {
     deployFailed: `Deploy failed`,
     instanceDeployCompleted: `{env} deploy completed`,
     instanceDryRunCompleted: `{env} dry-run deploy completed`,
+    seedDatabase: `Seed database`,
+    seedNone: `None — fresh database from scratch (recommended)`,
+    seedSaved: `{env} seed saved`,
+    seedConfirmTyped: `This restores the local database "{db}" as the {env} database on the server.\n\nTo confirm, type the environment name: {env}`,
+    seedWarning: `Deploy warning: {detail}`,
     dryRunPrefixOutput: `[dry-run] `,
     deployDoneOutput: `Deploy done.\n`,
     dryRunTargetDone: `Dry run {target} done`,
@@ -1946,18 +1956,35 @@ const Instances = {
     const busy  = ref(true)
     const dep   = ref({})
     const dry   = ref({})
+    const dbs   = ref([])
+    const dbsError = ref('')
 
     async function load() {
       busy.value = true
       try { const r = await api.get('/instances'); inst.value = r.instances||[]; instanceCount.value = inst.value.length }
       catch(e) { notify(t('loadFailed'),'err') }
+      try { const d = await api.get('/odoo/databases'); dbs.value = d.databases||[]; dbsError.value = d.error||'' }
+      catch(e) { dbs.value = []; dbsError.value = e.message }
       finally { busy.value = false }
     }
 
-    async function deploy(env) {
+    async function setSeed(i, db) {
+      try {
+        const r = await api.post('/instances/seed', { env: i.env, seed_database: db })
+        if (r.ok) { i.seed_database = db; notify(t('seedSaved', { env: i.env })) }
+        else notify(r.error||t('deployFailed'),'err')
+      } catch(e) { notify(e.message,'err') }
+      await load()
+    }
+
+    async function deploy(i) {
+      const env = i.env
+      if (i.seed_database && !dry.value[env] &&
+          prompt(t('seedConfirmTyped', { db: i.seed_database, env: env })) !== env) return
       dep.value[env] = true
       try {
         const r = await api.post('/instances/deploy', { env, dry_run: !!dry.value[env] })
+        for (const c of (r.checks||[])) if (c.level === 'warn' && !c.ok) notify(t('seedWarning', { detail: c.detail }),'err')
         if (r.ok) notify(r.dry_run ? t('instanceDryRunCompleted', { env: env }) : t('instanceDeployCompleted', { env: env }))
         else notify(r.error||t('deployFailed'),'err')
       } catch(e) { notify(e.message,'err') }
@@ -1965,7 +1992,7 @@ const Instances = {
     }
 
     onActivated(load)
-    return { inst, busy, dep, dry, load, deploy, I }
+    return { inst, busy, dep, dry, dbs, dbsError, load, deploy, setSeed, I }
   },
   template: `
   <div class="page fade-in">
@@ -2008,10 +2035,19 @@ const Instances = {
             <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">Odoo</span><span style="color:var(--tx);">{{ i.odoo_version||'—' }}</span></div>
             <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('type') }}</span><span class="badge badge-gray">{{ i.type }}</span></div>
             <div style="display:flex;gap:10px;"><span style="color:var(--su);min-width:72px;">{{ $t('path') }}</span><span style="color:var(--mu);font-family:monospace;font-size:11px;">{{ i.remote_path||'—' }}</span></div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <label :for="'seed-'+i.env" style="color:var(--su);min-width:72px;">{{ $t('seedDatabase') }}</label>
+              <select :id="'seed-'+i.env" class="input" :value="i.seed_database" @change="setSeed(i, $event.target.value)">
+                <option value="">{{ $t('seedNone') }}</option>
+                <option v-if="i.seed_database && !dbs.includes(i.seed_database)" :value="i.seed_database">{{ i.seed_database }}</option>
+                <option v-for="d in dbs" :key="d" :value="d">{{ d }}</option>
+              </select>
+            </div>
+            <div v-if="dbsError" style="color:var(--mu);font-size:11px;margin-left:82px;">{{ dbsError }}</div>
           </div>
 
           <div style="border-top:1px solid var(--ln);padding-top:14px;display:flex;align-items:center;gap:10px;">
-            <button @click="deploy(i.env)" class="btn btn-primary" :disabled="dep[i.env]">
+            <button @click="deploy(i)" class="btn btn-primary" :disabled="dep[i.env]">
               <span v-html="dep[i.env]?I.spin:I.deploy" :class="dep[i.env]?'spin':''"></span>
               {{ dep[i.env]?$t('deployingEllipsis'):$t('deploy') }}
             </button>

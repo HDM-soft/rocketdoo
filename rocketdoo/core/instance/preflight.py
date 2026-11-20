@@ -12,6 +12,8 @@ import subprocess
 from pathlib import Path
 
 from rocketdoo.core.gitman_config import gitman_has_scripts, gitman_repos
+from rocketdoo.core.odoo_db import database_bytes, databases_result, filestore_bytes, pg_major_version
+from rocketdoo.core.project_info import read_docker_compose
 
 from .config_manager import (
     CRON_THREADS,
@@ -56,7 +58,7 @@ def local_facts(project_root: Path, cfg: dict) -> dict:
     vps = cfg.get("vps", {})
     use_gitman = bool(cfg.get("use_gitman"))
     key = vps.get("ssh_key", "~/.ssh/id_rsa") if vps.get("auth_method", "ssh_key") == "ssh_key" else None
-    return {
+    facts = {
         "enterprise_dir": (root / "enterprise").is_dir(),
         "gitman_file": (root / gitman_file(cfg)).is_file(),
         "gitman_urls": list(dict.fromkeys(gitman_repos(root / gitman_file(cfg)))) if use_gitman else [],
@@ -67,6 +69,28 @@ def local_facts(project_root: Path, cfg: dict) -> dict:
         "build_needs_ssh": build_needs_ssh(root, cfg),
         "key_file": None if key is None else os.path.exists(os.path.expanduser(key)),
         "invalid_identifiers": invalid_identifiers(cfg.get("db_user", ""), cfg.get("db_name", "")),
+    }
+    if cfg.get("seed_database"):
+        facts.update(_seed_facts(root, cfg["seed_database"]))
+    return facts
+
+
+def _seed_facts(root: Path, database: str) -> dict:
+    compose = read_docker_compose(root) or {}
+    databases, reason = databases_result(compose)
+    exists = database in databases
+    try:
+        odoo_container = compose["services"]["web"]["container_name"]
+    except (KeyError, TypeError):
+        odoo_container = ""
+    # The dump is smaller than the database, so this over-asks a little for
+    # disk, which is the safe side of a warning.
+    size = (database_bytes(database, compose) + filestore_bytes(odoo_container, database)) if exists else 0
+    return {
+        "seed_exists": exists,
+        "seed_error": reason,
+        "seed_bytes": size,
+        "local_pg_major": pg_major_version(compose) if exists else 0,
     }
 
 
@@ -110,6 +134,8 @@ def _remote_script(cfg: dict, repos: list[str]) -> str:
             f"echo traefik_attached=$(docker ps --filter network={_TRAEFIK_NETWORK} 2>/dev/null"
             " | grep -qi traefik && echo yes || echo no)",
         ]
+    if cfg.get("seed_database") and cfg.get("type", "docker") != "docker":
+        lines.append("echo pg_major=$(ls /usr/lib/postgresql 2>/dev/null | sort -n | tail -1)")
     for url in repos:
         quoted = shlex.quote(url)
         lines.append(
@@ -206,6 +232,35 @@ def _memory_check(cfg: dict, remote: dict, env: str) -> Check:
     )
 
 
+def _major(version) -> int:
+    match = re.match(r"\d+", str(version or ""))
+    return int(match.group()) if match else 0
+
+
+def _postgresql_version_check(local: dict, target: int, where: str) -> Check:
+    """Block a dump from a newer PostgreSQL than the one that must restore it.
+
+    Blocking rather than a warning because it cannot work: pg_restore refuses
+    an archive written by a newer major, and finding that out after the
+    transfer costs the whole upload. The other direction restores fine.
+    """
+    source = _int(local.get("local_pg_major"))
+    if not source or not target:
+        unknown = "the local server" if not source else where
+        return _check("postgresql version", "block", True, f"version of {unknown} unknown: not compared")
+    ok = source <= target
+    return _check(
+        "postgresql version",
+        "block",
+        ok,
+        f"local PostgreSQL {source} restores into {where} ({target})"
+        if ok
+        else f"the local dump comes from PostgreSQL {source} and {where} runs {target}",
+        f"A dump from a newer PostgreSQL does not restore into an older one. Raise the server to {source} or "
+        f"later (db_version on a Docker deploy), or choose no seed database.",
+    )
+
+
 def _remote_checks(cfg: dict, remote: dict, env: str, local: dict) -> list[Check]:
     docker = cfg.get("type", "docker") == "docker"
     path = _remote_path(cfg)
@@ -299,15 +354,21 @@ def _remote_checks(cfg: dict, remote: dict, env: str, local: dict) -> list[Check
             )
     checks.append(_memory_check(cfg, remote, env))
     free = _int(remote.get("free_kb"))
+    seed_kb = _int(local.get("seed_bytes")) // 1024
+    # Twice: the transferred files and the restored copy exist side by side.
+    needed_kb = _MIN_FREE_KB + 2 * seed_kb
+    seed_note = f" plus twice the {seed_kb // (1024 * 1024)} GiB to seed" if seed_kb else ""
     checks.append(
         _check(
             "disk space",
             "warn",
-            free >= _MIN_FREE_KB,
-            f"{free // (1024 * 1024)} GiB free on the VPS (5 GiB recommended)",
+            free >= needed_kb,
+            f"{free // (1024 * 1024)} GiB free on the VPS ({needed_kb // (1024 * 1024)} GiB recommended: 5 GiB{seed_note})",
             "An Odoo image, its database and Enterprise take several GiB: free some space on the VPS.",
         )
     )
+    if cfg.get("seed_database") and not docker:
+        checks.append(_postgresql_version_check(local, _major(remote.get("pg_major")), "the VPS cluster"))
     if docker and cfg.get("domain"):
         running = remote.get("traefik_running") == "yes"
         attached = remote.get("traefik_attached") == "yes"
@@ -431,6 +492,27 @@ def _gitman_checks(cfg: dict, local: dict) -> list[Check]:
     return checks
 
 
+def _seed_checks(cfg: dict, local: dict) -> list[Check]:
+    name = cfg["seed_database"]
+    found = bool(local.get("seed_exists"))
+    reason = local.get("seed_error")
+    checks = [
+        _check(
+            "seed database",
+            "block",
+            found,
+            f"local database '{name}' found"
+            if found
+            else f"local database '{name}' not found" + (f" ({reason})" if reason else ""),
+            "It was listed when the environment was configured. Start the project (rkd up -d) or choose another "
+            "with rkd instance init: continuing would deploy an empty database and report success.",
+        )
+    ]
+    if found and cfg.get("type", "docker") == "docker":
+        checks.append(_postgresql_version_check(local, _major(cfg.get("db_version")), f"db_version {cfg.get('db_version')}"))
+    return checks
+
+
 def _local_checks(cfg: dict, local: dict) -> list[Check]:
     invalid = local.get("invalid_identifiers", [])
     checks = [
@@ -465,6 +547,8 @@ def _local_checks(cfg: dict, local: dict) -> list[Check]:
         )
     if cfg.get("use_gitman"):
         checks += _gitman_checks(cfg, local)
+    if cfg.get("seed_database"):
+        checks += _seed_checks(cfg, local)
     # Only when the build will actually pass `--ssh default`: that flag is what
     # aborts without a socket, and it is now conditional on the same predicate.
     if cfg.get("type", "docker") == "docker" and local.get("build_needs_ssh"):

@@ -291,7 +291,7 @@ class TestTheDatabase:
         # died during the install must still get initialised next time.
         assert "FROM pg_database WHERE datname = 'odoo_prod'" in script
         assert "FROM ir_module_module WHERE name = 'base' AND state = 'installed'" in script
-        assert f"FROM ir_config_parameter WHERE key = '{deployer_native._ADMIN_PASSWORD_MARK}'" in script
+        assert f"WHERE key IN ('{deployer_native._ADMIN_PASSWORD_MARK}', '{deployer_native.SEEDED_MARK}')" in script
 
     def test_the_database_name_defaults_to_the_role_name(self, tmp_path, monkeypatch):
         _, run = _deploy(tmp_path, monkeypatch, db_user="odoo_prod")

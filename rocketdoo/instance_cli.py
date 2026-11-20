@@ -10,10 +10,45 @@ import yaml
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 console = Console()
+
+
+def _human_size(size: int) -> str:
+    return f"{size / (1024 * 1024):.0f} MiB" if size < 1024**3 else f"{size / 1024**3:.1f} GiB"
+
+
+def _confirm_seed(env: str, seed_database: str, remote_db: str, host: str) -> bool:
+    """Ask before a deploy that restores a local database on the server.
+
+    Not covered by the generic confirmation: what is at stake is the database
+    that will be served, and for prod it cannot be undone.
+    """
+    from rocketdoo.core.odoo_db import database_bytes, filestore_bytes
+    from rocketdoo.core.project_info import read_docker_compose
+
+    compose = read_docker_compose(Path.cwd()) or {}
+    try:
+        odoo_container = compose["services"]["web"]["container_name"]
+    except (KeyError, TypeError):
+        odoo_container = ""
+    size = database_bytes(seed_database, compose)
+    if odoo_container:
+        size += filestore_bytes(odoo_container, seed_database)
+    console.print(
+        f"\n[yellow]⚠  The local database [bold]{seed_database}[/bold] ({_human_size(size)} with its filestore) "
+        f"will be restored as [bold]{remote_db}[/bold] on {host}.[/yellow]"
+    )
+    console.print("[dim]A database already seeded is left alone; one initialised by a plain deploy is not touched.[/dim]")
+    if env == "prod":
+        console.print(
+            "[bold red]This puts a development database into PRODUCTION and cannot be undone: "
+            "every user, mail server and setting in it goes live.[/bold red]"
+        )
+        return Prompt.ask("Type 'prod' to confirm") == "prod"
+    return Confirm.ask(f"Restore it as {remote_db} on {env}?", default=False)
 
 
 @click.group(name="instance")
@@ -173,6 +208,8 @@ def instance_deploy(env, dry_run, yes):
     dep_type = env_config.get("type", "docker")
     host = env_config.get("vps", {}).get("host", "?")
     domain = env_config.get("domain", "?")
+    seed_database = env_config.get("seed_database", "")
+    remote_db = env_config.get("db_name") or env_config.get("db_user") or f"odoo_{env}"
 
     # ── Banner ──
     console.print()
@@ -187,7 +224,8 @@ def instance_deploy(env, dry_run, yes):
             f"[bold cyan]Deploying {env.upper()}[/bold cyan]\n\n"
             f"[dim]Type   :[/dim] {dep_type}\n"
             f"[dim]Host   :[/dim] {host}\n"
-            f"[dim]Domain :[/dim] {domain}",
+            f"[dim]Domain :[/dim] {domain}"
+            + (f"\n[dim]Seed   :[/dim] local {seed_database} → {remote_db}" if seed_database else ""),
             border_style="cyan",
             box=box.ROUNDED,
         )
@@ -201,6 +239,10 @@ def instance_deploy(env, dry_run, yes):
         if not Confirm.ask(f"Deploy {env} to {host}?", default=False):
             console.print("[dim]Cancelled.[/dim]\n")
             raise SystemExit(1)
+
+    if seed_database and not yes and not dry_run and not _confirm_seed(env, seed_database, remote_db, host):
+        console.print("[dim]Cancelled.[/dim]\n")
+        raise SystemExit(1)
 
     # ── Run deployer ──
     try:
@@ -241,6 +283,13 @@ def instance_deploy(env, dry_run, yes):
             )
         console.print(Panel(body, border_style="green" if success else "red", box=box.ROUNDED))
     elif success:
+        restore_warnings = [c for c in getattr(deployer, "checks", []) if c["name"] == "seed restore"]
+        admin_line = (
+            "[dim]Admin      :[/dim] the users of the seeded database keep their passwords"
+            if seed_database
+            else f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env"
+        )
+        warning_line = "".join(f"\n[yellow]⚠  {c['detail']}[/yellow]\n[dim]{c['hint']}[/dim]" for c in restore_warnings)
         if dep_type == "native":
             # Nothing stands in front of a native deploy until #211: the
             # domain has no certificate and nothing listens on 443, so
@@ -249,8 +298,9 @@ def instance_deploy(env, dry_run, yes):
                 f"[bold green]Deployment successful![/bold green]\n\n"
                 f"[dim]Environment:[/dim] {env}\n"
                 f"[dim]URL        :[/dim] [cyan underline]http://{host}:8069[/cyan underline]\n"
-                f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env\n\n"
+                f"{admin_line}\n\n"
                 "[dim]Plain HTTP on port 8069: a native deploy has no reverse proxy yet.[/dim]"
+                f"{warning_line}"
             )
         else:
             unanswered = [c for c in getattr(deployer, "checks", []) if c["name"] in ("traefik", "public url") and not c["ok"]]
@@ -268,8 +318,9 @@ def instance_deploy(env, dry_run, yes):
                 f"[bold green]Deployment successful![/bold green]\n\n"
                 f"[dim]Environment:[/dim] {env}\n"
                 f"{url_line}"
-                f"[dim]Admin      :[/dim] admin, password in .rkd/secrets/instance_{env}_db.env\n\n"
+                f"{admin_line}\n\n"
                 f"{note}"
+                f"{warning_line}"
             )
         console.print(Panel(body, border_style="green", box=box.DOUBLE))
     else:
