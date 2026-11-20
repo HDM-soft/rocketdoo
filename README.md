@@ -459,6 +459,21 @@ rkd instance status                  # Show configured environments
 
 **Pre-flight:** every deploy (and dry-run) first checks the VPS over SSH (Docker, sudo, disk, memory, repository access) and stops on blocking problems before touching anything.
 
+**Take your development database with you (3.14.0):** the wizard asks, per environment, **which local database to deploy there**. The default is *none — a fresh database from scratch*, which is what rkd has always done: it creates an empty database, installs `base` and hands you the admin password. Pick one instead, and the deploy dumps it, ships it with its filestore, and restores it on the VPS **in place of** creating an empty one.
+
+That closes the gap between "it works on my machine" and the client's server: you build and test locally with rkd — Traefik, Mailpit, your addons, your third-party repos — and when the database covers what the client needs, that same database becomes their staging or production instance.
+
+```bash
+rkd instance init                    # asks which local database goes to each environment
+rkd instance deploy --env prod       # dumps, ships and restores it, then neutralizes
+```
+
+Three things worth knowing before you use it:
+
+- **It happens once per environment.** The deploy writes a marker inside the restored database, so a redeploy never restores again. Seeding a second time means dropping the database on the VPS by hand — deliberately, because the alternative is a flag that overwrites a client's production with a development dump.
+- **An existing database is never overwritten.** If the target already holds an Odoo that rkd did not seed, the deploy refuses and says so.
+- **What gets neutralized depends on the target.** Both regenerate the database UUID and disable the Mailpit mail server (it points at a host that does not exist on the VPS, and leaving it would make every outgoing mail fail silently). Only **staging** also disables the scheduled actions, the mail servers and the payment providers — doing that to **production** would switch off the crons of the instance you are launching.
+
 **The reverse proxy (3.12.0):** the deployed compose only *exposes* Odoo's port and labels it for Traefik — nothing is published to the host. Without a Traefik on the `traefik-public` network your domain answers nothing, even though the deploy finishes green. `rkd instance traefik --env <stage|prod>` installs it, once per host, from the same configuration `rkd traefik` renders locally:
 
 ```bash
