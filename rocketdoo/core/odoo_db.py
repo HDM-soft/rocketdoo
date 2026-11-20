@@ -9,8 +9,10 @@ no longer read-only.
 """
 
 import subprocess
+from pathlib import Path
 
 from rocketdoo.core.project_info import read_docker_compose
+from rocketdoo.core.service import ProgressCallback
 
 PSQL_USER = "root"  # POSTGRES_USER set by the docker-compose template
 
@@ -189,3 +191,78 @@ def disable_mailpit_server(db: str, compose_data: dict | None = None) -> tuple[i
     # Count returned ids, not non-empty lines: psql's status line ("UPDATE 0")
     # is not a row, and counting it reports an archive that never happened.
     return len([line for line in stdout.splitlines() if line.strip().isdigit()]), ""
+
+
+FILESTORE_PATH_TEMPLATES = [
+    "/var/lib/odoo/.local/share/Odoo/filestore/{db}",
+    "/var/lib/odoo/filestore/{db}",
+]
+
+
+def dump_database(db_container_name: str, db_name: str, output_path: Path, report: ProgressCallback) -> bool:
+    """Runs pg_dump inside the container and saves the result to output_path.
+
+    Returns True if the backup succeeded.
+    """
+    report(f"Running pg_dump for '{db_name}'...")
+    try:
+        with open(output_path, "wb") as f:
+            result = subprocess.run(
+                ["docker", "exec", db_container_name, "pg_dump", "-U", "root", "--format=custom", db_name],
+                stdout=f,
+                stderr=subprocess.PIPE,
+            )
+        if result.returncode != 0:
+            report(f"pg_dump error: {result.stderr.decode()}", "warn")
+            return False
+        size_mb = output_path.stat().st_size / (1024 * 1024)
+        report(f"Backup saved: {output_path.name} ({size_mb:.1f} MB)", "ok")
+        return True
+    except Exception as exc:
+        report(f"Exception during database backup: {exc}", "warn")
+        return False
+
+
+def dump_filestore(odoo_container: str, db_name: str, output_path: Path, report: ProgressCallback) -> tuple[bool, str | None]:
+    """Copies and compresses the Odoo filestore from the container to the host.
+
+    Returns (success, filestore_base). Supports multiple filestore layouts.
+    """
+    report("Copying filestore from container...")
+
+    filestore_path = None
+    filestore_base = None
+
+    try:
+        for template in FILESTORE_PATH_TEMPLATES:
+            path = template.format(db=db_name)
+            check = subprocess.run(["docker", "exec", odoo_container, "test", "-d", path], capture_output=True)
+            if check.returncode == 0:
+                filestore_path = path
+                filestore_base = str(Path(path).parent)
+                break
+
+        if not filestore_path:
+            report(f"Filestore not found for database {db_name} in any known location - skipping.", "warn")
+            return True, None  # Not fatal
+
+        report(f"Detected filestore path: {filestore_path}")
+
+        with open(output_path, "wb") as f:
+            result = subprocess.run(
+                ["docker", "exec", odoo_container, "tar", "-czf", "-", "-C", filestore_base, db_name],
+                stdout=f,
+                stderr=subprocess.PIPE,
+            )
+
+        if result.returncode != 0:
+            report(f"Error copying filestore: {result.stderr.decode()}", "warn")
+            return False, filestore_base
+
+        size_mb = output_path.stat().st_size / (1024 * 1024)
+        report(f"Filestore compressed: {output_path.name} ({size_mb:.1f} MB)", "ok")
+        return True, filestore_base
+
+    except Exception as exc:
+        report(f"Exception during filestore backup: {exc}", "warn")
+        return False, None
