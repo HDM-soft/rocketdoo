@@ -659,12 +659,15 @@ class TestTheRoleStatementAgainstPostgres:
             capture_output=True,
         )
         try:
-            # A real query, not pg_isready: the image answers that one from
-            # the temporary server it runs during initdb, and then takes it
-            # down again, so a test can connect to a server about to vanish.
+            # Over TCP, and not through the unix socket: the entrypoint runs
+            # a temporary server during initdb with `listen_addresses=''`,
+            # which answers on the socket and then goes away. A probe on the
+            # socket therefore succeeds against a server about to vanish, and
+            # the test's next statement gets "the database system is shutting
+            # down". Only the real server ever listens on TCP.
             for _ in range(60):
                 ready = subprocess.run(
-                    ["docker", "exec", name, "psql", "-U", "postgres", "-tAc", "SELECT 1"],
+                    ["docker", "exec", name, "psql", "-U", "postgres", "-h", "127.0.0.1", "-tAc", "SELECT 1"],
                     capture_output=True,
                 )
                 if ready.returncode == 0:
