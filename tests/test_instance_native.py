@@ -874,3 +874,66 @@ class TestEnterprise:
         ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone", odoo_version="")
         assert not ok
         assert not run.sent_containing("git clone")
+
+
+class TestTheDeployExitCode:
+    """A deploy that failed has to be distinguishable by a script (#292).
+
+    `rkd instance deploy --dry-run && rkd instance deploy` used to run the
+    second half even when the dry-run had found blocking problems: every path
+    of the command returned, and a bare `return` exits 0.
+    """
+
+    def _invoke(self, tmp_path, monkeypatch, *, success, dry_run=False, env="prod", config=True):
+        if config:
+            data = {
+                "environments": {
+                    "prod": {
+                        "type": "native",
+                        "vps": {
+                            "host": "vps.example.com",
+                            "user": "ubuntu",
+                            "auth_method": "ssh_key",
+                            "ssh_key": "~/.ssh/id_rsa",
+                        },
+                        "remote_path": "/opt/odoo-prod",
+                    }
+                }
+            }
+            (tmp_path / ".rkd").mkdir(exist_ok=True)
+            (tmp_path / ".rkd" / "instance.yaml").write_text(yaml.safe_dump(data))
+        monkeypatch.chdir(tmp_path)
+
+        class _Deployer:
+            checks: list = []
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def deploy(self, dry_run=False):
+                return success
+
+        monkeypatch.setattr(deployer_native, "NativeInstanceDeployer", _Deployer)
+        monkeypatch.setattr("rocketdoo.core.instance.deployer_docker.DockerInstanceDeployer", _Deployer, raising=False)
+        args = ["instance", "deploy", "--env", env, "--yes"]
+        if dry_run:
+            args.append("--dry-run")
+        return CliRunner().invoke(main, args)
+
+    def test_a_failed_deploy_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=False).exit_code == 1
+
+    def test_a_blocked_dry_run_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=False, dry_run=True).exit_code == 1
+
+    def test_a_successful_deploy_still_exits_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True).exit_code == 0
+
+    def test_a_successful_dry_run_still_exits_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True, dry_run=True).exit_code == 0
+
+    def test_a_missing_environment_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True, env="stage").exit_code == 1
+
+    def test_without_a_config_it_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True, config=False).exit_code == 1

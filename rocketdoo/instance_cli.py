@@ -157,18 +157,18 @@ def instance_deploy(env, dry_run, yes):
 
     if not mgr.exists():
         console.print("\n[red]No instance.yaml found. Run rkd instance init first.[/red]\n")
-        return
+        raise SystemExit(1)
 
     try:
         env_config = mgr.get_env(env)
     except Exception as e:
         console.print(f"\n[red]Error loading config: {e}[/red]\n")
-        return
+        raise SystemExit(1)
 
     if not env_config:
         console.print(f'\n[red]Environment "{env}" not found in instance.yaml.[/red]')
         console.print("[dim]Run rkd instance init to add it.[/dim]\n")
-        return
+        raise SystemExit(1)
 
     dep_type = env_config.get("type", "docker")
     host = env_config.get("vps", {}).get("host", "?")
@@ -200,7 +200,7 @@ def instance_deploy(env, dry_run, yes):
             console.print("[yellow]⚠  You are deploying to PRODUCTION.[/yellow]")
         if not Confirm.ask(f"Deploy {env} to {host}?", default=False):
             console.print("[dim]Cancelled.[/dim]\n")
-            return
+            raise SystemExit(1)
 
     # ── Run deployer ──
     try:
@@ -210,20 +210,20 @@ def instance_deploy(env, dry_run, yes):
             deployer = NativeInstanceDeployer(env, env_config, project_path)
         else:
             console.print(f"\n[red]Unknown deployment type: {dep_type}[/red]\n")
-            return
+            raise SystemExit(1)
 
         success = deployer.deploy(dry_run=dry_run)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Deployment cancelled.[/yellow]\n")
-        return
+        raise SystemExit(130)
     except Exception as e:
         console.print(f"\n[red]Deployment error: {e}[/red]\n")
         if click.get_current_context().obj and click.get_current_context().obj.get("verbose"):
             import traceback
 
             console.print("[dim]" + traceback.format_exc() + "[/dim]")
-        return
+        raise SystemExit(1)
 
     # ── Result ──
     console.print()
@@ -283,6 +283,10 @@ def instance_deploy(env, dry_run, yes):
             )
         )
     console.print()
+    # A failed deploy and a blocked dry-run are failures of the command:
+    # `rkd instance deploy --dry-run && rkd instance deploy` has to stop.
+    if not success:
+        raise SystemExit(1)
 
 
 @instance.command(name="traefik")
