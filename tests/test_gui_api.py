@@ -1251,3 +1251,63 @@ class TestStaticAssets:
 
     def test_an_unknown_static_path_is_not_answered_with_the_page(self, client):
         assert client.get("/static/no-such-asset.js").status_code == 404
+
+
+class TestInstanceSeedDatabase:
+    @pytest.fixture(autouse=True)
+    def _inside_a_project(self, project_dir):
+        (project_dir / "Dockerfile").write_text("FROM odoo:18.0\n")
+        (project_dir / "docker-compose.yaml").write_text("services: {}\n")
+
+    def _env(self, **extra):
+        return {"type": "docker", "host": "vps.example.com", "domain": "stage.example.com", **extra}
+
+    def test_init_saves_and_listing_returns_it(self, client):
+        payload = {"environments": {"stage": self._env(seed_database="dev")}}
+        assert client.post("/api/instances/init", json=payload).json()["ok"] is True
+        assert client.get("/api/instances").json()["instances"][0]["seed_database"] == "dev"
+
+    def test_an_environment_without_the_field_still_works(self, client):
+        client.post("/api/instances/init", json={"environments": {"stage": self._env()}})
+        assert client.get("/api/instances").json()["instances"][0]["seed_database"] == ""
+
+    def test_seed_endpoint_changes_only_that_field(self, client, monkeypatch):
+        from rocketdoo.core import odoo_db
+
+        monkeypatch.setattr(odoo_db, "list_databases", lambda *a, **k: ["dev"])
+        client.post("/api/instances/init", json={"environments": {"stage": self._env()}})
+        body = client.post("/api/instances/seed", json={"env": "stage", "seed_database": "dev"}).json()
+        assert body["ok"] is True
+        listed = client.get("/api/instances").json()["instances"][0]
+        assert listed["seed_database"] == "dev"
+        assert listed["host"] == "vps.example.com"
+        client.post("/api/instances/seed", json={"env": "stage", "seed_database": ""})
+        assert client.get("/api/instances").json()["instances"][0]["seed_database"] == ""
+
+    def test_seed_endpoint_rejects_an_unknown_database(self, client, monkeypatch):
+        from rocketdoo.core import odoo_db
+
+        monkeypatch.setattr(odoo_db, "list_databases", lambda *a, **k: ["dev"])
+        client.post("/api/instances/init", json={"environments": {"stage": self._env()}})
+        body = client.post("/api/instances/seed", json={"env": "stage", "seed_database": "nope"}).json()
+        assert body["ok"] is False
+
+    def test_seed_endpoint_rejects_an_unknown_environment(self, client):
+        client.post("/api/instances/init", json={"environments": {"stage": self._env()}})
+        assert client.post("/api/instances/seed", json={"env": "prod"}).json()["ok"] is False
+
+    def test_seed_warnings_travel_in_the_deploy_response(self, client, monkeypatch):
+        from rocketdoo.core.instance import deployer_docker
+
+        warning = {"name": "seed restore", "level": "warn", "ok": False, "detail": "pg_restore exited 1", "hint": ""}
+
+        class Seeding:
+            def __init__(self, env, env_config, project_path):
+                self.checks = [warning]
+
+            def deploy(self, dry_run=False):
+                return True
+
+        monkeypatch.setattr(deployer_docker, "DockerInstanceDeployer", Seeding)
+        client.post("/api/instances/init", json={"environments": {"stage": self._env(seed_database="dev")}})
+        assert client.post("/api/instances/deploy", json={"env": "stage"}).json()["checks"] == [warning]

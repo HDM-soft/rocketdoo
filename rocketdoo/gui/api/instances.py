@@ -38,6 +38,7 @@ async def list_instances():
                 "remote_path": env.remote_path,
                 "user": env.vps.user,
                 "port": env.vps.port,
+                "seed_database": env.seed_database,
                 "deployable": env.is_deployable,
                 "missing": env.missing_fields(),
             }
@@ -77,6 +78,7 @@ class EnvConfig(BaseModel):
     pg_profile: str = "small"
     proxy_mode: bool = False
     remote_path: str = ""
+    seed_database: str = ""
 
 
 class InstanceInitRequest(BaseModel):
@@ -116,6 +118,33 @@ async def init_instances(body: InstanceInitRequest):
             "environments": list(config.environments),
             "incomplete": {name: env.missing_fields() for name, env in config.environments.items() if not env.is_deployable},
         }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+class SeedRequest(BaseModel):
+    env: str
+    seed_database: str = ""
+
+
+@router.post("/seed")
+def set_seed_database(body: SeedRequest):
+    """Change only the local database an environment is seeded from."""
+    from rocketdoo.core.instance.config_manager import InstanceConfigManager
+    from rocketdoo.core.odoo_db import list_databases
+
+    try:
+        manager = InstanceConfigManager(Path.cwd())
+        if not manager.exists():
+            return {"ok": False, "error": "No instance.yaml found. Run rkd instance init first."}
+        config = manager.load()
+        if body.env not in config["environments"]:
+            return {"ok": False, "error": f"Environment '{body.env}' is not configured in instance.yaml."}
+        if body.seed_database and body.seed_database not in list_databases():
+            return {"ok": False, "error": f"Unknown local database '{body.seed_database}'."}
+        config["environments"][body.env]["seed_database"] = body.seed_database
+        manager.save(config)
+        return {"ok": True, "env": body.env, "seed_database": body.seed_database}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
