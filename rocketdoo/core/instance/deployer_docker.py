@@ -31,9 +31,11 @@ from .config_manager import (
     WORKERS_BY_ENV,
     db_maxconn,
 )
+from .db_seed import SEEDED_MARK, docker_restore_script, docker_state_script
 from .enterprise import branch, clone_script
 from .gitman_remote import GITMAN_DIR
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
+from .seeding import seed, seed_dir
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
 console = Console()
@@ -83,6 +85,7 @@ class DockerInstanceDeployer:
 
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
+        self.seed_database = env_config.get("seed_database", "")
 
         self.pg = PG_PROFILES.get(env_config.get("pg_profile"), PG_PROFILES["small"])
         self.project_name = self._detect_project_name()
@@ -115,10 +118,16 @@ class DockerInstanceDeployer:
             if dry_run:
                 console.print("\n[yellow]DRY-RUN: Skipping transfer and build.[/yellow]")
                 self._show_generated_files(tmp_path)
-                console.print(
-                    f"[dim]A real run would also create the database [bold]{self.db_name}[/bold], "
-                    "install base in it and set the admin password.[/dim]\n"
-                )
+                if self.seed_database:
+                    console.print(
+                        f"[dim]A real run would also restore the local database [bold]{self.seed_database}[/bold] "
+                        f"as [bold]{self.db_name}[/bold] with its filestore, unless it was already seeded.[/dim]\n"
+                    )
+                else:
+                    console.print(
+                        f"[dim]A real run would also create the database [bold]{self.db_name}[/bold], "
+                        "install base in it and set the admin password.[/dim]\n"
+                    )
                 return True
 
             console.print("[dim]Step 2/7 — Preparing remote directory...[/dim]")
@@ -167,7 +176,7 @@ class DockerInstanceDeployer:
 
     def _repeat_warnings(self):
         if self._warnings:
-            console.print("[yellow]Warnings from the pre-flight:[/yellow]")
+            console.print("[yellow]Warnings from the deploy:[/yellow]")
             print_checks(console, self._warnings)
 
     # ─── secrets ─────────────────────────────────────────────────────────────
@@ -340,6 +349,42 @@ class DockerInstanceDeployer:
             )
             return False
 
+    def _ssh_capture(self, command: str, *, input: str, timeout: int) -> tuple[int, str, str]:
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
+        try:
+            result = subprocess.run(cmd, timeout=timeout, env=env, input=input, text=True, capture_output=True)
+        except subprocess.TimeoutExpired:
+            return 1, "", f"Timed out after {timeout}s waiting for the VPS. The remote command may still be running.\n"
+        return result.returncode, result.stdout, result.stderr
+
+    def _seed_database(self) -> bool:
+        compose_dir = f"{self.remote_path}/{self.env}"
+        directory = seed_dir(self.env)
+        ok, warnings = seed(
+            project_path=self.project_path,
+            env=self.env,
+            source_db=self.seed_database,
+            db_name=self.db_name,
+            state_script=docker_state_script(compose_dir, db_name=self.db_name, db_user=self.db_user),
+            restore_script=lambda has_filestore: docker_restore_script(
+                compose_dir,
+                directory,
+                env=self.env,
+                source_db=self.seed_database,
+                db_name=self.db_name,
+                db_user=self.db_user,
+                domain=self.cfg.get("domain", ""),
+                has_filestore=has_filestore,
+            ),
+            run=lambda script, timeout: self._ssh_capture("bash -s", input=script, timeout=timeout),
+            ssh=self._ssh,
+            rsync=self._rsync,
+            console=console,
+        )
+        self.checks += warnings
+        self._warnings += warnings
+        return ok
+
     def _rsync(self, local: str, remote: str, extra_opts: list[str] | None = None) -> bool:
         cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, local, remote, extra_opts)
         return subprocess.run(cmd, env=env).returncode == 0
@@ -509,6 +554,8 @@ class DockerInstanceDeployer:
         wrap psql's output in carriage returns and make the emptiness checks
         below answer wrongly.
         """
+        if self.seed_database and not self._seed_database():
+            return False
         return self._ssh(
             "bash -s",
             timeout=1800,
@@ -548,8 +595,12 @@ class DockerInstanceDeployer:
                 # Its own guard, and a mark of its own: an install that
                 # succeeded while this step failed must be retried, or the
                 # admin user keeps the password `base` ships with.
+                # A seeded database never carries rkd.admin_password_set, so
+                # without the second key this step would replace the password
+                # of the customer's admin user with a generated one.
                 f'if [ -z "$(docker compose exec -T db psql -U {self.db_user} -d "{self.db_name}" -tAc'
-                f' "SELECT 1 FROM ir_config_parameter WHERE key = \'{_ADMIN_PASSWORD_MARK}\'" 2>/dev/null)" ]; then\n'
+                f" \"SELECT 1 FROM ir_config_parameter WHERE key IN ('{_ADMIN_PASSWORD_MARK}', '{SEEDED_MARK}')\""
+                ' 2>/dev/null)" ]; then\n'
                 f'  docker compose run --rm -T -l traefik.enable=false web odoo shell -d "{self.db_name}"'
                 " --logfile= <<'RKD_PY'\n"
                 f"env.ref('base.user_admin').write({{'password': '{self._resolve_admin_login_password()}'}})\n"
