@@ -434,6 +434,10 @@ Deploy a complete Odoo instance (stage and/or production) to a remote VPS. Suppo
 - **Docker** (recommended): Transfers files and builds the Docker image directly on the VPS using BuildKit SSH agent forwarding for private repositories.
 - **Native**: Installs Odoo via official nightly packages (`apt`), configures `/etc/odoo/odoo.conf`, and manages it as a `systemd` service.
 
+Since 3.13.0 both paths install your **third-party repositories through gitman**, so the choice is about packaging, not about what you get. gitman runs on the server, not on your machine, because the `scripts:` of each source install their Python dependencies into the interpreter that runs Odoo — which, on a native deploy, is the server's system Python.
+
+Both paths also build the **same `addons_path`**, in the same order: `enterprise, extra-addons, nested dirs, gitman`. Odoo resolves a module by the order of that path, so a module that Enterprise overrides locally is overridden the same way on the server. Until 3.13.0 the native path put Enterprise last and ignored nested directories entirely.
+
 ```bash
 rkd instance init                    # Interactive wizard: adds environments, never overwrites (--force starts over)
 rkd instance traefik --env stage     # Install Traefik on that VPS (once per host)
@@ -467,6 +471,8 @@ It is safe to run again: files you tuned are kept, certificates already issued a
 **What the final panel promises (3.12.0):** after starting, the deploy probes your public domain from the VPS — over HTTP and HTTPS, read-only, never fatal. It tells apart four states: Odoo answers, Traefik answers but cannot reach Odoo, the certificate is not issued yet, or nothing answers. When the domain does not answer, the panel says so and names the command that fixes it, instead of printing an URL nobody tested.
 
 **Odoo Enterprise:** `enterprise_source: rsync` transfers your local `enterprise/` directory; `clone` clones `odoo/enterprise` on the VPS through your forwarded SSH agent, leaving no credentials on the server.
+
+> **On a native deploy, gitman runs on the live server.** There is no image to build next to the running one: the sources are replaced in the directory your Odoo is reading. That is safe in practice — Odoo imports its code at startup, the step runs before the service restarts, a failure aborts the deploy, and `gitman install` converges on the next run — but there is one hole worth knowing: if the install breaks halfway *and* Odoo restarts for an unrelated reason (a reboot, an out-of-memory kill) before you run the deploy again, that start reads a half-updated tree and may fail until you do. **No data is at risk**: this step never touches the database.
 
 > **Note:** a Docker deploy needs a running SSH agent only when it actually forwards one — that is, when your gitman file has at least one source that is not plain HTTPS. Projects whose external repositories are all public HTTPS now build with no agent at all (3.12.0). When one *is* needed, an **empty** agent is enough for the build itself (`eval $(ssh-agent)`): BuildKit needs the socket, not the keys. Cloning `odoo/enterprise` on the VPS does need a loaded key, and the pre-flight tells the two cases apart.
 >
