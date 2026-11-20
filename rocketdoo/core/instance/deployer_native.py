@@ -35,9 +35,11 @@ from .config_manager import (
     WORKERS_BY_ENV,
     db_maxconn,
 )
+from .db_seed import SEEDED_MARK, native_restore_script, native_state_script
 from .enterprise import branch, clone_script
 from .gitman_remote import GITMAN_DIR, install_script
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
+from .seeding import seed, seed_dir
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
 console = Console()
@@ -86,6 +88,7 @@ class NativeInstanceDeployer:
 
         self.db_user = env_config.get("db_user") or f"odoo_{env}"
         self.db_name = env_config.get("db_name") or self.db_user
+        self.seed_database = env_config.get("seed_database", "")
         self.checks: list[dict] = []
         self._warnings: list[dict] = []
 
@@ -128,7 +131,7 @@ class NativeInstanceDeployer:
 
     def _repeat_warnings(self):
         if self._warnings:
-            console.print("[yellow]Warnings from the pre-flight:[/yellow]")
+            console.print("[yellow]Warnings from the deploy:[/yellow]")
             print_checks(console, self._warnings)
 
     def _steps(self) -> list[tuple[str, Callable[[], bool]]]:
@@ -156,7 +159,12 @@ class NativeInstanceDeployer:
             (f"Syncing extra-addons → {self.remote_addons}", self._sync_addons),
             *enterprise,
             *gitman,
-            (f"Ensuring database {self.db_name}", self._ensure_database),
+            (
+                f"Seeding database {self.db_name} from the local {self.seed_database}"
+                if self.seed_database
+                else f"Ensuring database {self.db_name}",
+                self._ensure_database,
+            ),
             (f"Enabling Odoo service ({self.service_name})", self._enable_service),
             ("Verifying Odoo answers", self._verify_odoo_answers),
         ]
@@ -425,6 +433,8 @@ class NativeInstanceDeployer:
         # password: a secret routed through an intermediate variable is
         # exactly the shape tests/test_secrets_hardening.py watches for,
         # because that is how it would reach an argv by accident.
+        if self.seed_database and not self._seed_database():
+            return False
         script = (
             "set -e\n"
             f"if ! sudo -u postgres psql -tAc \"SELECT 1 FROM pg_database WHERE datname = '{self.db_name}'\""
@@ -446,7 +456,11 @@ class NativeInstanceDeployer:
             # while this step failed must be retried, or the admin user keeps
             # the password `base` ships with.
             f'if [ -z "$(sudo -u postgres psql -d "{self.db_name}" -tAc'
-            f' "SELECT 1 FROM ir_config_parameter WHERE key = \'{_ADMIN_PASSWORD_MARK}\'" 2>/dev/null)" ]; then\n'
+            # A seeded database never carries rkd.admin_password_set, so
+            # without the second key this step would replace the password of
+            # the customer's admin user with a generated one.
+            f" \"SELECT 1 FROM ir_config_parameter WHERE key IN ('{_ADMIN_PASSWORD_MARK}', '{SEEDED_MARK}')\""
+            ' 2>/dev/null)" ]; then\n'
             f'  sudo -u odoo odoo shell -c {self.odoo_conf_path} -d "{self.db_name}"'
             " --logfile= <<'RKD_PY'\n"
             f"env.ref('base.user_admin').write({{'password': '{self._resolve_admin_login_password()}'}})\n"
@@ -485,6 +499,41 @@ class NativeInstanceDeployer:
         return self._ssh("bash -s", timeout=180, input=script)
 
     # ─── helpers ─────────────────────────────────────────────────────────────
+
+    def _ssh_capture(self, command: str, *, input: str, timeout: int) -> tuple[int, str, str]:
+        cmd, env = build_ssh_cmd(self.auth, self.port, self.user, self.host, command)
+        try:
+            result = subprocess.run(cmd, timeout=timeout, env=env, input=input, text=True, capture_output=True)
+        except subprocess.TimeoutExpired:
+            return 1, "", f"Timed out after {timeout}s waiting for the VPS. The remote command may still be running.\n"
+        return result.returncode, result.stdout, result.stderr
+
+    def _seed_database(self) -> bool:
+        directory = seed_dir(self.env)
+        ok, warnings = seed(
+            project_path=self.project_path,
+            env=self.env,
+            source_db=self.seed_database,
+            db_name=self.db_name,
+            state_script=native_state_script(db_name=self.db_name),
+            restore_script=lambda has_filestore: native_restore_script(
+                directory,
+                env=self.env,
+                source_db=self.seed_database,
+                db_name=self.db_name,
+                db_user=self.db_user,
+                domain=self.cfg.get("domain", ""),
+                has_filestore=has_filestore,
+            ),
+            run=lambda script, timeout: self._ssh_capture("bash -s", input=script, timeout=timeout),
+            ssh=self._ssh,
+            rsync=self._rsync,
+            console=console,
+            before_restore=f"sudo systemctl stop {self.service_name}\n",
+        )
+        self.checks += warnings
+        self._warnings += warnings
+        return ok
 
     def _rsync(self, local: str, remote: str, extra_opts: list[str] | None = None) -> bool:
         cmd, env = build_rsync_cmd(self.auth, self.port, self.user, self.host, local, remote, extra_opts)

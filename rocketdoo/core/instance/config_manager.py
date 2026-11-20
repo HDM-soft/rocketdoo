@@ -17,7 +17,8 @@ from rich.prompt import Confirm, Prompt
 
 from rocketdoo.core.models import InstanceConfig
 from rocketdoo.core.models.instance import NATIVE_ADDONS_PATH
-from rocketdoo.core.project_info import get_project_info
+from rocketdoo.core.odoo_db import databases_result
+from rocketdoo.core.project_info import get_project_info, read_docker_compose
 from rocketdoo.core.ssh_manager import list_private_keys
 
 console = Console()
@@ -217,6 +218,24 @@ class InstanceConfigManager:
         self.save(config)
         return config
 
+    def _ask_seed_database(self, env: str) -> str:
+        """Which local database to restore into `env`; empty for a new one from scratch."""
+        console.print("\n[bold]Database[/bold]")
+        console.print(
+            "[dim]Recommended: start from scratch. The deploy creates an empty database, installs base and "
+            "gives you the password of the admin user.[/dim]"
+        )
+        databases, reason = databases_result(read_docker_compose(self.project_path) or {})
+        if not databases:
+            if reason:
+                console.print(f"[yellow]No local database to offer: {reason}[/yellow]")
+            return ""
+        choices = [questionary.Choice("None - a new database from scratch  (recommended)", value="")]
+        choices += [
+            questionary.Choice(f"Restore local database '{name}' (with its filestore)", value=name) for name in databases
+        ]
+        return questionary.select(f"Database for {env}:", choices=choices, default=choices[0], style=_custom_style).ask() or ""
+
     def _wizard_env(self, env: str, dep_type: str) -> dict:
         docker = dep_type == "docker"
         project = get_project_info(self.project_path)
@@ -279,6 +298,8 @@ class InstanceConfigManager:
         if admin_passwd == generated_passwd:
             console.print(f"Generated master password: [bold]{generated_passwd}[/bold]")
 
+        seed_database = self._ask_seed_database(env)
+
         use_enterprise = Confirm.ask("Use Odoo Enterprise?", default=False)
         enterprise_source = "rsync"
         if use_enterprise:
@@ -338,6 +359,7 @@ class InstanceConfigManager:
             "db_user": db_user,
             "db_name": db_name,
             "admin_passwd": admin_passwd,
+            "seed_database": seed_database,
             "use_enterprise": use_enterprise,
             "enterprise_source": enterprise_source,
             "use_gitman": use_gitman,

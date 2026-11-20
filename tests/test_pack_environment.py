@@ -873,7 +873,7 @@ class TestAFilestoreWithNoDumpBesideIt:
         calls = []
         monkeypatch.setattr(core_pack.subprocess, "run", _fake_docker_run(calls))
         monkeypatch.setattr(core_pack, "databases_result", lambda *a, **k: (["qa"], ""))
-        monkeypatch.setattr(core_pack, "_backup_database", lambda *a, **k: False)
+        monkeypatch.setattr(core_pack, "dump_database", lambda *a, **k: False)
         output = packable_project / "sin-dump.zip"
 
         report = core_pack.pack(packable_project, db_name="qa", output=output)

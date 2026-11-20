@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 from rocketdoo.core.gitignore_manager import SENSITIVE_ENTRIES, SENSITIVE_EXCEPTIONS
-from rocketdoo.core.odoo_db import databases_result, db_container
+from rocketdoo.core.odoo_db import databases_result, db_container, dump_database, dump_filestore
 from rocketdoo.core.project_info import get_project_info, project_exists, read_docker_compose
 from rocketdoo.core.service import ProgressCallback, ServiceError, reporter
 
@@ -142,11 +142,6 @@ def _matches_secret(name: str, secret_paths: Iterable[str]) -> bool:
 # class of bug: the writer owns the format.
 BACKUP_FILENAME = re.compile(r"^(db|filestore)_.+_\d{8}_\d{6}\.(dump|tar\.gz)$")
 
-_FILESTORE_PATH_TEMPLATES = [
-    "/var/lib/odoo/.local/share/Odoo/filestore/{db}",
-    "/var/lib/odoo/filestore/{db}",
-]
-
 
 class PackError(ServiceError):
     """The environment cannot be packaged as requested."""
@@ -182,77 +177,6 @@ def _is_container_running(container_name: str) -> bool:
         return result.stdout.strip() == "true"
     except Exception:
         return False
-
-
-def _backup_database(db_container_name: str, db_name: str, output_path: Path, report: ProgressCallback) -> bool:
-    """Runs pg_dump inside the container and saves the result to output_path.
-
-    Returns True if the backup succeeded.
-    """
-    report(f"Running pg_dump for '{db_name}'...")
-    try:
-        with open(output_path, "wb") as f:
-            result = subprocess.run(
-                ["docker", "exec", db_container_name, "pg_dump", "-U", "root", "--format=custom", db_name],
-                stdout=f,
-                stderr=subprocess.PIPE,
-            )
-        if result.returncode != 0:
-            report(f"pg_dump error: {result.stderr.decode()}", "warn")
-            return False
-        size_mb = output_path.stat().st_size / (1024 * 1024)
-        report(f"Backup saved: {output_path.name} ({size_mb:.1f} MB)", "ok")
-        return True
-    except Exception as exc:
-        report(f"Exception during database backup: {exc}", "warn")
-        return False
-
-
-def _backup_filestore(
-    odoo_container: str, db_name: str, output_path: Path, report: ProgressCallback
-) -> tuple[bool, str | None]:
-    """Copies and compresses the Odoo filestore from the container to the host.
-
-    Returns (success, filestore_base). Supports multiple filestore layouts.
-    """
-    report("Copying filestore from container...")
-
-    filestore_path = None
-    filestore_base = None
-
-    try:
-        for template in _FILESTORE_PATH_TEMPLATES:
-            path = template.format(db=db_name)
-            check = subprocess.run(["docker", "exec", odoo_container, "test", "-d", path], capture_output=True)
-            if check.returncode == 0:
-                filestore_path = path
-                filestore_base = str(Path(path).parent)
-                break
-
-        if not filestore_path:
-            report(f"Filestore not found for database {db_name} in any known location - skipping.", "warn")
-            return True, None  # Not fatal
-
-        report(f"Detected filestore path: {filestore_path}")
-
-        with open(output_path, "wb") as f:
-            result = subprocess.run(
-                ["docker", "exec", odoo_container, "tar", "-czf", "-", "-C", filestore_base, db_name],
-                stdout=f,
-                stderr=subprocess.PIPE,
-            )
-
-        if result.returncode != 0:
-            report(f"Error copying filestore: {result.stderr.decode()}", "warn")
-            return False, filestore_base
-
-        size_mb = output_path.stat().st_size / (1024 * 1024)
-        report(f"Filestore compressed: {output_path.name} ({size_mb:.1f} MB)", "ok")
-        return True, filestore_base
-
-    except Exception as exc:
-        report(f"Exception during filestore backup: {exc}", "warn")
-        return False, None
 
 
 def _sanitize_dockerfile(dockerfile_path: Path) -> str:
@@ -578,11 +502,11 @@ def pack(
                 db_backup_path = backup_dir / f"db_{selected_db}_{timestamp}.dump"
                 fs_backup_path = backup_dir / f"filestore_{selected_db}_{timestamp}.tar.gz"
 
-                if not _backup_database(db_container_name, selected_db, db_backup_path, report):
+                if not dump_database(db_container_name, selected_db, db_backup_path, report):
                     db_backup_path = None
 
                 if odoo_container and _is_container_running(odoo_container):
-                    fs_ok, filestore_base = _backup_filestore(odoo_container, selected_db, fs_backup_path, report)
+                    fs_ok, filestore_base = dump_filestore(odoo_container, selected_db, fs_backup_path, report)
                     if not fs_ok:
                         fs_backup_path = None
                 else:
