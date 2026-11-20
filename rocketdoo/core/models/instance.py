@@ -100,6 +100,9 @@ class InstanceEnvironment(BaseModel):
     # spoof its address.
     proxy_mode: bool = False
 
+    # A local database to restore into this environment; empty means a new one.
+    seed_database: str = ""
+
     use_enterprise: bool = False
     enterprise_source: EnterpriseSource = "rsync"
     use_gitman: bool = False

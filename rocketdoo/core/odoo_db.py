@@ -85,6 +85,43 @@ def list_databases(compose_data: dict | None = None) -> list[str]:
     return databases_result(compose_data)[0]
 
 
+def pg_major_version(compose_data: dict | None = None) -> int:
+    """Major version of the project's PostgreSQL server, or 0 if it cannot be read.
+
+    Asked of the running server rather than read from the compose image tag:
+    the tag can be `latest` or carry a suffix, and the dump is made by the
+    pg_dump that ships in this very container.
+    """
+    stdout, error = _psql("postgres", "SHOW server_version_num;", "-t", "-A", compose_data=compose_data)
+    digits = stdout.strip()
+    return int(digits) // 10000 if not error and digits.isdigit() else 0
+
+
+def database_bytes(db: str, compose_data: dict | None = None) -> int:
+    """On-disk size of `db`; an upper bound for its compressed dump. 0 if unreadable."""
+    stdout, error = _psql(db, "SELECT pg_database_size(current_database());", "-t", "-A", compose_data=compose_data)
+    digits = stdout.strip()
+    return int(digits) if not error and digits.isdigit() else 0
+
+
+def filestore_bytes(odoo_container: str, db: str) -> int:
+    """Size of the filestore of `db` inside the Odoo container; 0 if absent or unreadable."""
+    for template in FILESTORE_PATH_TEMPLATES:
+        try:
+            result = subprocess.run(
+                ["docker", "exec", odoo_container, "du", "-sk", template.format(db=db)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return 0
+        head = result.stdout.split("\t")[0].strip()
+        if result.returncode == 0 and head.isdigit():
+            return int(head) * 1024
+    return 0
+
+
 def module_states(db: str) -> tuple[dict[str, str], str]:
     """Map `{module_name: state}` read from `ir_module_module` in `db`.
 
