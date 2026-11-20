@@ -54,13 +54,13 @@ def gitman_file(cfg: dict) -> str:
 def local_facts(project_root: Path, cfg: dict) -> dict:
     root = Path(project_root)
     vps = cfg.get("vps", {})
-    docker_gitman = bool(cfg.get("use_gitman")) and cfg.get("type", "docker") == "docker"
+    use_gitman = bool(cfg.get("use_gitman"))
     key = vps.get("ssh_key", "~/.ssh/id_rsa") if vps.get("auth_method", "ssh_key") == "ssh_key" else None
     return {
         "enterprise_dir": (root / "enterprise").is_dir(),
         "gitman_file": (root / gitman_file(cfg)).is_file(),
-        "gitman_urls": list(dict.fromkeys(gitman_repos(root / gitman_file(cfg)))) if docker_gitman else [],
-        "gitman_scripts": docker_gitman and gitman_has_scripts(root / gitman_file(cfg)),
+        "gitman_urls": list(dict.fromkeys(gitman_repos(root / gitman_file(cfg)))) if use_gitman else [],
+        "gitman_scripts": use_gitman and gitman_has_scripts(root / gitman_file(cfg)),
         "install_script": (root / INSTALL_SCRIPT).is_file(),
         "agent_has_keys": _agent_has_keys(),
         "ssh_auth_sock": bool(os.environ.get("SSH_AUTH_SOCK")),
@@ -275,8 +275,13 @@ def _remote_checks(cfg: dict, remote: dict, env: str, local: dict) -> list[Check
                     "warn",
                     False,
                     "git is not installed on the VPS host, so the repositories were not probed",
-                    "The build clones them inside the image with its own git, so this does not stop the deploy; "
-                    "install git on the host to have them checked first.",
+                    (
+                        "The build clones them inside the image with its own git, so this does not stop the "
+                        "deploy; install git on the host to have them checked first."
+                        if cfg.get("type", "docker") == "docker"
+                        else "The deploy installs git before cloning them, so this does not stop it; "
+                        "on a later deploy they are checked first."
+                    ),
                 )
             )
         else:
@@ -289,7 +294,7 @@ def _remote_checks(cfg: dict, remote: dict, env: str, local: dict) -> list[Check
                     if not failed
                     else f"git ls-remote failed: {', '.join(failed)}",
                     "Load a key with access to those repositories in the local SSH agent (ssh-add -l): "
-                    "the build clones them with your forwarded key.",
+                    "the clone uses your forwarded key.",
                 )
             )
     checks.append(_memory_check(cfg, remote, env))
@@ -385,17 +390,7 @@ _CONNECTION_DEFAULT_HINT = "ssh failed: check host, port, user and key (or passw
 
 
 def _gitman_checks(cfg: dict, local: dict) -> list[Check]:
-    if cfg.get("type", "docker") != "docker":
-        return [
-            _check(
-                "gitman",
-                "warn",
-                False,
-                "use_gitman is set on a native deploy: the repositories in the gitman file are not installed",
-                "The native deploy has no build step to run gitman in. Put those addons under addons/, "
-                "or deploy with type: docker.",
-            )
-        ]
+    docker = cfg.get("type", "docker") == "docker"
     name = gitman_file(cfg)
     found = bool(local.get("gitman_file"))
     checks = [
@@ -404,8 +399,8 @@ def _gitman_checks(cfg: dict, local: dict) -> list[Check]:
             "block",
             found,
             f"{name} found in the project" if found else f"{name} is missing from the project",
-            "The Dockerfile copies it into the image: create it (rkd init writes gitman.yaml) "
-            "or fix gitman_config in .rkd/instance.yaml.",
+            ("The Dockerfile copies it into the image" if docker else "The deploy copies it to the VPS")
+            + ": create it (rkd init writes gitman.yaml) or fix gitman_config in .rkd/instance.yaml.",
         )
     ]
     if found:
@@ -423,9 +418,14 @@ def _gitman_checks(cfg: dict, local: dict) -> list[Check]:
                     if needed
                     else f"{INSTALL_SCRIPT} is missing from the project"
                 ),
-                "A failed script aborts gitman install (the build passes --force only for stage), and the "
-                "Python dependencies of the cloned repositories are not installed either way. "
-                f"Restore {INSTALL_SCRIPT} in the project root.",
+                (
+                    "A failed script aborts gitman install (the build passes --force only for stage), and the "
+                    "Python dependencies of the cloned repositories are not installed either way. "
+                    if docker
+                    else "A failing script aborts nothing on a native deploy, but the Python dependencies of "
+                    "the cloned repositories are not installed. "
+                )
+                + f"Restore {INSTALL_SCRIPT} in the project root.",
             )
         )
     return checks
