@@ -659,12 +659,15 @@ class TestTheRoleStatementAgainstPostgres:
             capture_output=True,
         )
         try:
-            # A real query, not pg_isready: the image answers that one from
-            # the temporary server it runs during initdb, and then takes it
-            # down again, so a test can connect to a server about to vanish.
+            # Over TCP, and not through the unix socket: the entrypoint runs
+            # a temporary server during initdb with `listen_addresses=''`,
+            # which answers on the socket and then goes away. A probe on the
+            # socket therefore succeeds against a server about to vanish, and
+            # the test's next statement gets "the database system is shutting
+            # down". Only the real server ever listens on TCP.
             for _ in range(60):
                 ready = subprocess.run(
-                    ["docker", "exec", name, "psql", "-U", "postgres", "-tAc", "SELECT 1"],
+                    ["docker", "exec", name, "psql", "-U", "postgres", "-h", "127.0.0.1", "-tAc", "SELECT 1"],
                     capture_output=True,
                 )
                 if ready.returncode == 0:
@@ -864,7 +867,7 @@ class TestEnterprise:
     def test_the_conf_points_at_the_directory_that_was_filled(self, tmp_path, monkeypatch):
         self._local(tmp_path)
         _, run = _deploy(tmp_path, monkeypatch, use_enterprise=True)
-        assert ",/opt/odoo/enterprise" in run.stdin_of("addons_path")
+        assert "addons_path = /opt/odoo/enterprise,/opt/odoo-prod" in run.stdin_of("addons_path")
 
     def test_the_plan_does_not_mention_enterprise_when_it_is_off(self, tmp_path):
         deployer = deployer_native.NativeInstanceDeployer("prod", _config(), tmp_path)
@@ -874,3 +877,66 @@ class TestEnterprise:
         ok, run = _deploy(tmp_path, monkeypatch, use_enterprise=True, enterprise_source="clone", odoo_version="")
         assert not ok
         assert not run.sent_containing("git clone")
+
+
+class TestTheDeployExitCode:
+    """A deploy that failed has to be distinguishable by a script (#292).
+
+    `rkd instance deploy --dry-run && rkd instance deploy` used to run the
+    second half even when the dry-run had found blocking problems: every path
+    of the command returned, and a bare `return` exits 0.
+    """
+
+    def _invoke(self, tmp_path, monkeypatch, *, success, dry_run=False, env="prod", config=True):
+        if config:
+            data = {
+                "environments": {
+                    "prod": {
+                        "type": "native",
+                        "vps": {
+                            "host": "vps.example.com",
+                            "user": "ubuntu",
+                            "auth_method": "ssh_key",
+                            "ssh_key": "~/.ssh/id_rsa",
+                        },
+                        "remote_path": "/opt/odoo-prod",
+                    }
+                }
+            }
+            (tmp_path / ".rkd").mkdir(exist_ok=True)
+            (tmp_path / ".rkd" / "instance.yaml").write_text(yaml.safe_dump(data))
+        monkeypatch.chdir(tmp_path)
+
+        class _Deployer:
+            checks: list = []
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def deploy(self, dry_run=False):
+                return success
+
+        monkeypatch.setattr(deployer_native, "NativeInstanceDeployer", _Deployer)
+        monkeypatch.setattr("rocketdoo.core.instance.deployer_docker.DockerInstanceDeployer", _Deployer, raising=False)
+        args = ["instance", "deploy", "--env", env, "--yes"]
+        if dry_run:
+            args.append("--dry-run")
+        return CliRunner().invoke(main, args)
+
+    def test_a_failed_deploy_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=False).exit_code == 1
+
+    def test_a_blocked_dry_run_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=False, dry_run=True).exit_code == 1
+
+    def test_a_successful_deploy_still_exits_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True).exit_code == 0
+
+    def test_a_successful_dry_run_still_exits_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True, dry_run=True).exit_code == 0
+
+    def test_a_missing_environment_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True, env="stage").exit_code == 1
+
+    def test_without_a_config_it_exits_non_zero(self, tmp_path, monkeypatch):
+        assert self._invoke(tmp_path, monkeypatch, success=True, config=False).exit_code == 1

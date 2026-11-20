@@ -32,6 +32,7 @@ from .config_manager import (
     db_maxconn,
 )
 from .enterprise import branch, clone_script
+from .gitman_remote import GITMAN_DIR
 from .secrets_store import ADMIN_LOGIN_PASSWD, ADMIN_PASSWD, PG_PASS, load, random_password, save
 from .ssh_utils import build_rsync_cmd, build_ssh_cmd, ensure_dirs_command, resolve_auth
 
@@ -248,7 +249,7 @@ class DockerInstanceDeployer:
         addons_path += local_addons.discover(self.project_path, "/mnt/extra-addons")
         ssh_hosts = ["github.com"]
         if use_gitman:
-            addons_path += gitman_module_paths(self.project_path / gitman_config, "/opt/odoo/gitman")
+            addons_path += gitman_module_paths(self.project_path / gitman_config, GITMAN_DIR)
             ssh_hosts += gitman_ssh_hosts(self.project_path / gitman_config)
         admin_passwd = creds["admin_passwd"]
         workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])

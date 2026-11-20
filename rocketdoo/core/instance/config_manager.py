@@ -302,14 +302,13 @@ class InstanceConfigManager:
             if enterprise_source == "rsync" and not has_local:
                 console.print("[yellow]⚠ There is no enterprise/ directory in this project to transfer.[/yellow]")
 
-        use_gitman = False
+        use_gitman = Confirm.ask("Use Gitman for third-party repos?", default=False)
         gitman_config = ""
+        if use_gitman:
+            gitman_config = Prompt.ask("Gitman config file (local path)", default=DEFAULT_GITMAN_FILE)
+
         pg_profile = ""
         if docker:
-            use_gitman = Confirm.ask("Use Gitman for third-party repos?", default=False)
-            if use_gitman:
-                gitman_config = Prompt.ask("Gitman config file (local path)", default=DEFAULT_GITMAN_FILE)
-
             console.print("\n[bold]PostgreSQL profile[/bold]")
             pg_profile = questionary.select(
                 "Resource profile:",
@@ -341,6 +340,8 @@ class InstanceConfigManager:
             "admin_passwd": admin_passwd,
             "use_enterprise": use_enterprise,
             "enterprise_source": enterprise_source,
+            "use_gitman": use_gitman,
+            "gitman_config": gitman_config,
             "remote_path": remote_path,
         }
         if docker:
@@ -349,8 +350,6 @@ class InstanceConfigManager:
                 domain=domain,
                 traefik_email=traefik_email,
                 db_version=db_version,
-                use_gitman=use_gitman,
-                gitman_config=gitman_config,
                 pg_profile=pg_profile,
             )
         return result
