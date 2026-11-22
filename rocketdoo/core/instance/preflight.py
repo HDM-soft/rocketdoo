@@ -14,6 +14,7 @@ from pathlib import Path
 from rocketdoo.core.gitman_config import gitman_has_scripts, gitman_repos
 from rocketdoo.core.odoo_db import database_bytes, databases_result, filestore_bytes, pg_major_version
 from rocketdoo.core.project_info import read_docker_compose
+from rocketdoo.core.ssh_manager import resolve_key_path
 
 from .config_manager import (
     CRON_THREADS,
@@ -67,7 +68,7 @@ def local_facts(project_root: Path, cfg: dict) -> dict:
         "agent_has_keys": _agent_has_keys(),
         "ssh_auth_sock": bool(os.environ.get("SSH_AUTH_SOCK")),
         "build_needs_ssh": build_needs_ssh(root, cfg),
-        "key_file": None if key is None else os.path.exists(os.path.expanduser(key)),
+        "key_file": None if key is None else os.path.exists(resolve_key_path(key)),
         "invalid_identifiers": invalid_identifiers(cfg.get("db_user", ""), cfg.get("db_name", "")),
     }
     if cfg.get("seed_database"):
