@@ -135,3 +135,34 @@ class TestBuildContext:
         assert "RUN mkdir -p /root/.ssh" in content
         assert "#RUN mkdir -p /root/.ssh" not in content
         assert "COPY ./.ssh/id_ed25519 /root/.ssh/id_ed25519" in content
+
+
+class TestResolveKeyPath:
+    """A configured `ssh_key` that names a key in ~/.ssh/ instead of pointing at it.
+
+    Every rkd wizard lists ~/.ssh/ by name, so the name is what the user types
+    back. `expanduser()` alone left it relative to the current directory and the
+    deploy died with "SSH key not found" for a key that was there all along (#314).
+    """
+
+    @pytest.fixture(autouse=True)
+    def fake_home(self, monkeypatch, tmp_path):
+        # HOME is what both Path.home() and expanduser() read, so one knob
+        # covers the helper however it is written.
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+    def test_bare_name_resolves_under_ssh_dir(self, tmp_path):
+        assert ssh_manager.resolve_key_path("hdmsoft") == str(tmp_path / ".ssh" / "hdmsoft")
+
+    def test_tilde_path_is_expanded(self, tmp_path):
+        assert ssh_manager.resolve_key_path("~/.ssh/hdmsoft") == str(tmp_path / ".ssh" / "hdmsoft")
+
+    def test_absolute_path_is_left_alone(self):
+        assert ssh_manager.resolve_key_path("/etc/keys/deploy") == "/etc/keys/deploy"
+
+    def test_relative_path_with_separator_is_left_alone(self):
+        assert ssh_manager.resolve_key_path("keys/deploy") == "keys/deploy"
+
+    def test_empty_value_stays_empty(self):
+        # Not "~/.ssh/": no key configured must not resolve to the directory itself.
+        assert ssh_manager.resolve_key_path("") == ""

@@ -3,7 +3,6 @@ RocketDoo Deploy - VPS Deployer
 Deploys Odoo modules to VPS servers (Docker or Native)
 """
 
-import os
 import stat
 import subprocess
 from getpass import getpass
@@ -13,7 +12,7 @@ from typing import Dict, List
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
-from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref, sshpass_wrap
+from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref, resolve_key_path, sshpass_wrap
 
 from .base import BaseDeployer, DeploymentResult
 from .module_packager import ModulePackager
@@ -48,7 +47,7 @@ class VPSDeployer(BaseDeployer):
         self.user = self.connection.get("user")
 
         # Authentication credentials
-        self.ssh_key = self.connection.get("ssh_key")
+        self.ssh_key = resolve_key_path(self.connection.get("ssh_key") or "")
         self.password = self.connection.get("password")
 
         # Determine authentication method by presence
@@ -138,7 +137,7 @@ class VPSDeployer(BaseDeployer):
         if self.auth_method == "ssh_key":
             if not self.ssh_key:
                 errors.append("SSH key authentication selected but 'ssh_key' not configured")
-            elif not Path(os.path.expanduser(self.ssh_key)).exists():
+            elif not Path(self.ssh_key).exists():
                 errors.append(f"SSH key not found: {self.ssh_key}")
         elif self.auth_method == "password":
             if not self.password:
@@ -421,7 +420,7 @@ class VPSDeployer(BaseDeployer):
 
         # Add authentication based on method
         if self.auth_method == "ssh_key" and self.ssh_key:
-            key_path = os.path.expanduser(self.ssh_key)
+            key_path = self.ssh_key
             ssh_cmd.extend(["-i", key_path])
 
         # Add user@host
@@ -461,7 +460,7 @@ class VPSDeployer(BaseDeployer):
             ssh_opts = f"-p {self.port} -o StrictHostKeyChecking=no"
 
             if self.auth_method == "ssh_key" and self.ssh_key:
-                key_path = os.path.expanduser(self.ssh_key)
+                key_path = self.ssh_key
                 ssh_opts += f" -i {key_path}"
 
             rsync_cmd.extend(["-e", f"ssh {ssh_opts}"])
@@ -513,7 +512,7 @@ class VPSDeployer(BaseDeployer):
 
             # Add authentication based on method
             if self.auth_method == "ssh_key" and self.ssh_key:
-                key_path = os.path.expanduser(self.ssh_key)
+                key_path = self.ssh_key
                 scp_cmd.extend(["-i", key_path])
 
             # Add source and destination

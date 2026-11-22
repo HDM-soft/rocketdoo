@@ -206,3 +206,74 @@ class TestValidateExitCode:
         result = self._run(tmp_path)
 
         assert result.exit_code == 0
+
+
+class TestConfiguredKeyReachesTheDeployer:
+    """What the wizard writes under `ssh_key` has to work when the deploy reads it.
+
+    `rkd deploy init` took the key as free text while `rkd init` and
+    `rkd instance init` list ~/.ssh/ by name, so a bare name was the natural
+    thing to type — and the deployer then read it as a path relative to the
+    current directory (#314).
+    """
+
+    @staticmethod
+    def _deployer(tmp_path, ssh_key):
+        from rocketdoo.core.deploy.vps import VPSDeployer
+
+        target = {
+            "type": "vps",
+            "deployment_type": "docker",
+            "connection": {"host": "vps.example.com", "user": "root", "port": 22, "ssh_key": ssh_key},
+            "docker": {"container_name": "odoo", "addons_mount": "/mnt/extra-addons"},
+        }
+        return VPSDeployer("production", target, tmp_path)
+
+    @pytest.fixture
+    def home_with_key(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        (home / ".ssh").mkdir(parents=True)
+        (home / ".ssh" / "hdmsoft").write_text("private")
+        monkeypatch.setenv("HOME", str(home))
+        return home
+
+    @pytest.mark.parametrize("configured", ["hdmsoft", "~/.ssh/hdmsoft"])
+    def test_name_and_tilde_path_both_validate(self, configured, home_with_key, tmp_path):
+        deployer = self._deployer(tmp_path, configured)
+
+        assert deployer.validate_config() == []
+        assert deployer.ssh_key == str(home_with_key / ".ssh" / "hdmsoft")
+
+    def test_missing_key_still_reported(self, home_with_key, tmp_path):
+        deployer = self._deployer(tmp_path, "not-there")
+
+        errors = deployer.validate_config()
+
+        assert len(errors) == 1
+        assert "SSH key not found" in errors[0]
+        # The message names the resolved path, not the bare word that was typed.
+        assert str(home_with_key / ".ssh" / "not-there") in errors[0]
+
+    def test_ssh_command_gets_the_absolute_path(self, home_with_key, tmp_path, monkeypatch):
+        from rocketdoo.core.deploy import vps
+
+        deployer = self._deployer(tmp_path, "hdmsoft")
+        calls = []
+        monkeypatch.setattr(
+            vps.subprocess,
+            "run",
+            lambda *a, **k: calls.append(a) or type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})(),
+        )
+
+        deployer._run_ssh_command("echo hi")
+
+        argv = calls[0][0]
+        assert argv[argv.index("-i") + 1] == str(home_with_key / ".ssh" / "hdmsoft")
+
+    def test_wizard_writes_a_path_not_a_name(self, monkeypatch):
+        from rocketdoo.core.deploy import config_manager as cm
+
+        monkeypatch.setattr(cm, "list_private_keys", lambda: ["hdmsoft", "id_rsa"])
+        monkeypatch.setattr(cm.questionary, "select", lambda *a, **k: type("Q", (), {"ask": lambda self: "hdmsoft"})())
+
+        assert cm.DeployConfigManager._ask_ssh_key() == "~/.ssh/hdmsoft"
