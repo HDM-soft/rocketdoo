@@ -6,6 +6,22 @@ import shutil
 from pathlib import Path
 
 
+def resolve_key_path(value: str) -> str:
+    """Absolute path of a configured `ssh_key`.
+
+    A bare name means a key in ~/.ssh/: that is what every rkd wizard lists and
+    what the user types back. `expanduser()` alone leaves it as a path relative
+    to the current directory, so the deploy failed with "SSH key not found" for
+    a key that was sitting in ~/.ssh/ all along (#314).
+    """
+    if not value:
+        return ""
+    expanded = os.path.expanduser(value)
+    if os.path.dirname(expanded):
+        return expanded
+    return str(Path.home() / ".ssh" / expanded)
+
+
 def list_private_keys(ssh_dir: Path = Path.home() / ".ssh"):
     if not ssh_dir.exists():
         return []

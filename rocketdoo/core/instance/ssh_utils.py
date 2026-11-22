@@ -7,13 +7,12 @@ Mirrors the auth pattern from core/deploy/vps.py:
   - password → sshpass -e     (password read from the SSHPASS env var, requires sshpass installed)
 """
 
-import os
 from getpass import getpass
 from pathlib import Path
 
 from rich.console import Console
 
-from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref, sshpass_wrap
+from rocketdoo.core.ssh_manager import check_sshpass, env_ref_name, resolve_env_ref, resolve_key_path, sshpass_wrap
 
 console = Console()
 
@@ -38,7 +37,7 @@ def resolve_auth(vps_cfg: dict, env: str, project_path: Path) -> dict:
 
     if method == "ssh_key":
         raw_key = vps_cfg.get("ssh_key", "~/.ssh/id_rsa")
-        key_path = os.path.expanduser(raw_key)
+        key_path = resolve_key_path(raw_key)
         if not Path(key_path).exists():
             console.print(f"[yellow]⚠ SSH key not found: {key_path}[/yellow]")
         return {"method": "ssh_key", "key_path": key_path, "password": None}
