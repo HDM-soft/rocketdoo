@@ -268,7 +268,9 @@ class InstanceConfigManager:
                 selected = questionary.select(
                     "Select the SSH key configured on this VPS:", choices=available_keys, style=_custom_style
                 ).ask()
-                ssh_key = f"~/.ssh/{selected}"
+                # A cancelled select returns None, and f"~/.ssh/{None}" validates
+                # as a str: the deploy then fails on a key named "None".
+                ssh_key = f"~/.ssh/{selected}" if selected else Prompt.ask("SSH key path (full)", default="~/.ssh/id_rsa")
         else:
             console.print("[dim]Password will be requested at deploy time or read from the env var below.[/dim]")
             env_var = f"INSTANCE_{env.upper()}_PASSWORD"
