@@ -14,6 +14,7 @@ from rich.console import Console
 from rich.prompt import Confirm, Prompt
 
 from rocketdoo.core.models import DeployConfig
+from rocketdoo.core.ssh_manager import list_private_keys
 
 console = Console()
 
@@ -271,7 +272,7 @@ class DeployConfigManager:
         use_key = Confirm.ask("Use SSH key authentication?", default=True)
 
         if use_key:
-            ssh_key = Prompt.ask("SSH key path", default="~/.ssh/id_rsa")
+            ssh_key = self._ask_ssh_key()
             connection = {"host": host, "port": int(port), "user": user, "ssh_key": ssh_key}
         else:
             console.print("[yellow]⚠️  Password will be requested at deploy time[/yellow]")
@@ -315,6 +316,27 @@ class DeployConfigManager:
         }
 
         return (target_name, config)
+
+    @staticmethod
+    def _ask_ssh_key() -> str:
+        """Pick a key from ~/.ssh/, the way `rkd init` and `rkd instance init` do.
+
+        A free-text prompt took a bare name and wrote it unchanged, which the
+        deployer then read as a relative path (#314).
+        """
+        available_keys = list_private_keys()
+        if not available_keys:
+            console.print("[yellow]⚠ No SSH keys found in ~/.ssh/[/yellow]")
+            console.print("[dim]Generate one with: ssh-keygen -t ed25519[/dim]")
+            return Prompt.ask("SSH key path (full)", default="~/.ssh/id_rsa")
+
+        console.print(f"[dim]Found {len(available_keys)} key(s) in ~/.ssh/[/dim]")
+        selected = questionary.select(
+            "Select the SSH key configured on this server:", choices=available_keys, style=custom_style
+        ).ask()
+        if not selected:
+            return Prompt.ask("SSH key path (full)", default="~/.ssh/id_rsa")
+        return f"~/.ssh/{selected}"
 
     def _configure_odoo_sh_target(self, target_name: str) -> tuple:
         """

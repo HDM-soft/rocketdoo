@@ -518,6 +518,31 @@ class TestADryRun:
         assert not (tmp_path / ".rkd").exists()
 
 
+class TestTheConfiguredKey:
+    """resolve_auth() had the same blind spot as the module deployer (#314):
+    a bare name in instance.yaml resolved relative to the current directory."""
+
+    def test_bare_name_resolves_under_ssh_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        vps = {"host": "h", "user": "u", "auth_method": "ssh_key", "ssh_key": "hdmsoft"}
+
+        auth = ssh_utils.resolve_auth(vps, "prod", tmp_path)
+
+        assert auth["key_path"] == str(tmp_path / ".ssh" / "hdmsoft")
+
+    def test_preflight_agrees_with_the_deployer(self, tmp_path, monkeypatch):
+        # A warn that contradicts what the deploy then does is worse than no warn.
+        monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".ssh").mkdir()
+        (tmp_path / ".ssh" / "hdmsoft").write_text("private")
+
+        vps = {"host": "h", "user": "u", "port": 22, "auth_method": "ssh_key", "ssh_key": "hdmsoft"}
+
+        facts = preflight.local_facts(tmp_path, _cfg(vps=vps))
+
+        assert facts["key_file"] is True
+
+
 class TestThePasswordPrompt:
     def test_it_no_longer_writes_the_password_to_disk(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ssh_utils, "getpass", lambda *_: "s3cret")
