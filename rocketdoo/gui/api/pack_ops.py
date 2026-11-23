@@ -163,7 +163,10 @@ def unpack(body: UnpackRequest = UnpackRequest()):
     blocks the event loop. Port and project-name conflicts are auto-accepted -- the same
     behaviour `--yes` gives the CLI -- since there is no terminal here to ask.
     """
-    info = core_unpack.inspect(Path.cwd())
+    # One read: this one restores a database, so inspecting one project and
+    # unpacking into another is the worst of the four (#287).
+    root = Path.cwd()
+    info = core_unpack.inspect(root)
     messages: list[str] = []
 
     def _collect(message: str, level: str = "info") -> None:
@@ -171,7 +174,7 @@ def unpack(body: UnpackRequest = UnpackRequest()):
 
     try:
         report = core_unpack.unpack(
-            Path.cwd(),
+            root,
             ports=info["suggested_ports"],
             # Only when there is a conflict, like the CLI. Without one the
             # suggestion IS the current name, and passing it put every unpack

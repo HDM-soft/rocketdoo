@@ -1327,32 +1327,43 @@ class TestNoHandlerBlocksTheEventLoop:
 
     @staticmethod
     def _async_defs(path: Path) -> list[str]:
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         return [
-            node.name
+            f"{path.name}:{node.lineno} {node.name}"
             for node in ast.walk(tree)
             if isinstance(node, ast.AsyncFunctionDef)
             and not any(isinstance(n, (ast.Await, ast.AsyncFor, ast.AsyncWith)) for n in ast.walk(node))
         ]
 
     def test_no_async_handler_without_await(self):
+        # rglob, so a gui/api/<subpackage>/ added later is covered too.
         api = Path(__file__).resolve().parents[1] / "rocketdoo" / "gui" / "api"
-        offenders = {f.name: names for f in sorted(api.glob("*.py")) if (names := self._async_defs(f))}
+        offenders = sorted(name for f in sorted(api.rglob("*.py")) for name in self._async_defs(f))
 
-        assert offenders == {}, (
+        assert offenders == [], (
             f"declared async def but awaits nothing, so it blocks the event loop while it runs: {offenders}. Drop the `async`."
         )
 
     def test_the_websocket_handlers_are_still_async(self):
-        # The guard above must not push someone into making these sync: they
-        # await for real, and a sync WebSocket handler would not work at all.
-        server = Path(__file__).resolve().parents[1] / "rocketdoo" / "gui" / "server.py"
-        tree = ast.parse(server.read_text())
-        awaiting = [
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.AsyncFunctionDef)
-            and any(isinstance(n, (ast.Await, ast.AsyncFor, ast.AsyncWith)) for n in ast.walk(node))
-        ]
+        """The guard above must not push someone into making these sync.
 
-        assert awaiting, "server.py should still hold async handlers that await"
+        A sync WebSocket handler does not work at all. Dropping only the
+        `async` is already a SyntaxError while the awaits are there, so what
+        this covers is the non-trivial version -- dropping the awaits and the
+        `async` together -- plus the inventory: adding or removing a WebSocket
+        handler has to be deliberate. It names them by decorator rather than
+        asserting that *something* in the file awaits, which the token
+        middleware and a module-level helper satisfy on their own.
+        """
+        server = Path(__file__).resolve().parents[1] / "rocketdoo" / "gui" / "server.py"
+        tree = ast.parse(server.read_text(encoding="utf-8"), filename=str(server))
+        handlers = {
+            node.name: node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+            and any(_called_name(d.func) == "websocket" for d in node.decorator_list if isinstance(d, ast.Call))
+        }
+
+        assert set(handlers) == {"ws_docker_action", "ws_odoo_update", "ws_logs"}
+        sync = sorted(name for name, node in handlers.items() if not isinstance(node, ast.AsyncFunctionDef))
+        assert sync == [], f"a sync WebSocket handler does not work: {sync}"

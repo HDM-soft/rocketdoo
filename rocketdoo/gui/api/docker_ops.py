@@ -12,8 +12,12 @@ router = APIRouter()
 
 @router.post("/up")
 def docker_up():
-    ensure_addons_path(Path.cwd())
-    return run_compose_result("up", "-d")
+    # One read: a navigate() in another thread must not land between the
+    # addons_path sync and the compose call, which would start a project with
+    # another one's addons_path (#287).
+    root = Path.cwd()
+    ensure_addons_path(root)
+    return run_compose_result("up", "-d", cwd=root)
 
 
 @router.post("/down")
