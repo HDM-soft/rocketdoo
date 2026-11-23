@@ -31,6 +31,30 @@ class TestListPrivateKeys:
     def test_empty_directory_returns_empty(self, tmp_path):
         assert ssh_manager.list_private_keys(tmp_path) == []
 
+    def test_openssh_own_files_are_not_offered(self, tmp_path):
+        """A key picker that offers `config` produces a config that fails at deploy time (#318)."""
+        for name in ("config", "known_hosts", "authorized_keys", "environment", "rc"):
+            (tmp_path / name).write_text("not a key")
+        (tmp_path / "id_rsa").write_text("private")
+
+        assert ssh_manager.list_private_keys(tmp_path) == ["id_rsa"]
+
+    def test_their_backups_go_with_them(self, tmp_path):
+        # Matched on the name up to the first dot: ssh-keygen and editors leave
+        # these behind, and none of them is a key either.
+        for name in ("known_hosts.old", "config.bak.20261118-111526", "known_hosts.tmp"):
+            (tmp_path / name).write_text("not a key")
+        (tmp_path / "deploy_key").write_text("private")
+
+        assert ssh_manager.list_private_keys(tmp_path) == ["deploy_key"]
+
+    def test_a_key_whose_name_merely_starts_like_one_is_kept(self, tmp_path):
+        # The match is on the whole segment, not a prefix: these are real keys.
+        for name in ("configuracion", "known_hosts_backup_key", "rc2"):
+            (tmp_path / name).write_text("private")
+
+        assert sorted(ssh_manager.list_private_keys(tmp_path)) == ["configuracion", "known_hosts_backup_key", "rc2"]
+
 
 class TestEnvRefName:
     @pytest.mark.parametrize(

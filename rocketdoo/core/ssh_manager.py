@@ -22,10 +22,21 @@ def resolve_key_path(value: str) -> str:
     return str(Path.home() / ".ssh" / expanded)
 
 
+# What OpenSSH keeps in ~/.ssh/ that is not a key. Matched on the name up to
+# the first dot, so known_hosts.old and config.bak.20261118 go with it (#318).
+# Offering these in a key picker produces a configuration that fails at deploy
+# time, which is exactly what #314 was about.
+_RESERVED_NAMES = frozenset({"config", "known_hosts", "authorized_keys", "environment", "rc"})
+
+
 def list_private_keys(ssh_dir: Path = Path.home() / ".ssh"):
     if not ssh_dir.exists():
         return []
-    return [p.name for p in ssh_dir.iterdir() if p.is_file() and not p.name.endswith(".pub")]
+    return [
+        p.name
+        for p in ssh_dir.iterdir()
+        if p.is_file() and not p.name.endswith(".pub") and p.name.split(".", 1)[0] not in _RESERVED_NAMES
+    ]
 
 
 def copy_key_to_build_context(key_name: str, dockerfile_dir: Path):
