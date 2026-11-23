@@ -2404,12 +2404,14 @@ const Deploy = {
     const hasConfig  = ref(false)
     const initForm   = ref({ target_name:'production', target_type:'vps', host:'', user:'ubuntu', ssh_port:22, ssh_key:'', deployment_type:'docker', force:false })
     const initBusy   = ref(false)
+    const sshKeys    = ref([])
 
     async function load() {
       busy.value = true
       try {
-        const [t,c] = await Promise.all([api.get('/deploy/targets'), api.get('/deploy/config')])
-        targets.value = t.targets||[]; hasConfig.value = c.exists
+        const [t,c,k] = await Promise.all([api.get('/deploy/targets'), api.get('/deploy/config'), api.get('/setup/ssh-keys')])
+        targets.value = t.targets||[]; hasConfig.value = c.exists; sshKeys.value = k.keys||[]
+        if (!initForm.value.ssh_key && sshKeys.value.length) initForm.value.ssh_key = '~/.ssh/' + sshKeys.value[0]
       } catch { notify(t('loadFailed'),'err') }
       finally { busy.value = false }
     }
@@ -2441,7 +2443,7 @@ const Deploy = {
       finally { initBusy.value = false }
     }
     onActivated(load)
-    return { targets, busy, depBusy, valBusy, validation, output, hasConfig, initForm, initBusy, load, deployTarget, validate, initDeploy, I }
+    return { targets, busy, depBusy, valBusy, validation, output, hasConfig, initForm, initBusy, sshKeys, load, deployTarget, validate, initDeploy, I }
   },
   template: `
   <div class="page fade-in">
@@ -2498,8 +2500,14 @@ const Deploy = {
             <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('deploymentLabel') }}</label>
               <select v-model="initForm.deployment_type" class="input"><option value="docker">docker</option><option value="native">native</option></select></div>
           </div>
-          <div><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('sshKeyPathLabel') }}</label>
-            <input v-model="initForm.ssh_key" class="input" :placeholder="$t('sshKeyPathPlaceholder')" /></div>
+          <div v-if="sshKeys.length"><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('sshKeyFromDir') }}</label>
+            <select v-model="initForm.ssh_key" class="input">
+              <option v-for="k in sshKeys" :key="k" :value="'~/.ssh/' + k">{{ k }}</option>
+              <option v-if="initForm.ssh_key && !sshKeys.some(k => '~/.ssh/' + k === initForm.ssh_key)" :value="initForm.ssh_key">{{ initForm.ssh_key }}</option>
+            </select></div>
+          <div v-else><label style="font-size:12px;color:var(--mu);display:block;margin-bottom:4px;">{{ $t('sshKeyPathLabel') }}</label>
+            <input v-model="initForm.ssh_key" class="input" :placeholder="$t('sshKeyPathPlaceholder')" />
+            <div style="font-size:11px;color:var(--mu);margin-top:5px;" v-html="$t('noSshKeysFoundHint')"></div></div>
         </div>
         <div style="margin-top:14px;border-top:1px solid var(--ln);padding-top:12px;">
           <button @click="initDeploy" class="btn btn-primary" :disabled="initBusy">
