@@ -22,10 +22,41 @@ def resolve_key_path(value: str) -> str:
     return str(Path.home() / ".ssh" / expanded)
 
 
+# What OpenSSH keeps in ~/.ssh/ that is not a key. Matched on the name up to
+# the first dot, case-insensitively, so known_hosts.old and config.bak.20261118
+# go with it and `Config` on a case-insensitive filesystem does too (#318).
+# Offering these in a key picker produces a configuration that fails at deploy
+# time, which is exactly what #314 was about.
+_RESERVED_NAMES = frozenset(
+    {
+        "config",
+        "known_hosts",
+        "known_hosts2",
+        "authorized_keys",
+        # The documented default of AuthorizedKeysFile is the pair
+        # `.ssh/authorized_keys .ssh/authorized_keys2`.
+        "authorized_keys2",
+        # gpg.ssh.allowedSignersFile, increasingly common with SSH commit signing.
+        "allowed_signers",
+        "environment",
+        "rc",
+    }
+)
+# .pub is a public key; .ppk is PuTTY's own format, which `ssh -i` does not read.
+_NOT_KEY_SUFFIXES = (".pub", ".ppk")
+
+
 def list_private_keys(ssh_dir: Path = Path.home() / ".ssh"):
     if not ssh_dir.exists():
         return []
-    return [p.name for p in ssh_dir.iterdir() if p.is_file() and not p.name.endswith(".pub")]
+    keys = []
+    for p in ssh_dir.iterdir():
+        # An empty stem is a dotfile (.DS_Store, .bash_history): a private key
+        # whose name starts with a dot does not happen in practice.
+        stem = p.name.split(".", 1)[0].lower()
+        if p.is_file() and stem and stem not in _RESERVED_NAMES and not p.name.endswith(_NOT_KEY_SUFFIXES):
+            keys.append(p.name)
+    return keys
 
 
 def copy_key_to_build_context(key_name: str, dockerfile_dir: Path):
