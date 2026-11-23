@@ -17,7 +17,7 @@ def _deploy_yaml_path() -> Path:
 
 
 @router.get("/config")
-async def get_deploy_config():
+def get_deploy_config():
     """Read and return deploy.yaml content."""
     import yaml
 
@@ -31,7 +31,7 @@ async def get_deploy_config():
 
 
 @router.get("/targets")
-async def get_targets():
+def get_targets():
     """Return list of configured deploy targets."""
     import yaml
 
@@ -67,7 +67,7 @@ class DeployInitRequest(BaseModel):
 
 
 @router.post("/init")
-async def deploy_init(body: DeployInitRequest):
+def deploy_init(body: DeployInitRequest):
     """Create or overwrite .rkd/deploy.yaml with the provided target config."""
     import yaml
 
@@ -130,7 +130,7 @@ class DeployRunRequest(BaseModel):
 
 
 @router.post("/run")
-async def deploy_run(body: DeployRunRequest):
+def deploy_run(body: DeployRunRequest):
     """Execute a module deployment to the given target."""
     try:
         from rocketdoo.core.deploy.config_manager import DeployConfigManager
@@ -171,7 +171,7 @@ async def deploy_run(body: DeployRunRequest):
 
 
 @router.post("/validate")
-async def deploy_validate():
+def deploy_validate():
     """Validate all Odoo modules (manifest + Python syntax)."""
     try:
         from rocketdoo.core.module_scanner import ModuleScanner

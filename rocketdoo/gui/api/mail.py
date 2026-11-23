@@ -23,12 +23,12 @@ def _reported(report: dict) -> dict:
 
 
 @router.get("/status")
-async def mail_status():
+def mail_status():
     return status()
 
 
 @router.post("/on")
-async def mail_on():
+def mail_on():
     try:
         report = enable(Path.cwd())
     except Exception as e:
@@ -37,7 +37,7 @@ async def mail_on():
 
 
 @router.post("/off")
-async def mail_off():
+def mail_off():
     try:
         report = disable(Path.cwd())
     except Exception as e:

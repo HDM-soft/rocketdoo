@@ -1311,3 +1311,59 @@ class TestInstanceSeedDatabase:
         monkeypatch.setattr(deployer_docker, "DockerInstanceDeployer", Seeding)
         client.post("/api/instances/init", json={"environments": {"stage": self._env(seed_database="dev")}})
         assert client.post("/api/instances/deploy", json={"env": "stage"}).json()["checks"] == [warning]
+
+
+class TestNoHandlerBlocksTheEventLoop:
+    """FastAPI runs a `def` handler in the threadpool and an `async def` one on
+    the event loop. A handler declared `async def` that does blocking work —
+    subprocess, SSH, a filesystem walk — freezes the loop for its whole
+    duration: no other request advances, **including the log WebSockets** the
+    GUI depends on (#287).
+
+    Every handler under gui/api/ does blocking work and none of them awaits
+    anything, so the rule is simple: there are no `async def` handlers there.
+    `server.py` is excluded — its WebSocket handlers await for real.
+    """
+
+    @staticmethod
+    def _async_defs(path: Path) -> list[str]:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        return [
+            f"{path.name}:{node.lineno} {node.name}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.AsyncFunctionDef)
+            and not any(isinstance(n, (ast.Await, ast.AsyncFor, ast.AsyncWith)) for n in ast.walk(node))
+        ]
+
+    def test_no_async_handler_without_await(self):
+        # rglob, so a gui/api/<subpackage>/ added later is covered too.
+        api = Path(__file__).resolve().parents[1] / "rocketdoo" / "gui" / "api"
+        offenders = sorted(name for f in sorted(api.rglob("*.py")) for name in self._async_defs(f))
+
+        assert offenders == [], (
+            f"declared async def but awaits nothing, so it blocks the event loop while it runs: {offenders}. Drop the `async`."
+        )
+
+    def test_the_websocket_handlers_are_still_async(self):
+        """The guard above must not push someone into making these sync.
+
+        A sync WebSocket handler does not work at all. Dropping only the
+        `async` is already a SyntaxError while the awaits are there, so what
+        this covers is the non-trivial version -- dropping the awaits and the
+        `async` together -- plus the inventory: adding or removing a WebSocket
+        handler has to be deliberate. It names them by decorator rather than
+        asserting that *something* in the file awaits, which the token
+        middleware and a module-level helper satisfy on their own.
+        """
+        server = Path(__file__).resolve().parents[1] / "rocketdoo" / "gui" / "server.py"
+        tree = ast.parse(server.read_text(encoding="utf-8"), filename=str(server))
+        handlers = {
+            node.name: node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+            and any(_called_name(d.func) == "websocket" for d in node.decorator_list if isinstance(d, ast.Call))
+        }
+
+        assert set(handlers) == {"ws_docker_action", "ws_odoo_update", "ws_logs"}
+        sync = sorted(name for name, node in handlers.items() if not isinstance(node, ast.AsyncFunctionDef))
+        assert sync == [], f"a sync WebSocket handler does not work: {sync}"
