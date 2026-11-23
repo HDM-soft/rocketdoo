@@ -17,7 +17,7 @@ def _gitman_path() -> Path:
 
 
 @router.get("")
-async def get_gitman():
+def get_gitman():
     """Read gitman.yaml and return sources list."""
     gp = _gitman_path()
     if not gp.exists():
@@ -64,7 +64,7 @@ class GitmanSave(BaseModel):
 
 
 @router.post("")
-async def save_gitman(body: GitmanSave):
+def save_gitman(body: GitmanSave):
     """Write gitman.yaml with the provided sources."""
     try:
         from rocketdoo.core.gitman_config import generate_gitman_yaml

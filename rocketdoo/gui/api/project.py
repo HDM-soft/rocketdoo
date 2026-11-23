@@ -7,7 +7,7 @@ router = APIRouter()
 
 
 @router.get("")
-async def get_project():
+def get_project():
     """Returns project info and running container statuses."""
     try:
         from rocketdoo.core.project_info import get_project_info, project_exists
@@ -24,7 +24,7 @@ async def get_project():
 
 
 @router.get("/containers")
-async def get_containers():
+def get_containers():
     """Returns docker ps output for the current project."""
     containers, error = compose_ps_result("--all")
     if error:

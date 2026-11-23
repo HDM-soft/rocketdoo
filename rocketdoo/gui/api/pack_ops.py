@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 @router.get("/status")
-async def pack_status():
+def pack_status():
     """Check pack/unpack prerequisites in current directory."""
     cwd = Path.cwd()
     shared_json = cwd / "rkd-shared.json"

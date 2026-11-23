@@ -25,7 +25,7 @@ def _load_instances() -> InstanceConfig:
 
 
 @router.get("")
-async def list_instances():
+def list_instances():
     config = _load_instances()
     return {
         "instances": [
@@ -86,7 +86,7 @@ class InstanceInitRequest(BaseModel):
 
 
 @router.post("/init")
-async def init_instances(body: InstanceInitRequest):
+def init_instances(body: InstanceInitRequest):
     """Save instance configuration (.rkd/instance.yaml) from GUI form data."""
     try:
         from rocketdoo.core.instance.config_manager import InstanceConfigManager, merge_environments

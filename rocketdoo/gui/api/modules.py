@@ -7,7 +7,7 @@ router = APIRouter()
 
 
 @router.get("")
-async def list_modules(path: str = "addons", include_all: bool = False):
+def list_modules(path: str = "addons", include_all: bool = False):
     """Scan and return Odoo modules in the addons directory."""
     try:
         from rocketdoo.core.module_scanner import ModuleScanner

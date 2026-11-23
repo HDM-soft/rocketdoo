@@ -1311,3 +1311,48 @@ class TestInstanceSeedDatabase:
         monkeypatch.setattr(deployer_docker, "DockerInstanceDeployer", Seeding)
         client.post("/api/instances/init", json={"environments": {"stage": self._env(seed_database="dev")}})
         assert client.post("/api/instances/deploy", json={"env": "stage"}).json()["checks"] == [warning]
+
+
+class TestNoHandlerBlocksTheEventLoop:
+    """FastAPI runs a `def` handler in the threadpool and an `async def` one on
+    the event loop. A handler declared `async def` that does blocking work —
+    subprocess, SSH, a filesystem walk — freezes the loop for its whole
+    duration: no other request advances, **including the log WebSockets** the
+    GUI depends on (#287).
+
+    Every handler under gui/api/ does blocking work and none of them awaits
+    anything, so the rule is simple: there are no `async def` handlers there.
+    `server.py` is excluded — its WebSocket handlers await for real.
+    """
+
+    @staticmethod
+    def _async_defs(path: Path) -> list[str]:
+        tree = ast.parse(path.read_text())
+        return [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.AsyncFunctionDef)
+            and not any(isinstance(n, (ast.Await, ast.AsyncFor, ast.AsyncWith)) for n in ast.walk(node))
+        ]
+
+    def test_no_async_handler_without_await(self):
+        api = Path(__file__).resolve().parents[1] / "rocketdoo" / "gui" / "api"
+        offenders = {f.name: names for f in sorted(api.glob("*.py")) if (names := self._async_defs(f))}
+
+        assert offenders == {}, (
+            f"declared async def but awaits nothing, so it blocks the event loop while it runs: {offenders}. Drop the `async`."
+        )
+
+    def test_the_websocket_handlers_are_still_async(self):
+        # The guard above must not push someone into making these sync: they
+        # await for real, and a sync WebSocket handler would not work at all.
+        server = Path(__file__).resolve().parents[1] / "rocketdoo" / "gui" / "server.py"
+        tree = ast.parse(server.read_text())
+        awaiting = [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.AsyncFunctionDef)
+            and any(isinstance(n, (ast.Await, ast.AsyncFor, ast.AsyncWith)) for n in ast.walk(node))
+        ]
+
+        assert awaiting, "server.py should still hold async handlers that await"
