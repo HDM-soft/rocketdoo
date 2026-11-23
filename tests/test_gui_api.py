@@ -1367,3 +1367,123 @@ class TestNoHandlerBlocksTheEventLoop:
         assert set(handlers) == {"ws_docker_action", "ws_odoo_update", "ws_logs"}
         sync = sorted(name for name, node in handlers.items() if not isinstance(node, ast.AsyncFunctionDef))
         assert sync == [], f"a sync WebSocket handler does not work: {sync}"
+
+
+class TestTheDeployRunEndpoint:
+    """`POST /api/deploy/run` never worked and nobody noticed (#322).
+
+    It called `config_manager.load_config()`, a method that does not exist, and
+    the module's broad `except` turned the AttributeError into a 200 with
+    `{"ok": false}` — the same shape #279 found in the instance deploy. Behind
+    that first failure sat two more: `ModuleScanner(base_path=...)` (the
+    parameter is `addons_path`) and passing module *names* where
+    `prepare_modules()` takes dicts.
+
+    And it called `deploy_modules()` direct, skipping what `execute()` does
+    before it: validate the config and the modules, take the backup, check
+    connectivity, and roll back on failure.
+    """
+
+    TARGET = {
+        "type": "vps",
+        "enabled": True,
+        "connection": {"host": "1.2.3.4", "port": 22, "user": "root", "ssh_key": "~/.ssh/nope"},
+        "deployment_type": "docker",
+        "docker": {"container_name": "odoo", "compose_path": "/opt/odoo", "addons_mount": "/mnt/extra-addons"},
+    }
+
+    @pytest.fixture
+    def project(self, tmp_path, monkeypatch):
+        import yaml
+
+        (tmp_path / "Dockerfile").write_text("FROM odoo:18.0\n")
+        (tmp_path / "docker-compose.yaml").write_text("services: {}\n")
+        (tmp_path / ".rkd").mkdir()
+        (tmp_path / ".rkd" / "deploy.yaml").write_text(
+            yaml.safe_dump({"modules": {"base_path": "addons"}, "targets": {"prod": self.TARGET}})
+        )
+        mod = tmp_path / "addons" / "mi_modulo"
+        mod.mkdir(parents=True)
+        (mod / "__init__.py").write_text("")
+        (mod / "__manifest__.py").write_text(
+            "{'name': 'Mi Modulo', 'version': '1.0', 'installable': True, 'depends': ['base']}"
+        )
+        monkeypatch.chdir(tmp_path)
+        return tmp_path
+
+    @staticmethod
+    def _run(**body):
+        from rocketdoo.gui.api.deploy_ops import DeployRunRequest, deploy_run
+
+        return deploy_run(DeployRunRequest(target=body.pop("target", "prod"), **body))
+
+    def test_it_runs_at_all(self, project):
+        # The regression that matters: any answer other than the AttributeError
+        # the endpoint used to hand back for every single call.
+        answer = self._run(dry_run=True)
+
+        assert "has no attribute" not in str(answer.get("error", ""))
+        assert answer["ok"] is True
+        assert answer["dry_run"] is True
+
+    def test_it_goes_through_execute(self, project, monkeypatch):
+        from rocketdoo.core.deploy import vps
+
+        calls = {}
+
+        def _execute(self, modules):
+            calls["modules"] = modules
+            return _Result()
+
+        monkeypatch.setattr(vps.VPSDeployer, "execute", _execute)
+        monkeypatch.setattr(
+            vps.VPSDeployer,
+            "deploy_modules",
+            lambda self, modules: pytest.fail("deploy_modules called directly: execute() is the entry point"),
+        )
+
+        answer = self._run(dry_run=False)
+
+        assert answer["ok"] is True
+        # dicts, not names: prepare_modules() reads the path out of each one.
+        assert [m["name"] for m in calls["modules"]] == ["mi_modulo"]
+        assert all(isinstance(m, dict) for m in calls["modules"])
+
+    def test_a_bad_configuration_is_rejected_like_the_cli_does(self, project):
+        # The ssh_key does not exist, so execute() stops at validate_config()
+        # with the same message `rkd deploy run` gives.
+        answer = self._run(dry_run=False)
+
+        assert answer["ok"] is False
+        assert answer["message"] == "Invalid configuration"
+
+    def test_an_unknown_module_is_named(self, project):
+        answer = self._run(dry_run=False, modules=["no_existe"])
+
+        assert answer["ok"] is False
+        assert "no_existe" in answer["error"]
+
+    def test_a_dry_run_never_builds_the_deployer(self, project, monkeypatch):
+        """VPSDeployer's constructor calls getpass() with password auth and no
+        exported variable, which from the GUI prompts on the *server's*
+        terminal and persists what is typed. A simulation must not do that."""
+        from rocketdoo.core.deploy import vps
+
+        monkeypatch.setattr(
+            vps.VPSDeployer,
+            "__init__",
+            lambda *a, **k: pytest.fail("a dry run must not construct the deployer"),
+        )
+
+        assert self._run(dry_run=True)["ok"] is True
+
+    def test_an_unknown_target_is_named(self, project):
+        answer = self._run(target="nope", dry_run=True)
+
+        assert answer["ok"] is False
+        assert "nope" in answer["error"]
+
+
+class _Result:
+    success = True
+    message = "ok"

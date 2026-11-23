@@ -131,41 +131,72 @@ class DeployRunRequest(BaseModel):
 
 @router.post("/run")
 def deploy_run(body: DeployRunRequest):
-    """Execute a module deployment to the given target."""
+    """Execute a module deployment to the given target.
+
+    Goes through BaseDeployer.execute(), the same entry point the CLI uses, and
+    not straight to deploy_modules(): execute() validates the configuration and
+    the modules, takes the backup, runs the pre-deploy connectivity check and
+    rolls back on failure. Calling deploy_modules() direct meant a deploy.yaml
+    without a credential deployed from here and was rejected by the CLI, and a
+    deploy from the GUI took no backup however `backup.enabled` read (#322).
+    """
     try:
         from rocketdoo.core.deploy.config_manager import DeployConfigManager
         from rocketdoo.core.module_scanner import ModuleScanner
 
+        # One read, like every other handler: a navigate() in another thread
+        # must not land between the config and the scan (#287).
         project_path = Path.cwd()
         config_manager = DeployConfigManager(project_path)
 
         if not config_manager.config_exists():
             return {"ok": False, "error": "deploy.yaml not found. Run deploy init first."}
 
-        config = config_manager.load_config()
+        config = config_manager.load()
         target_config = config.get("targets", {}).get(body.target)
         if not target_config:
             return {"ok": False, "error": f"Target '{body.target}' not found in deploy.yaml."}
 
         target_type = target_config.get("type", "vps")
-        if target_type == "vps":
-            from rocketdoo.core.deploy.vps import VPSDeployer
-
-            deployer = VPSDeployer(body.target, target_config, project_path)
-        else:
+        if target_type != "vps":
             return {"ok": False, "error": f"Target type '{target_type}' not yet supported via GUI."}
 
+        # Before building the deployer, and not after: VPSDeployer's constructor
+        # calls getpass() when auth_method is password and the variable is not
+        # exported, which from here prompts on the *server's* terminal and
+        # persists what is typed. A simulation must not do that.
         if body.dry_run:
-            return {"ok": True, "dry_run": True, "message": "Dry run: configuration looks valid."}
+            errors = config_manager.validate(config)
+            return {
+                "ok": not errors,
+                "dry_run": True,
+                "errors": errors,
+                "message": "Configuration is valid." if not errors else "Configuration has errors.",
+            }
 
+        from rocketdoo.core.deploy.vps import VPSDeployer
+
+        scanner = ModuleScanner(project_path / config.get("modules", {}).get("base_path", "addons"))
+        installable = scanner.get_installable_modules()
         if body.modules:
-            modules = body.modules
+            selected = [m for m in installable if m.name in body.modules]
+            missing = sorted(set(body.modules) - {m.name for m in selected})
+            if missing:
+                return {"ok": False, "error": f"Modules not found: {', '.join(missing)}"}
         else:
-            scanner = ModuleScanner(base_path=project_path / "addons")
-            modules = [m.name for m in scanner.scan() if m.is_installable]
+            selected = installable
+        if not selected:
+            return {"ok": False, "error": "No installable modules found to deploy."}
 
-        result = deployer.deploy_modules(modules)
-        return {"ok": getattr(result, "success", True), "result": str(result)}
+        # to_dict(), not the names: prepare_modules() takes dicts and reads the
+        # path out of each one.
+        deployer = VPSDeployer(body.target, target_config, project_path)
+        result = deployer.execute([m.to_dict() for m in selected])
+        return {
+            "ok": bool(getattr(result, "success", False)),
+            "message": getattr(result, "message", ""),
+            "modules": [m.name for m in selected],
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
