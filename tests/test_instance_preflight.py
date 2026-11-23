@@ -4,6 +4,7 @@ dry-run that neither claims success nor writes."""
 import subprocess
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from rocketdoo import instance_cli
@@ -822,3 +823,87 @@ class TestSeeding:
 
         assert facts["seed_exists"] and facts["seed_bytes"] == 150 and facts["local_pg_major"] == 16
         assert "seed_exists" not in preflight.local_facts(tmp_path, _cfg())
+
+
+class TestNativeHostClash:
+    """Two native environments on one host destroy each other (#319).
+
+    The native path shares every path between environments, so the second
+    deploy rewrites the first one's conf, repoints the single systemd unit and
+    rsyncs --delete over its addons — reporting success while doing it. Docker
+    isolates each environment under /opt/odoo-{env}, so it never applies there.
+    """
+
+    @staticmethod
+    def _write(tmp_path, environments):
+        (tmp_path / ".rkd").mkdir(exist_ok=True)
+        (tmp_path / ".rkd" / "instance.yaml").write_text(yaml.safe_dump({"environments": environments}))
+
+    @staticmethod
+    def _env(kind="native", host="vps.example.com"):
+        return {"type": kind, "vps": {"host": host, "user": "u", "port": 22, "auth_method": "ssh_key"}}
+
+    def _check(self, tmp_path, cfg, env="prod"):
+        facts = preflight.local_facts(tmp_path, cfg, env=env)
+        found = [c for c in preflight.evaluate(cfg, facts, env=env) if c["name"] == "native host"]
+        return found[0] if found else None
+
+    def test_same_host_blocks(self, tmp_path):
+        self._write(tmp_path, {"stage": self._env(), "prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        check = self._check(tmp_path, cfg)
+
+        assert check["level"] == "block"
+        assert check["ok"] is False
+        assert "stage" in check["detail"]
+
+    def test_different_hosts_pass(self, tmp_path):
+        self._write(tmp_path, {"stage": self._env(host="stage.example.com"), "prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is True
+
+    def test_a_docker_sibling_on_the_same_host_is_fine(self, tmp_path):
+        # Docker keeps its environment under /opt/odoo-{env}: nothing is shared.
+        self._write(tmp_path, {"stage": self._env(kind="docker"), "prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is True
+
+    def test_docker_deploys_get_no_such_check(self, tmp_path):
+        self._write(tmp_path, {"stage": self._env(), "prod": self._env(kind="docker")})
+        cfg = _cfg(type="docker", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg) is None
+
+    def test_host_comparison_ignores_case_and_padding(self, tmp_path):
+        self._write(tmp_path, {"stage": self._env(host="  VPS.Example.COM "), "prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is False
+
+    def test_lone_environment_passes(self, tmp_path):
+        self._write(tmp_path, {"prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is True
+
+    def test_missing_or_unreadable_file_stays_quiet(self, tmp_path):
+        # The deploy could not have loaded it either, and it already failed on
+        # that: this check does not turn an unrelated problem into its own.
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+        assert self._check(tmp_path, cfg)["ok"] is True
+
+        (tmp_path / ".rkd").mkdir(exist_ok=True)
+        (tmp_path / ".rkd" / "instance.yaml").write_text("environments: [not, a, mapping")
+        assert self._check(tmp_path, cfg)["ok"] is True
+
+    def test_it_blocks_the_deploy(self, tmp_path):
+        self._write(tmp_path, {"stage": self._env(), "prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        facts = preflight.local_facts(tmp_path, cfg, env="prod")
+        blocking = preflight.blocking(preflight.evaluate(cfg, facts, env="prod"))
+
+        assert "native host" in [c["name"] for c in blocking]

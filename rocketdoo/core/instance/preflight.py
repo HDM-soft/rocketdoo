@@ -11,12 +11,15 @@ import shlex
 import subprocess
 from pathlib import Path
 
+import yaml
+
 from rocketdoo.core.gitman_config import gitman_has_scripts, gitman_repos
 from rocketdoo.core.odoo_db import database_bytes, databases_result, filestore_bytes, pg_major_version
 from rocketdoo.core.project_info import read_docker_compose
 from rocketdoo.core.ssh_manager import resolve_key_path
 
 from .config_manager import (
+    CONFIG_FILE,
     CRON_THREADS,
     DEBIAN_PG_SHARED_BUFFERS,
     DEFAULT_GITMAN_FILE,
@@ -54,7 +57,7 @@ def gitman_file(cfg: dict) -> str:
     return cfg.get("gitman_config") or DEFAULT_GITMAN_FILE
 
 
-def local_facts(project_root: Path, cfg: dict) -> dict:
+def local_facts(project_root: Path, cfg: dict, *, env: str = "") -> dict:
     root = Path(project_root)
     vps = cfg.get("vps", {})
     use_gitman = bool(cfg.get("use_gitman"))
@@ -70,10 +73,45 @@ def local_facts(project_root: Path, cfg: dict) -> dict:
         "build_needs_ssh": build_needs_ssh(root, cfg),
         "key_file": None if key is None else os.path.exists(resolve_key_path(key)),
         "invalid_identifiers": invalid_identifiers(cfg.get("db_user", ""), cfg.get("db_name", "")),
+        "native_host_clash": _sibling_native_hosts(root, env, cfg),
     }
     if cfg.get("seed_database"):
         facts.update(_seed_facts(root, cfg["seed_database"]))
     return facts
+
+
+def _sibling_native_hosts(root: Path, env: str, cfg: dict) -> list[str]:
+    """Other native environments of this project that deploy to the same host.
+
+    The native path has no per-environment paths: `/opt/odoo/extra-addons` (the
+    default `remote_path`, with no environment in it, unlike Docker's
+    `/opt/odoo-{env}`), `/etc/odoo/odoo.conf`, the single `odoo` unit,
+    `/opt/odoo/enterprise`, `/opt/odoo/gitman` and port 8069 are shared. A
+    second native deploy to the same host rewrites the first one's conf, points
+    its service at another database and rsyncs `--delete` over its addons, and
+    reports success doing it (#319).
+    """
+    if cfg.get("type") != "native":
+        return []
+    host = str(cfg.get("vps", {}).get("host", "")).strip().lower()
+    if not host:
+        return []
+    try:
+        raw = yaml.safe_load((root / CONFIG_FILE).read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        # Unreadable here means the deploy could not have loaded it either; the
+        # caller already failed on that, so this check stays silent.
+        return []
+    others = raw.get("environments")
+    if not isinstance(others, dict):
+        return []
+    clashing = []
+    for name, other in others.items():
+        if name == env or not isinstance(other, dict) or other.get("type") != "native":
+            continue
+        if str(other.get("vps", {}).get("host", "")).strip().lower() == host:
+            clashing.append(str(name))
+    return sorted(clashing)
 
 
 def _seed_facts(root: Path, database: str) -> dict:
@@ -525,6 +563,23 @@ def _local_checks(cfg: dict, local: dict) -> list[Check]:
             "Up to 63 letters, digits and underscores, not starting with a digit.",
         )
     ]
+    clash = local.get("native_host_clash", [])
+    if cfg.get("type") == "native":
+        checks.append(
+            _check(
+                "native host",
+                "block",
+                not clash,
+                "no other native environment targets this host"
+                if not clash
+                else f"{', '.join(clash)} already deploys natively to this host",
+                "A native deploy owns /etc/odoo/odoo.conf, the odoo systemd unit, /opt/odoo/extra-addons "
+                "(rsynced with --delete), /opt/odoo/enterprise, /opt/odoo/gitman and port 8069 — none of them "
+                "per environment. Deploying this one would overwrite the other's configuration, point its "
+                "service at another database and delete its addons. Use a separate host, or type docker, "
+                "which isolates each environment under /opt/odoo-{env}.",
+            )
+        )
     if local.get("key_file") is not None:
         checks.append(
             _check(
@@ -604,7 +659,7 @@ def blocking(checks: list[Check]) -> list[Check]:
 
 def run(project_root: Path, auth: dict, cfg: dict, *, env: str) -> list[Check]:
     """Local checks first: a failure already known does not wait for a 90 s SSH session."""
-    local = local_facts(project_root, cfg)
+    local = local_facts(project_root, cfg, env=env)
     checks = evaluate(cfg, local, env=env)
     if blocking(checks):
         return checks
