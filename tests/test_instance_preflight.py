@@ -37,6 +37,7 @@ def _local(**overrides) -> dict:
         "build_needs_ssh": False,
         "key_file": True,
         "invalid_identifiers": [],
+        "native_host_clash": [],
     }
     local.update(overrides)
     return local
@@ -159,9 +160,9 @@ class TestTheSshAgentSocket:
 
     def test_the_fact_reads_the_environment(self, tmp_path, monkeypatch):
         monkeypatch.setenv("SSH_AUTH_SOCK", "/tmp/agent.sock")
-        assert preflight.local_facts(tmp_path, _cfg())["ssh_auth_sock"] is True
+        assert preflight.local_facts(tmp_path, _cfg(), env="prod")["ssh_auth_sock"] is True
         monkeypatch.delenv("SSH_AUTH_SOCK")
-        assert preflight.local_facts(tmp_path, _cfg())["ssh_auth_sock"] is False
+        assert preflight.local_facts(tmp_path, _cfg(), env="prod")["ssh_auth_sock"] is False
 
 
 class TestWhetherTheBuildForwardsAnAgent:
@@ -294,7 +295,7 @@ class TestLocalFacts:
     def test_what_the_project_holds(self, tmp_path, monkeypatch):
         monkeypatch.setattr(preflight, "_agent_has_keys", lambda: False)
 
-        facts = preflight.local_facts(tmp_path, _cfg(db_user="bad-name"))
+        facts = preflight.local_facts(tmp_path, _cfg(db_user="bad-name"), env="prod")
 
         assert facts["enterprise_dir"] is False
         assert facts["agent_has_keys"] is False
@@ -539,7 +540,7 @@ class TestTheConfiguredKey:
 
         vps = {"host": "h", "user": "u", "port": 22, "auth_method": "ssh_key", "ssh_key": "hdmsoft"}
 
-        facts = preflight.local_facts(tmp_path, _cfg(vps=vps))
+        facts = preflight.local_facts(tmp_path, _cfg(vps=vps), env="prod")
 
         assert facts["key_file"] is True
 
@@ -663,9 +664,9 @@ class TestGitman:
     def test_local_facts_read_the_gitman_file_for_both_types(self, tmp_path):
         (tmp_path / "gitman.yaml").write_text("sources:\n  - repo: https://h/a.git\n    scripts: [x]\n")
         for kind in ("docker", "native"):
-            facts = preflight.local_facts(tmp_path, _cfg(type=kind, **self.CFG))
+            facts = preflight.local_facts(tmp_path, _cfg(type=kind, **self.CFG), env="prod")
             assert facts["gitman_urls"] == ["https://h/a.git"] and facts["gitman_scripts"] is True
-        off = preflight.local_facts(tmp_path, _cfg(type="native", use_gitman=False))
+        off = preflight.local_facts(tmp_path, _cfg(type="native", use_gitman=False), env="prod")
         assert off["gitman_urls"] == [] and off["gitman_scripts"] is False
 
     def test_the_urls_come_from_the_file_and_are_probed(self, tmp_path, monkeypatch):
@@ -819,10 +820,10 @@ class TestSeeding:
         monkeypatch.setattr(preflight, "filestore_bytes", lambda container, db: 50)
         monkeypatch.setattr(preflight, "pg_major_version", lambda compose: 16)
 
-        facts = preflight.local_facts(tmp_path, _cfg(**self.SEEDED))
+        facts = preflight.local_facts(tmp_path, _cfg(**self.SEEDED), env="prod")
 
         assert facts["seed_exists"] and facts["seed_bytes"] == 150 and facts["local_pg_major"] == 16
-        assert "seed_exists" not in preflight.local_facts(tmp_path, _cfg())
+        assert "seed_exists" not in preflight.local_facts(tmp_path, _cfg(), env="prod")
 
 
 class TestNativeHostClash:
@@ -898,6 +899,68 @@ class TestNativeHostClash:
         (tmp_path / ".rkd").mkdir(exist_ok=True)
         (tmp_path / ".rkd" / "instance.yaml").write_text("environments: [not, a, mapping")
         assert self._check(tmp_path, cfg)["ok"] is True
+
+    def test_a_sibling_with_an_empty_vps_block_does_not_crash(self, tmp_path):
+        """`vps:` with no value is a file the deploy loads fine (#319 review).
+
+        A raw safe_load turns it into None and the next .get() raises, which
+        blocked a perfectly deployable prod with an AttributeError — the false
+        positive this check exists to avoid. Reading through the loader gives
+        the model's default instead, with an empty host.
+        """
+        (tmp_path / ".rkd").mkdir(exist_ok=True)
+        (tmp_path / ".rkd" / "instance.yaml").write_text(
+            "environments:\n  stage:\n    type: native\n    vps:\n  prod:\n    type: native\n"
+            "    vps:\n      host: vps.example.com\n      user: u\n"
+        )
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        check = self._check(tmp_path, cfg)
+
+        assert check["ok"] is True
+
+    def test_the_bare_environment_map_is_read_too(self, tmp_path):
+        # No `environments:` wrapper. The model accepts it, so the check has to
+        # see it: otherwise the deploy keeps destroying the sibling in silence.
+        (tmp_path / ".rkd").mkdir(exist_ok=True)
+        (tmp_path / ".rkd" / "instance.yaml").write_text(yaml.safe_dump({"stage": self._env(), "prod": self._env()}))
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is False
+
+    def test_the_flat_connection_fields_are_read_too(self, tmp_path):
+        # The shape the GUI used to write: host/user/port loose, with no `vps:`.
+        flat = {"type": "native", "host": "vps.example.com", "user": "u", "port": 22}
+        self._write(tmp_path, {"stage": flat, "prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is False
+
+    def test_the_same_host_on_another_ssh_port_is_another_server(self, tmp_path):
+        # A port-forward to two machines behind one IP is ordinary with NAT, and
+        # a false positive here blocks a deploy that works.
+        other = self._env()
+        other["vps"]["port"] = 2222
+        self._write(tmp_path, {"stage": other, "prod": self._env()})
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is True
+
+    def test_an_environments_key_of_the_wrong_shape_stays_quiet(self, tmp_path):
+        # Valid YAML, wrong shape: the loader rejects it and so the deploy did too.
+        (tmp_path / ".rkd").mkdir(exist_ok=True)
+        (tmp_path / ".rkd" / "instance.yaml").write_text("environments:\n  - a\n  - b\n")
+        cfg = _cfg(type="native", vps=self._env()["vps"])
+
+        assert self._check(tmp_path, cfg)["ok"] is True
+
+    def test_the_host_of_the_environment_being_deployed_is_normalised_too(self, tmp_path):
+        # Both sides go through strip().lower(), not just the sibling's.
+        self._write(tmp_path, {"stage": self._env(), "prod": self._env()})
+        vps = {**self._env()["vps"], "host": "  VPS.Example.COM "}
+        cfg = _cfg(type="native", vps=vps)
+
+        assert self._check(tmp_path, cfg)["ok"] is False
 
     def test_it_blocks_the_deploy(self, tmp_path):
         self._write(tmp_path, {"stage": self._env(), "prod": self._env()})
