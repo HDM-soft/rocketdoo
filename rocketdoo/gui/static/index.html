@@ -2419,7 +2419,12 @@ const Deploy = {
       const k = target+dry_run; depBusy.value[k] = true; output.value = ''
       try {
         const r = await api.post('/deploy/run', { target, dry_run, modules:[], skip_backup:false, skip_validation:false })
-        output.value = r.ok ? '✓ '+(dry_run?t('dryRunPrefixOutput'):'')+t('deployDoneOutput')+(r.result||r.message||'') : '✗ '+r.error
+        // The verdict says which step failed, never why. The deployer's own
+        // chronology is the diagnosis, and it used to end up only in the
+        // server's stdout, which is not the user's to read.
+        const detail = (r.logs||[]).map(l => l.message||l).join('\n')
+        output.value = (r.ok ? '✓ '+(dry_run?t('dryRunPrefixOutput'):'')+t('deployDoneOutput')+(r.message||'')
+                             : '✗ '+(r.error||t('failed'))) + (detail ? '\n\n'+detail : '')
         r.ok ? notify(dry_run ? t('dryRunTargetDone', { target: target }) : t('deployTargetDone', { target: target })) : notify(r.error||t('failed'),'err')
       } catch(e) { notify(e.message,'err'); output.value = '✗ '+e.message }
       finally { delete depBusy.value[k] }

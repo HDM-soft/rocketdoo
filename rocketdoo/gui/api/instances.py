@@ -25,7 +25,7 @@ def _load_instances() -> InstanceConfig:
 
 
 @router.get("")
-async def list_instances():
+def list_instances():
     config = _load_instances()
     return {
         "instances": [
@@ -86,7 +86,7 @@ class InstanceInitRequest(BaseModel):
 
 
 @router.post("/init")
-async def init_instances(body: InstanceInitRequest):
+def init_instances(body: InstanceInitRequest):
     """Save instance configuration (.rkd/instance.yaml) from GUI form data."""
     try:
         from rocketdoo.core.instance.config_manager import InstanceConfigManager, merge_environments
@@ -132,15 +132,20 @@ def set_seed_database(body: SeedRequest):
     """Change only the local database an environment is seeded from."""
     from rocketdoo.core.instance.config_manager import InstanceConfigManager
     from rocketdoo.core.odoo_db import list_databases
+    from rocketdoo.core.project_info import read_docker_compose
 
     try:
-        manager = InstanceConfigManager(Path.cwd())
+        # One read: list_databases() reads the cwd too, and a navigate() between
+        # the two validated the database against one project and saved it in
+        # another's instance.yaml (#287).
+        root = Path.cwd()
+        manager = InstanceConfigManager(root)
         if not manager.exists():
             return {"ok": False, "error": "No instance.yaml found. Run rkd instance init first."}
         config = manager.load()
         if body.env not in config["environments"]:
             return {"ok": False, "error": f"Environment '{body.env}' is not configured in instance.yaml."}
-        if body.seed_database and body.seed_database not in list_databases():
+        if body.seed_database and body.seed_database not in list_databases(read_docker_compose(root)):
             return {"ok": False, "error": f"Unknown local database '{body.seed_database}'."}
         config["environments"][body.env]["seed_database"] = body.seed_database
         manager.save(config)

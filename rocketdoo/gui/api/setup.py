@@ -35,7 +35,7 @@ def _render(template_dir: Path, template_name: str, output_path: Path, **ctx):
 
 
 @router.get("/ssh-keys")
-async def get_ssh_keys():
+def get_ssh_keys():
     """List SSH private keys available in ~/.ssh/"""
     try:
         from rocketdoo.core.ssh_manager import list_private_keys
@@ -46,7 +46,7 @@ async def get_ssh_keys():
 
 
 @router.get("/port/check")
-async def check_port(port: int):
+def check_port(port: int):
     """Check if a port is available on the local machine."""
     try:
         from rocketdoo.core.port_validation import is_port_in_use
@@ -57,7 +57,7 @@ async def check_port(port: int):
 
 
 @router.get("/port/suggest")
-async def suggest_port(start: int = 8069):
+def suggest_port(start: int = 8069):
     """Return the first free port starting from *start*."""
     try:
         from rocketdoo.core.port_validation import find_available_port
@@ -73,7 +73,7 @@ class ScaffoldRequest(BaseModel):
 
 
 @router.post("/scaffold")
-async def scaffold(body: ScaffoldRequest):
+def scaffold(body: ScaffoldRequest):
     """Run rkd scaffold (copies base templates to cwd)."""
     try:
         from rocketdoo.scaffold import scaffold_project
@@ -107,7 +107,7 @@ class InitRequest(BaseModel):
 
 
 @router.post("/init")
-async def init_project(body: InitRequest):
+def init_project(body: InitRequest):
     """
     Initialize a Rocketdoo project without the interactive questionary wizard.
     Accepts all wizard answers as JSON and calls the same underlying
