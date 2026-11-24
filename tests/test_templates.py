@@ -18,7 +18,7 @@ import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from rocketdoo.core.instance.config_manager import PG_PROFILES
+from rocketdoo.core.instance.config_manager import PG_PROFILES, TIME_LIMITS
 
 from .conftest import TEMPLATES
 
@@ -60,11 +60,10 @@ INSTANCE_CONTEXT = {
     "log_level": "info",
     "limit_memory_hard": 1073741824,
     "limit_memory_soft": 805306368,
-    # The three the template used to hardcode (#332): same values, so the
-    # rendered conf is byte for byte what it was.
-    "limit_time_cpu": 60,
-    "limit_time_real": 120,
-    "limit_request": 8192,
+    # The three the template used to hardcode (#332). Taken from TIME_LIMITS
+    # and not written out again: with literals here, changing the real default
+    # would leave this snapshot green while the deployed conf changed.
+    **TIME_LIMITS,
     "use_enterprise": False,
     "use_gitman": False,
     "gitman_config_file": "gitman.stage.yml",

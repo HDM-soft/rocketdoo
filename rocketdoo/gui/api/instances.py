@@ -100,6 +100,10 @@ def init_instances(body: InstanceInitRequest):
         if not project_exists(Path.cwd()):
             return {"ok": False, "error": f"No Rocketdoo project in {Path.cwd()}. Open a project first."}
 
+        manager = InstanceConfigManager(Path.cwd())
+        existing = manager.load() if manager.exists() else {}
+        known = existing.get("environments", {})
+
         raw = {}
         for env, cfg in body.environments.items():
             values = cfg.model_dump()
@@ -107,11 +111,16 @@ def init_instances(body: InstanceInitRequest):
             # would ship an empty admin_passwd.
             if not values.get("admin_passwd"):
                 values["admin_passwd"] = random_password()
+            # This form has no resources field and the GET does not return one,
+            # so letting it decide would silently wipe a tuned environment --
+            # the very failure #332 closes, reachable with one click on Save.
+            # Carry over what is on disk instead (#310's problem, one field at
+            # a time).
+            if "resources" in known.get(env, {}):
+                values["resources"] = known[env]["resources"]
             raw[env] = values
 
         config = InstanceConfig.model_validate({"environments": raw})
-        manager = InstanceConfigManager(Path.cwd())
-        existing = manager.load() if manager.exists() else {}
         manager.save(merge_environments(existing, config.to_yaml_dict()["environments"]))
         return {
             "ok": True,

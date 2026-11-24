@@ -13,7 +13,7 @@ import questionary
 import yaml
 from questionary import Style
 from rich.console import Console
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm, IntPrompt, Prompt
 
 from rocketdoo.core.models import InstanceConfig
 from rocketdoo.core.models.instance import NATIVE_ADDONS_PATH
@@ -111,17 +111,18 @@ def resources_for(env: str, cfg: dict) -> dict:
     Both deployers and the pre-flight read this, so the conf that gets written
     and the memory the pre-flight adds up can never be two different answers.
     """
+    mem = MEMORY_BY_ENV.get(env, MEMORY_BY_ENV["stage"])
     values = {
         "workers": WORKERS_BY_ENV.get(env, WORKERS_BY_ENV["stage"]),
         "max_cron_threads": CRON_THREADS,
-        **{
-            key: MEMORY_BY_ENV.get(env, MEMORY_BY_ENV["stage"])[key.removeprefix("limit_memory_")]
-            for key in ("limit_memory_soft", "limit_memory_hard")
-        },
+        "limit_memory_soft": mem["soft"],
+        "limit_memory_hard": mem["hard"],
         **TIME_LIMITS,
     }
     configured = cfg.get("resources") or {}
-    values.update({key: value for key, value in configured.items() if value is not None})
+    # Only the seven, so the return value is what the docstring says even if a
+    # caller hands over a dict that never went through the model.
+    values.update({k: v for k, v in configured.items() if k in RESOURCE_KEYS and v is not None})
     return values
 
 
@@ -289,7 +290,11 @@ class InstanceConfigManager:
             f"{defaults['limit_memory_soft'] // 1024 // 1024} MiB soft limit, "
             f"{defaults['limit_time_real']}s request limit.[/dim]"
         )
-        if not Confirm.ask("Tune Odoo's performance settings for this server?", default=bool(current)):
+        # Not bool(current): load() materialises the seven keys as null for
+        # every environment, so that was True for any existing one -- seven
+        # prompts nobody asked for, and the defaults pinned into the file.
+        tuned = any(value is not None for value in current.values())
+        if not Confirm.ask("Tune Odoo's performance settings for this server?", default=tuned):
             # Not {}: an environment that had values and now declines keeps
             # them, the same way every other answered-through question does.
             return dict(current)
@@ -298,18 +303,11 @@ class InstanceConfigManager:
             "[dim]Memory limits are per worker, in bytes. Time limits are seconds; Odoo's own\n"
             "defaults (60/120) cut a large import or a heavy report in half.[/dim]"
         )
-        answers = {}
-        for key in RESOURCE_KEYS:
-            answer = Prompt.ask(f"  {key}", default=str(defaults[key]))
-            try:
-                answers[key] = int(answer)
-            except (TypeError, ValueError):
-                # A cancelled prompt is None and a typo is not a number; either
-                # way the default stands rather than writing a conf Odoo cannot
-                # parse.
-                console.print(f"[yellow]⚠ {key}: not a number, keeping {defaults[key]}[/yellow]")
-                answers[key] = defaults[key]
-        return answers
+        # IntPrompt and not Prompt: it re-asks on a typo instead of accepting it,
+        # and there is no conversion left to get wrong. Neither returns None on
+        # Ctrl-C -- it raises, and instance_cli catches it before anything is
+        # written.
+        return {key: IntPrompt.ask(f"  {key}", default=defaults[key]) for key in RESOURCE_KEYS}
 
     def _wizard_env(self, env: str, dep_type: str, known: dict | None = None) -> dict:
         docker = dep_type == "docker"

@@ -102,6 +102,28 @@ class InstanceResources(BaseModel):
     limit_time_real: int | None = None
     limit_request: int | None = None
 
+    @model_validator(mode="after")
+    def _sane_numbers(self) -> "InstanceResources":
+        """Reject what a person can plausibly type and no deploy survives.
+
+        The pre-flight cannot catch either case: it only reads
+        `limit_memory_soft`, and a negative one makes its sum pass for any
+        amount of RAM. A `limit_memory_hard` below the soft limit kills every
+        worker instead of recycling it.
+        """
+        negative = sorted(name for name, value in self.__dict__.items() if value is not None and value < 0)
+        if negative:
+            raise ValueError(f"must not be negative: {', '.join(negative)}")
+        if (
+            self.limit_memory_hard is not None
+            and self.limit_memory_soft is not None
+            and self.limit_memory_hard < self.limit_memory_soft
+        ):
+            raise ValueError(
+                "limit_memory_hard must not be below limit_memory_soft: Odoo kills the worker instead of recycling it"
+            )
+        return self
+
 
 class InstanceEnvironment(BaseModel):
     """One deployment target — typically `stage` or `prod`."""

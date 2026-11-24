@@ -13,8 +13,11 @@ imports and heavy reports — values rkd replaced with 60/120 on the Docker path
 and left at Odoo's own defaults on the native one.
 """
 
+from pathlib import Path
+
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from rocketdoo.core.instance import preflight
 from rocketdoo.core.instance.config_manager import (
@@ -95,7 +98,7 @@ class TestTheModelRoundTrip:
     def test_a_misspelled_key_is_rejected(self):
         # extra="forbid" inside resources too: a typo must fail loudly rather
         # than silently deploying the default.
-        with pytest.raises(Exception, match="worker_count|extra"):
+        with pytest.raises(ValidationError, match="worker_count"):
             InstanceResources.model_validate({"worker_count": 3})
 
     def test_it_is_written_to_the_yaml(self, tmp_path):
@@ -134,11 +137,12 @@ class TestBothPathsEmitTheSameSeven:
             assert f"{key} = {value}\n" in captured["conf"]
 
     def test_the_docker_conf_carries_them(self):
-        from jinja2 import Environment, FileSystemLoader
+        from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
         from rocketdoo.core.instance.config_manager import resources_for as resolve
 
-        env = Environment(loader=FileSystemLoader("rocketdoo/templates"), keep_trailing_newline=True)
+        templates = Path(__file__).resolve().parents[1] / "rocketdoo" / "templates"
+        env = Environment(loader=FileSystemLoader(str(templates)), keep_trailing_newline=True, undefined=StrictUndefined)
         ctx = {
             "addons_path": "/mnt/extra-addons",
             "admin_passwd": "x",
@@ -190,3 +194,120 @@ class TestThePreflightChecksWhatGetsDeployed:
         checks = {c["name"]: c for c in preflight.evaluate(cfg, local, remote, env="prod")}
 
         assert checks["memory"]["ok"] is True
+
+
+class TestWhatTheWizardAsks:
+    """Seven prompts nobody asked for is a cost, so the question defaults to no
+    for an untuned environment — and `load()` materialises the seven keys as
+    null for every one of them, which is what made `bool(current)` wrong."""
+
+    @staticmethod
+    def _ask(current, answer, monkeypatch):
+        from rocketdoo.core.instance import config_manager as cm
+
+        asked = []
+        monkeypatch.setattr(cm.Confirm, "ask", staticmethod(lambda *a, **kw: asked.append(kw.get("default")) or answer))
+        monkeypatch.setattr(cm.IntPrompt, "ask", staticmethod(lambda label, **kw: kw["default"]))
+        result = cm.InstanceConfigManager._wizard_resources("prod", current)
+        return asked[0], result
+
+    def test_a_new_environment_defaults_to_no(self, monkeypatch):
+        default, _ = self._ask({}, False, monkeypatch)
+
+        assert default is False
+
+    def test_an_untuned_existing_environment_also_defaults_to_no(self, monkeypatch):
+        # What load() hands back for an environment nobody tuned.
+        default, _ = self._ask(dict.fromkeys(RESOURCE_KEYS), False, monkeypatch)
+
+        assert default is False
+
+    def test_a_tuned_environment_defaults_to_yes(self, monkeypatch):
+        default, _ = self._ask({**dict.fromkeys(RESOURCE_KEYS), "workers": 3}, False, monkeypatch)
+
+        assert default is True
+
+    def test_declining_keeps_what_was_there(self, monkeypatch):
+        current = {**dict.fromkeys(RESOURCE_KEYS), "workers": 3, "limit_time_real": 1200}
+
+        _, result = self._ask(current, False, monkeypatch)
+
+        assert result["workers"] == 3
+        assert result["limit_time_real"] == 1200
+
+    def test_answering_through_changes_nothing(self, monkeypatch):
+        # Every prompt offers the effective value as its default.
+        current = {**dict.fromkeys(RESOURCE_KEYS), "limit_time_real": 1200}
+
+        _, result = self._ask(current, True, monkeypatch)
+
+        assert result == resources_for("prod", {"resources": current})
+
+
+class TestTheNumbersAPersonTypes:
+    """The pre-flight cannot catch either of these: it reads only
+    `limit_memory_soft`, and a negative one makes its sum pass for any RAM."""
+
+    def test_a_negative_value_is_rejected(self):
+        with pytest.raises(ValidationError, match="must not be negative"):
+            InstanceResources.model_validate({"workers": -1})
+
+    def test_a_hard_limit_below_the_soft_one_is_rejected(self):
+        with pytest.raises(ValidationError, match="limit_memory_hard"):
+            InstanceResources.model_validate({"limit_memory_soft": 2_000_000_000, "limit_memory_hard": 100})
+
+    def test_equal_limits_are_fine(self):
+        assert InstanceResources.model_validate({"limit_memory_soft": 100, "limit_memory_hard": 100})
+
+    def test_one_limit_alone_is_fine(self):
+        # Only the soft one given: the hard one falls back to the default.
+        assert InstanceResources.model_validate({"limit_memory_soft": 100})
+
+
+class TestTheKeysStayInStep:
+    def test_resource_keys_matches_the_model(self):
+        """An eighth field with no default and no prompt would be invisible."""
+        assert set(RESOURCE_KEYS) == set(InstanceResources.model_fields)
+
+    def test_a_foreign_key_cannot_reach_the_template_context(self):
+        # Not reachable through load() (extra="forbid" rejects the file), but
+        # the docstring promises seven.
+        values = resources_for("prod", {"resources": {"db_user": "pwned", "workers": 9}})
+
+        assert "db_user" not in values
+        assert values["workers"] == 9
+
+
+class TestTheGuiDoesNotWipeThem:
+    """POST /api/instances/init has no resources field and the GET does not
+    return one, so letting the form decide wiped a tuned environment with one
+    click on Save — the failure #332 closes, through the back door (#310)."""
+
+    def test_saving_from_the_form_keeps_the_tuning(self, tmp_path, monkeypatch):
+        from rocketdoo.gui.api.instances import EnvConfig, InstanceInitRequest, init_instances
+
+        (tmp_path / "Dockerfile").write_text("FROM odoo:18.0\n")
+        (tmp_path / "docker-compose.yaml").write_text("services: {}\n")
+        (tmp_path / ".rkd").mkdir()
+        tuned = {"workers": 2, "limit_time_cpu": 600, "limit_time_real": 1200}
+        InstanceConfigManager(tmp_path).save(
+            {
+                "environments": {
+                    "prod": {
+                        "type": "native",
+                        "vps": {"host": "h", "user": "u"},
+                        "db_user": "o",
+                        "db_name": "o",
+                        "admin_passwd": "x",
+                        "resources": tuned,
+                    }
+                }
+            }
+        )
+        monkeypatch.chdir(tmp_path)
+
+        answer = init_instances(InstanceInitRequest(environments={"prod": EnvConfig(host="h", user="u", type="native")}))
+
+        assert answer["ok"] is True
+        back = InstanceConfigManager(tmp_path).load()["environments"]["prod"]["resources"]
+        assert {k: v for k, v in back.items() if v is not None} == tuned
