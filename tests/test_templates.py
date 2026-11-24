@@ -60,6 +60,11 @@ INSTANCE_CONTEXT = {
     "log_level": "info",
     "limit_memory_hard": 1073741824,
     "limit_memory_soft": 805306368,
+    # The three the template used to hardcode (#332): same values, so the
+    # rendered conf is byte for byte what it was.
+    "limit_time_cpu": 60,
+    "limit_time_real": 120,
+    "limit_request": 8192,
     "use_enterprise": False,
     "use_gitman": False,
     "gitman_config_file": "gitman.stage.yml",

@@ -72,6 +72,37 @@ class VPSConnection(BaseModel):
         return bool(self.ssh_key) if self.auth_method == "ssh_key" else bool(self.password)
 
 
+class InstanceResources(BaseModel):
+    """Odoo tuning for one environment: what goes in the performance block of
+    its `odoo.conf`.
+
+    Every field is optional, and an absent one means "the default the
+    environment name implies" — which is what rkd emitted before this existed,
+    so an environment with no `resources` deploys byte for byte as it used to.
+    One field holding seven, and not seven fields, because `extra="forbid"`
+    makes each new key an instance.yaml a previous rkd cannot read.
+
+    Sizing is not derived from the server on purpose: physical RAM is not
+    available RAM —a VPS may be running PostgreSQL and something else beside
+    it— and deriving it would tie template rendering to the pre-flight's
+    facts. The `memory` check already compares against the measured RAM, so
+    a figure that does not fit is caught before anything is deployed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    workers: int | None = None
+    max_cron_threads: int | None = None
+    # Bytes, like Odoo's own options. Applied per worker, not to the server.
+    limit_memory_soft: int | None = None
+    limit_memory_hard: int | None = None
+    # Seconds. Odoo defaults to 60/120, which cuts a large import or a heavy
+    # report in half; a project that needs longer operations raises these.
+    limit_time_cpu: int | None = None
+    limit_time_real: int | None = None
+    limit_request: int | None = None
+
+
 class InstanceEnvironment(BaseModel):
     """One deployment target — typically `stage` or `prod`."""
 
@@ -109,6 +140,7 @@ class InstanceEnvironment(BaseModel):
     gitman_config: str = ""
 
     pg_profile: PGProfileName = "small"
+    resources: InstanceResources = Field(default_factory=InstanceResources)
     remote_path: str = ""
 
     @model_validator(mode="before")

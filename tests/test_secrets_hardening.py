@@ -204,6 +204,12 @@ class TestConfigureOdooStdin:
             "gevent_port = 8072\n"
             "limit_memory_hard = 1073741824\n"
             "limit_memory_soft = 805306368\n"
+            # The native conf did not declare these at all, so it fell back to
+            # Odoo's defaults while the Docker template fixed its own. Now both
+            # emit the same seven values (#332).
+            "limit_time_cpu = 60\n"
+            "limit_time_real = 120\n"
+            "limit_request = 8192\n"
             "proxy_mode = False\n"
             "list_db = False\n"
         )

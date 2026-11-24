@@ -86,6 +86,44 @@ DEBIAN_PG_SHARED_BUFFERS = "128MB"
 # Cron threads in both odoo.conf files, and in the pre-flight's memory sum.
 CRON_THREADS = 1
 
+# Odoo's own defaults are 60/120 seconds and 2**16 requests. rkd has always
+# emitted 8192 on the Docker path and nothing at all on the native one, so the
+# native conf fell back to Odoo's. These are now the single answer for both.
+TIME_LIMITS = {"limit_time_cpu": 60, "limit_time_real": 120, "limit_request": 8192}
+
+# The order the wizard asks them in, and the keys `resources` accepts.
+RESOURCE_KEYS = (
+    "workers",
+    "max_cron_threads",
+    "limit_memory_soft",
+    "limit_memory_hard",
+    "limit_time_cpu",
+    "limit_time_real",
+    "limit_request",
+)
+
+
+def resources_for(env: str, cfg: dict) -> dict:
+    """The seven tuning values this environment's `odoo.conf` is written with.
+
+    The defaults come from the environment name, as they always did; whatever
+    `resources` names overrides them, and what it leaves out keeps the default.
+    Both deployers and the pre-flight read this, so the conf that gets written
+    and the memory the pre-flight adds up can never be two different answers.
+    """
+    values = {
+        "workers": WORKERS_BY_ENV.get(env, WORKERS_BY_ENV["stage"]),
+        "max_cron_threads": CRON_THREADS,
+        **{
+            key: MEMORY_BY_ENV.get(env, MEMORY_BY_ENV["stage"])[key.removeprefix("limit_memory_")]
+            for key in ("limit_memory_soft", "limit_memory_hard")
+        },
+        **TIME_LIMITS,
+    }
+    configured = cfg.get("resources") or {}
+    values.update({key: value for key, value in configured.items() if value is not None})
+    return values
+
 
 def db_maxconn(pg_max_connections: int, workers: int) -> int:
     """Connections each Odoo process may open without exhausting PostgreSQL.
@@ -212,7 +250,7 @@ class InstanceConfigManager:
                     ).ask()
                 dep_type = new_type
             console.print(f"\n[bold cyan]── {env.upper()} environment ──[/bold cyan]")
-            updates[env] = {**known.get(env, {}), **self._wizard_env(env, dep_type)}
+            updates[env] = {**known.get(env, {}), **self._wizard_env(env, dep_type, known.get(env))}
 
         config = merge_environments(existing, updates)
         self.save(config)
@@ -236,7 +274,44 @@ class InstanceConfigManager:
         ]
         return questionary.select(f"Database for {env}:", choices=choices, default=choices[0], style=_custom_style).ask() or ""
 
-    def _wizard_env(self, env: str, dep_type: str) -> dict:
+    @staticmethod
+    def _wizard_resources(env: str, current: dict) -> dict:
+        """The performance block of this environment's odoo.conf.
+
+        One question first, defaulting to no: the values rkd derives from the
+        environment name fit a small VPS and most projects never need to touch
+        them. Saying yes shows each one with the effective value as its default,
+        so answering through leaves the configuration unchanged.
+        """
+        defaults = resources_for(env, {"resources": current})
+        console.print(
+            f"\n[dim]Performance: {defaults['workers']} workers, "
+            f"{defaults['limit_memory_soft'] // 1024 // 1024} MiB soft limit, "
+            f"{defaults['limit_time_real']}s request limit.[/dim]"
+        )
+        if not Confirm.ask("Tune Odoo's performance settings for this server?", default=bool(current)):
+            # Not {}: an environment that had values and now declines keeps
+            # them, the same way every other answered-through question does.
+            return dict(current)
+
+        console.print(
+            "[dim]Memory limits are per worker, in bytes. Time limits are seconds; Odoo's own\n"
+            "defaults (60/120) cut a large import or a heavy report in half.[/dim]"
+        )
+        answers = {}
+        for key in RESOURCE_KEYS:
+            answer = Prompt.ask(f"  {key}", default=str(defaults[key]))
+            try:
+                answers[key] = int(answer)
+            except (TypeError, ValueError):
+                # A cancelled prompt is None and a typo is not a number; either
+                # way the default stands rather than writing a conf Odoo cannot
+                # parse.
+                console.print(f"[yellow]⚠ {key}: not a number, keeping {defaults[key]}[/yellow]")
+                answers[key] = defaults[key]
+        return answers
+
+    def _wizard_env(self, env: str, dep_type: str, known: dict | None = None) -> dict:
         docker = dep_type == "docker"
         project = get_project_info(self.project_path)
 
@@ -343,6 +418,8 @@ class InstanceConfigManager:
                 style=_custom_style,
             ).ask()
 
+        resources = self._wizard_resources(env, (known or {}).get("resources") or {})
+
         if docker:
             remote_path = Prompt.ask("Remote base path", default=f"/opt/odoo-{env}")
         else:
@@ -366,6 +443,7 @@ class InstanceConfigManager:
             "enterprise_source": enterprise_source,
             "use_gitman": use_gitman,
             "gitman_config": gitman_config,
+            "resources": resources,
             "remote_path": remote_path,
         }
         if docker:

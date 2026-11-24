@@ -226,11 +226,13 @@ class TestWarnings:
         assert "5376 MiB" in memory["detail"]
         assert _evaluate(remote=_remote(mem_kb=str(5376 * 1024)))["memory"]["ok"] is True
 
-    def test_more_cron_threads_raise_the_threshold(self, monkeypatch):
+    def test_more_cron_threads_raise_the_threshold(self):
+        # Through `resources` now, which is where the value comes from (#332),
+        # instead of monkeypatching the constant the check no longer reads.
         remote = _remote(mem_kb=str(5376 * 1024))
-        monkeypatch.setattr(preflight, "CRON_THREADS", 2)
 
-        assert _evaluate(remote=remote)["memory"]["ok"] is False
+        assert _evaluate(remote=remote)["memory"]["ok"] is True
+        assert _evaluate(_cfg(resources={"max_cron_threads": 2}), remote=remote)["memory"]["ok"] is False
 
     def test_native_counts_the_distro_postgresql_not_the_profile(self):
         """Native does not apply pg_profile: Debian's cluster keeps 128 MiB."""
@@ -239,11 +241,33 @@ class TestWarnings:
         assert "5248 MiB" in detail
 
     def test_the_hint_names_levers_that_exist(self):
+        """This assertion is inverted from what it used to say, and on purpose.
+
+        Before #332 the hint could only offer "deploy as stage" or "get more
+        RAM", because workers and the memory limits were constants: naming them
+        would have sent the operator looking for a knob that did not exist.
+        Now `resources` is that knob, so the hint has to name it.
+        """
         hint = _evaluate(remote=_remote(mem_kb="1"))["memory"]["hint"]
 
+        assert "resources" in hint and "limit_memory_soft" in hint
         assert "stage" in hint and "more RAM" in hint
-        assert "limit_memory_soft" not in hint and "workers," not in hint.split("stage")[0]
         assert "Add swap" not in hint
+
+    def test_the_memory_check_adds_up_what_the_environment_deploys(self):
+        """The conf that gets written and the sum the check makes are one
+        answer: a `resources` the VPS cannot hold is caught before deploying."""
+        remote = _remote(mem_kb=str(4 * 1024 * 1024))
+        # The shape measured on a real customer conf: workers from the CPU
+        # formula, memory left at Odoo's own 2 GiB default. 8 processes x 2 GiB
+        # does not fit in 4 GiB, and before #332 the check could not see it.
+        heavy = _cfg(resources={"workers": 5, "limit_memory_soft": 2147483648})
+
+        check = _evaluate(heavy, remote=remote)["memory"]
+
+        assert check["ok"] is False
+        assert "5 workers" in check["detail"]
+        assert "2048 MiB soft limit" in check["detail"]
 
     def test_a_shared_buffers_without_a_unit_does_not_raise(self):
         assert preflight._mib("256") == 0

@@ -24,12 +24,10 @@ from rocketdoo.core.traefik import NETWORK as TRAEFIK_NETWORK
 
 from . import preflight
 from .config_manager import (
-    CRON_THREADS,
     LOG_LEVEL_BY_ENV,
-    MEMORY_BY_ENV,
     PG_PROFILES,
-    WORKERS_BY_ENV,
     db_maxconn,
+    resources_for,
 )
 from .db_seed import SEEDED_MARK, docker_restore_script, docker_state_script
 from .enterprise import branch, clone_script
@@ -261,8 +259,9 @@ class DockerInstanceDeployer:
             addons_path += gitman_module_paths(self.project_path / gitman_config, GITMAN_DIR)
             ssh_hosts += gitman_ssh_hosts(self.project_path / gitman_config)
         admin_passwd = creds["admin_passwd"]
-        workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
-        mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
+        # One source for the seven tuning values, shared with the native
+        # deployer and with the pre-flight's memory check (#332).
+        tuning = resources_for(self.env, self.cfg)
 
         ctx = {
             "environment": self.env,
@@ -291,12 +290,9 @@ class DockerInstanceDeployer:
             "pg": self.pg,
             # odoo.conf specific
             "admin_passwd": admin_passwd,
-            "workers": workers,
-            "max_cron_threads": CRON_THREADS,
             "log_level": LOG_LEVEL_BY_ENV.get(self.env, "info"),
-            "limit_memory_hard": mem["hard"],
-            "limit_memory_soft": mem["soft"],
-            "db_maxconn": db_maxconn(self.pg["max_connections"], workers),
+            **tuning,
+            "db_maxconn": db_maxconn(self.pg["max_connections"], tuning["workers"]),
         }
 
         # Dockerfile.{env}
