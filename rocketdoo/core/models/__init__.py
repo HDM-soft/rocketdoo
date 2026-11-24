@@ -17,6 +17,7 @@ from rocketdoo.core.models.deploy import (
 from rocketdoo.core.models.instance import (
     InstanceConfig,
     InstanceEnvironment,
+    InstanceResources,
     VPSConnection,
 )
 from rocketdoo.core.models.project import (
@@ -35,6 +36,7 @@ __all__ = [
     "DeploymentResult",
     "InstanceConfig",
     "InstanceEnvironment",
+    "InstanceResources",
     "ModulesConfig",
     "OdooSHConfig",
     "Profile",

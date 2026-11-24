@@ -27,13 +27,11 @@ from rocketdoo.core.gitman_config import gitman_module_paths, gitman_ssh_hosts
 
 from . import preflight
 from .config_manager import (
-    CRON_THREADS,
     DEBIAN_PG_MAX_CONNECTIONS,
     LOG_LEVEL_BY_ENV,
-    MEMORY_BY_ENV,
     NATIVE_ADDONS_PATH,
-    WORKERS_BY_ENV,
     db_maxconn,
+    resources_for,
 )
 from .db_seed import SEEDED_MARK, native_restore_script, native_state_script
 from .enterprise import branch, clone_script
@@ -259,9 +257,9 @@ class NativeInstanceDeployer:
     def _configure_odoo(self) -> bool:
         admin_passwd = self._resolve_admin_passwd()
         db_password = self._resolve_db_password()
-        workers = WORKERS_BY_ENV.get(self.env, WORKERS_BY_ENV["stage"])
+        tuning = resources_for(self.env, self.cfg)
+        workers = tuning["workers"]
         log_level = LOG_LEVEL_BY_ENV.get(self.env, "info")
-        mem = MEMORY_BY_ENV.get(self.env, MEMORY_BY_ENV["stage"])
         # Nothing stands in front of a native deploy today (Traefik for this
         # path is #211), and with proxy_mode on Odoo trusts the X-Forwarded-*
         # headers of whoever reaches it directly.
@@ -283,10 +281,16 @@ class NativeInstanceDeployer:
             f"log_level = {log_level}\n"
             "logfile = /var/log/odoo/odoo-server.log\n"
             f"workers = {workers}\n"
-            f"max_cron_threads = {CRON_THREADS}\n"
+            f"max_cron_threads = {tuning['max_cron_threads']}\n"
             "gevent_port = 8072\n"
-            f"limit_memory_hard = {mem['hard']}\n"
-            f"limit_memory_soft = {mem['soft']}\n"
+            f"limit_memory_hard = {tuning['limit_memory_hard']}\n"
+            f"limit_memory_soft = {tuning['limit_memory_soft']}\n"
+            # The native conf did not declare these at all, so it fell back to
+            # Odoo's defaults while the Docker template fixed its own: two
+            # answers to one question (#332).
+            f"limit_time_cpu = {tuning['limit_time_cpu']}\n"
+            f"limit_time_real = {tuning['limit_time_real']}\n"
+            f"limit_request = {tuning['limit_request']}\n"
             f"proxy_mode = {proxy_mode}\n"
             "list_db = False\n"
         )
