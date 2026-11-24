@@ -42,7 +42,7 @@ def _container_status(project_path: Path) -> dict:
 
 
 @router.get("")
-async def get_workspace():
+def get_workspace():
     cwd = Path.cwd()
     return {
         "path": str(cwd),
@@ -58,7 +58,7 @@ class NavigateRequest(BaseModel):
 
 
 @router.post("/navigate")
-async def navigate(body: NavigateRequest):
+def navigate(body: NavigateRequest):
     try:
         path = Path(body.path).expanduser().resolve()
         if not path.exists():
@@ -77,7 +77,7 @@ class MkdirRequest(BaseModel):
 
 
 @router.post("/mkdir")
-async def mkdir_project(body: MkdirRequest):
+def mkdir_project(body: MkdirRequest):
     try:
         base = Path(body.base_dir).expanduser().resolve() if body.base_dir else Path.cwd()
         name = body.name.strip().replace(" ", "-")
@@ -98,7 +98,7 @@ class DiscoverRequest(BaseModel):
 
 
 @router.post("/discover")
-async def discover_projects(body: DiscoverRequest):
+def discover_projects(body: DiscoverRequest):
     base_str = body.base_dir.strip()
     base = Path(base_str).expanduser().resolve() if base_str else _default_scan_dir()
 
@@ -158,7 +158,7 @@ class BrowseRequest(BaseModel):
 
 
 @router.post("/browse")
-async def browse_dirs(body: BrowseRequest):
+def browse_dirs(body: BrowseRequest):
     """List immediate subdirectories of a given path (for a directory picker)."""
     try:
         base = Path(body.path).expanduser().resolve() if body.path else Path.home()

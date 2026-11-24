@@ -255,11 +255,11 @@ class TestWhatTheGuiSendsToTheSpa:
     """
 
     def _body(self):
-        import asyncio
-
+        # Not asyncio.run: the handler is a plain `def` so FastAPI runs it in
+        # the threadpool instead of freezing the event loop (#287).
         from rocketdoo.gui.api.project import get_project
 
-        return asyncio.run(get_project())
+        return get_project()
 
     def test_the_response_carries_the_whole_contract(self, community_project):
         assert set(self._body()) == set(EXPECTED_KEY_TYPES) | {"exists"}

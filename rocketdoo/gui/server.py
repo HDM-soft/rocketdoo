@@ -6,6 +6,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import Headers, QueryParams
 from starlette.routing import get_route_path
 
@@ -197,12 +198,18 @@ def create_app(host: str = "127.0.0.1", port: int = DEFAULT_PORT, token: str | N
     @app.websocket("/ws/odoo/update")
     async def ws_odoo_update(websocket: WebSocket, module: str, db: str):
         await websocket.accept()
-        action, changes = ensure_addons_path(Path.cwd())
+        # Both preparations are synchronous and slow: ensure_addons_path walks
+        # addons/ and rewrites the conf, and build_update_command runs a
+        # `docker exec psql` (timeout 15) plus a full module scan. On the event
+        # loop they froze the GUI, log WebSockets included -- the same bug #287
+        # fixes on the REST side. One cwd read, passed to both.
+        root = Path.cwd()
+        action, changes = await run_in_threadpool(ensure_addons_path, root)
         if action == "updated":
             await websocket.send_text(f"[rkd] addons_path updated: {', '.join(changes)}")
         elif action == "failed":
             await websocket.send_text(f"[rkd] could not update addons_path: {', '.join(changes)}")
-        cmd, error = build_update_command(module, db)
+        cmd, error = await run_in_threadpool(build_update_command, module, db)
         if error:
             await websocket.send_text(f"[error] {error}")
             await websocket.send_text("\x00exit:1")
