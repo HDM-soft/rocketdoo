@@ -1367,3 +1367,323 @@ class TestNoHandlerBlocksTheEventLoop:
         assert set(handlers) == {"ws_docker_action", "ws_odoo_update", "ws_logs"}
         sync = sorted(name for name, node in handlers.items() if not isinstance(node, ast.AsyncFunctionDef))
         assert sync == [], f"a sync WebSocket handler does not work: {sync}"
+
+
+class TestTheDeployRunEndpoint:
+    """`POST /api/deploy/run` never worked and nobody noticed (#322).
+
+    It called `config_manager.load_config()`, a method that does not exist, and
+    the module's broad `except` turned the AttributeError into a 200 with
+    `{"ok": false}` — the same shape #279 found in the instance deploy. Behind
+    that first failure sat two more: `ModuleScanner(base_path=...)` (the
+    parameter is `addons_path`) and passing module *names* where
+    `prepare_modules()` takes dicts.
+
+    And it called `deploy_modules()` direct, skipping what `execute()` does
+    before it: validate the configuration, check connectivity, and roll back.
+    """
+
+    @staticmethod
+    def _target(ssh_key: str, **overrides) -> dict:
+        target = {
+            "type": "vps",
+            "enabled": True,
+            "connection": {"host": "1.2.3.4", "port": 22, "user": "root", "ssh_key": ssh_key},
+            "deployment_type": "docker",
+            "docker": {"container_name": "odoo", "compose_path": "/opt/odoo", "addons_mount": "/mnt/extra-addons"},
+        }
+        target.update(overrides)
+        return target
+
+    @pytest.fixture
+    def project(self, tmp_path, monkeypatch):
+        """A project whose ssh_key path is inside tmp_path, so the outcome does
+        not depend on what happens to exist in the real ~/.ssh/."""
+        import yaml
+
+        (tmp_path / "Dockerfile").write_text("FROM odoo:18.0\n")
+        (tmp_path / "docker-compose.yaml").write_text("services: {}\n")
+        (tmp_path / ".rkd").mkdir()
+        self.key = tmp_path / "deploy_key"
+        (tmp_path / ".rkd" / "deploy.yaml").write_text(
+            yaml.safe_dump({"modules": {"base_path": "addons"}, "targets": {"prod": self._target(str(self.key))}})
+        )
+        mod = tmp_path / "addons" / "mi_modulo"
+        mod.mkdir(parents=True)
+        (mod / "__init__.py").write_text("")
+        (mod / "__manifest__.py").write_text(
+            "{'name': 'Mi Modulo', 'version': '1.0', 'installable': True, 'depends': ['base']}"
+        )
+        monkeypatch.chdir(tmp_path)
+        return tmp_path
+
+    @pytest.fixture
+    def no_ssh(self, monkeypatch):
+        """execute() reaches pre_deploy_check() once the config validates, and
+        that is a real ssh with a 300 s timeout. Tests that are not about
+        connectivity stop there."""
+        from rocketdoo.core.deploy import vps
+
+        monkeypatch.setattr(vps.VPSDeployer, "pre_deploy_check", lambda self: False)
+        return monkeypatch
+
+    @staticmethod
+    def _run(**body):
+        from rocketdoo.gui.api.deploy_ops import DeployRunRequest, deploy_run
+
+        return deploy_run(DeployRunRequest(target=body.pop("target", "prod"), **body))
+
+    def test_it_runs_at_all(self, project):
+        # The regression that matters: any answer other than the AttributeError
+        # the endpoint used to hand back for every single call.
+        self.key.write_text("private")
+
+        answer = self._run(dry_run=True)
+
+        assert "has no attribute" not in str(answer.get("error", ""))
+        assert answer == {
+            "ok": True,
+            "dry_run": True,
+            "errors": [],
+            "message": "deploy.yaml is valid for this target (connectivity not checked).",
+        }
+
+    def test_every_failure_carries_the_key_the_spa_reads(self, project, no_ssh):
+        """index.html reads `r.error`, not `r.message`.
+
+        Every failure coming out of execute() answered with `message` only, so
+        the panel printed a literal `✗ undefined` and the toast fell back to
+        the generic one. This is the shape the SPA depends on, pinned.
+        """
+        self.key.write_text("private")
+        answers = [
+            self._run(target="nope", dry_run=True),
+            self._run(dry_run=False, modules=["no_existe"]),
+            self._run(dry_run=False),
+        ]
+
+        for answer in answers:
+            assert answer["ok"] is False
+            assert answer.get("error"), f"no `error` key for the SPA to render: {answer}"
+
+    def test_the_dry_run_sees_a_missing_key(self, project):
+        # Without this, creating a target from the GUI (which defaults ssh_key
+        # to "") gave a green dry run and then a failed deploy.
+        answer = self._run(dry_run=True)
+
+        assert answer["ok"] is False
+        assert "SSH key not found" in answer["errors"][0]
+        assert str(self.key) in answer["errors"][0]
+
+    def test_the_dry_run_judges_only_the_target_asked_for(self, project):
+        # A broken sibling is not a reason to refuse a target that is fine.
+        import yaml
+
+        config = yaml.safe_load((project / ".rkd" / "deploy.yaml").read_text())
+        config["targets"]["broken"] = {"type": "vps", "connection": {"user": "root"}}
+        (project / ".rkd" / "deploy.yaml").write_text(yaml.safe_dump(config))
+        self.key.write_text("private")
+
+        assert self._run(dry_run=True)["ok"] is True
+        assert self._run(target="broken", dry_run=True)["ok"] is False
+
+    def test_it_goes_through_execute(self, project, monkeypatch):
+        from rocketdoo.core.deploy import vps
+        from rocketdoo.core.deploy.base import DeploymentResult
+
+        self.key.write_text("private")
+        calls = {}
+
+        def _execute(self, modules):
+            calls["modules"] = modules
+            return DeploymentResult(success=True, message="ok")
+
+        monkeypatch.setattr(vps.VPSDeployer, "execute", _execute)
+        monkeypatch.setattr(
+            vps.VPSDeployer,
+            "deploy_modules",
+            lambda self, modules: pytest.fail("deploy_modules called directly: execute() is the entry point"),
+        )
+
+        answer = self._run(dry_run=False)
+
+        assert answer["ok"] is True
+        # dicts, not names: prepare_modules() reads the path out of each one.
+        assert [m["name"] for m in calls["modules"]] == ["mi_modulo"]
+        assert all(isinstance(m, dict) for m in calls["modules"])
+
+    def test_the_answer_carries_the_deployers_own_chronology(self, project, no_ssh):
+        """execute() says which step failed, never why. Without the logs the
+        GUI user gets a verdict and no diagnosis, since the server's stdout is
+        not theirs to read."""
+        self.key.write_text("private")
+
+        answer = self._run(dry_run=False)
+
+        assert answer["logs"], "the deployer's log is the only diagnosis the GUI can show"
+        assert any("Validating" in entry["message"] for entry in answer["logs"])
+        assert answer["message"] == "Pre-deploy check failed"
+
+    def test_a_bad_configuration_is_rejected_like_the_cli_does(self, project):
+        # The key file does not exist, so execute() stops at validate_config()
+        # with the same message `rkd deploy run` gives.
+        answer = self._run(dry_run=False)
+
+        assert answer["ok"] is False
+        assert answer["message"] == "Invalid configuration"
+
+    def test_an_unknown_module_is_named(self, project, no_ssh):
+        self.key.write_text("private")
+
+        answer = self._run(dry_run=False, modules=["no_existe"])
+
+        assert answer["ok"] is False
+        assert "no_existe" in answer["error"]
+
+    def test_no_installable_modules_is_said_plainly(self, project, no_ssh):
+        self.key.write_text("private")
+        (project / "addons" / "mi_modulo" / "__manifest__.py").write_text("{'name': 'x', 'installable': False}")
+
+        answer = self._run(dry_run=False)
+
+        assert answer["ok"] is False
+        assert "No installable modules" in answer["error"]
+
+    def test_a_dry_run_never_builds_the_deployer(self, project, monkeypatch):
+        """VPSDeployer's constructor calls getpass() with password auth and no
+        exported variable, which from the GUI prompts on the *server's*
+        terminal and persists what is typed. A simulation must not do that."""
+        from rocketdoo.core.deploy import vps
+
+        self.key.write_text("private")
+        monkeypatch.setattr(
+            vps.VPSDeployer,
+            "__init__",
+            lambda *a, **k: pytest.fail("a dry run must not construct the deployer"),
+        )
+
+        assert self._run(dry_run=True)["ok"] is True
+
+    def test_password_auth_without_the_variable_is_refused_before_prompting(self, project, monkeypatch):
+        """Otherwise the constructor calls getpass() on the server's terminal:
+        the thread blocks on /dev/tty for good, the SPA's fetch has no timeout,
+        and whatever someone types gets persisted under .rkd/secrets/."""
+        import yaml
+
+        from rocketdoo.core.deploy import vps
+
+        config = yaml.safe_load((project / ".rkd" / "deploy.yaml").read_text())
+        config["targets"]["prod"]["connection"] = {
+            "host": "1.2.3.4",
+            "port": 22,
+            "user": "root",
+            "password": "${NOT_EXPORTED_ANYWHERE}",
+        }
+        (project / ".rkd" / "deploy.yaml").write_text(yaml.safe_dump(config))
+        monkeypatch.delenv("NOT_EXPORTED_ANYWHERE", raising=False)
+        monkeypatch.setattr(vps, "getpass", lambda *a: pytest.fail("the GUI has no terminal to ask on"))
+
+        answer = self._run(dry_run=False)
+
+        assert answer["ok"] is False
+        assert "NOT_EXPORTED_ANYWHERE" in answer["error"]
+
+    def test_skip_backup_reaches_the_deployer(self, project, monkeypatch):
+        # The SPA sends these two flags and the handler used to ignore them.
+        from rocketdoo.core.deploy import vps
+        from rocketdoo.core.deploy.base import DeploymentResult
+
+        self.key.write_text("private")
+        seen = {}
+        original = vps.VPSDeployer.__init__
+
+        def _init(self, target_name, config, project_path):
+            seen["backup"] = config.get("backup")
+            seen["validations"] = config.get("validations")
+            original(self, target_name, config, project_path)
+
+        monkeypatch.setattr(vps.VPSDeployer, "__init__", _init)
+        monkeypatch.setattr(vps.VPSDeployer, "execute", lambda self, m: DeploymentResult(success=True, message="ok"))
+
+        self._run(dry_run=False, skip_backup=True, skip_validation=True)
+
+        assert seen["backup"] == {"enabled": False}
+        assert seen["validations"] == {}
+
+    def test_an_unknown_target_is_named(self, project):
+        answer = self._run(target="nope", dry_run=True)
+
+        assert answer["ok"] is False
+        assert "nope" in answer["error"]
+
+    def test_a_non_vps_target_says_so(self, project):
+        import yaml
+
+        config = yaml.safe_load((project / ".rkd" / "deploy.yaml").read_text())
+        config["targets"]["sh"] = {"type": "odoo-sh", "odoo_sh": {"project_id": "x", "branch": "main"}}
+        (project / ".rkd" / "deploy.yaml").write_text(yaml.safe_dump(config))
+
+        answer = self._run(target="sh", dry_run=True)
+
+        assert answer["ok"] is False
+        assert "odoo-sh" in answer["error"]
+
+    def test_a_missing_deploy_yaml_says_so(self, project):
+        (project / ".rkd" / "deploy.yaml").unlink()
+
+        answer = self._run(dry_run=True)
+
+        assert answer["ok"] is False
+        assert "deploy init" in answer["error"]
+
+
+class TestTheDeployValidateEndpoint:
+    """`POST /api/deploy/validate` had the exact same bug, twenty lines below
+    the one #322 was about, and no test at all (#322 review).
+
+    `ModuleScanner(base_path=...)` raised a TypeError on every single call, and
+    the broad `except` turned it into a 200 the SPA renders as a red
+    "Validation errors" card with an empty list -- for every project, including
+    one with no errors.
+    """
+
+    @pytest.fixture
+    def addons(self, tmp_path, monkeypatch):
+        mod = tmp_path / "addons" / "sano"
+        mod.mkdir(parents=True)
+        (mod / "__init__.py").write_text("")
+        # name, version, depends and data: the four fields OdooModule.validate() wants.
+        (mod / "__manifest__.py").write_text("{'name': 'Sano', 'version': '1.0', 'depends': ['base'], 'data': []}")
+        monkeypatch.chdir(tmp_path)
+        return tmp_path
+
+    @staticmethod
+    def _validate():
+        from rocketdoo.gui.api.deploy_ops import deploy_validate
+
+        return deploy_validate()
+
+    def test_a_healthy_project_comes_back_clean(self, addons):
+        answer = self._validate()
+
+        assert "unexpected keyword argument" not in str(answer.get("error", ""))
+        assert answer == {"ok": True, "errors": {}, "total": 1}
+
+    def test_a_broken_manifest_is_named(self, addons):
+        broken = addons / "addons" / "roto"
+        broken.mkdir()
+        (broken / "__init__.py").write_text("")
+        (broken / "__manifest__.py").write_text("{'version': '1.0'}")
+
+        answer = self._validate()
+
+        assert answer["ok"] is False
+        assert "roto" in answer["errors"]
+
+    def test_no_addons_directory_is_not_an_error_shape(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        answer = self._validate()
+
+        assert answer["total"] == 0
+        assert "unexpected keyword argument" not in str(answer.get("error", ""))
