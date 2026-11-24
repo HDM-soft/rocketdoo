@@ -19,14 +19,12 @@ from rocketdoo.core.project_info import read_docker_compose
 from rocketdoo.core.ssh_manager import resolve_key_path
 
 from .config_manager import (
-    CRON_THREADS,
     DEBIAN_PG_SHARED_BUFFERS,
     DEFAULT_GITMAN_FILE,
-    MEMORY_BY_ENV,
     PG_PROFILES,
-    WORKERS_BY_ENV,
     InstanceConfigManager,
     invalid_identifiers,
+    resources_for,
 )
 from .enterprise import REPO as ENTERPRISE_REPO
 from .ssh_utils import build_ssh_cmd
@@ -262,13 +260,17 @@ def _memory_check(cfg: dict, remote: dict, env: str) -> Check:
     The sum is a conservative threshold, not a ceiling: Odoo recycles a
     worker past its soft limit and only kills it at the hard one.
     """
-    workers = WORKERS_BY_ENV.get(env, WORKERS_BY_ENV["stage"])
-    soft = MEMORY_BY_ENV.get(env, MEMORY_BY_ENV["stage"])["soft"] // _MIB
+    # The environment's effective values, not rkd's constants: once resources
+    # can be configured, adding up the constants would check a conf nobody
+    # deploys (#332).
+    tuning = resources_for(env, cfg)
+    workers = tuning["workers"]
+    soft = tuning["limit_memory_soft"] // _MIB
     if cfg.get("type", "docker") == "docker":
         buffers = _mib(PG_PROFILES.get(cfg.get("pg_profile"), PG_PROFILES["small"])["shared_buffers"])
     else:
         buffers = _mib(DEBIAN_PG_SHARED_BUFFERS)
-    processes = workers + CRON_THREADS + 2
+    processes = workers + tuning["max_cron_threads"] + 2
     needed = processes * soft + buffers
     have = _int(remote.get("mem_kb")) // 1024
     return _check(
@@ -276,10 +278,11 @@ def _memory_check(cfg: dict, remote: dict, env: str) -> Check:
         "warn",
         have >= needed,
         f"the VPS has {have} MiB of RAM; {processes} Odoo processes (master, {workers} workers, "
-        f"{CRON_THREADS} cron, gevent) at {soft} MiB soft limit plus {buffers:.0f} MiB of PostgreSQL "
+        f"{tuning['max_cron_threads']} cron, gevent) at {soft} MiB soft limit plus {buffers:.0f} MiB of PostgreSQL "
         f"shared_buffers come to {needed:.0f} MiB",
-        "Workers and memory limits follow the environment name: stage runs fewer workers with lower limits, "
-        "so deploy this one as stage, or use a VPS with more RAM. Swap does not count: this reads physical RAM.",
+        "Lower workers or limit_memory_soft under this environment's `resources` in .rkd/instance.yaml, "
+        "deploy this one as stage (fewer workers, lower limits by default), or use a VPS with more RAM. "
+        "Swap does not count: this reads physical RAM.",
     )
 
 
