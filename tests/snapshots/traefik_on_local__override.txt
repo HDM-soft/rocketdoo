@@ -9,9 +9,11 @@ services:
       - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.demo_project.rule=Host(`demo.local`)"
       - "traefik.http.routers.demo_project.entrypoints=web"
+      - "traefik.http.routers.demo_project.service=demo_project-svc"
       - "traefik.http.services.demo_project-svc.loadbalancer.server.port=8069"
       - "traefik.http.routers.demo_project-lp.rule=Host(`demo.local`) && (PathPrefix(`/longpolling`) || PathPrefix(`/websocket`))"
       - "traefik.http.routers.demo_project-lp.entrypoints=web"
+      - "traefik.http.routers.demo_project-lp.service=demo_project-lp-svc"
       - "traefik.http.services.demo_project-lp-svc.loadbalancer.server.port=8072"
 
   db:

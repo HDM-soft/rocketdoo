@@ -10,6 +10,7 @@ services:
       - "traefik.http.routers.demo_project-http.rule=Host(`prod.example.com`)"
       - "traefik.http.routers.demo_project-http.entrypoints=web"
       - "traefik.http.routers.demo_project-http.middlewares=redirect-https"
+      - "traefik.http.routers.demo_project-http.service=demo_project-svc"
       - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
       - "traefik.http.routers.demo_project.rule=Host(`prod.example.com`)"
       - "traefik.http.routers.demo_project.entrypoints=websecure"
