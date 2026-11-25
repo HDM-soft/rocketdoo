@@ -38,6 +38,15 @@ CONFIG_FILE = ".rkd/instance.yaml"
 
 # The file `rkd init` writes; the wizard proposes it and the pre-flight falls back to it.
 DEFAULT_GITMAN_FILE = "gitman.yaml"
+# The project's own Python dependencies: what its modules declare under
+# external_dependencies. Not the same as install_dependencies.sh, which the
+# `scripts:` of each gitman source run with `cd` inside the cloned repo and so
+# only ever sees that repo's file (#336).
+REQUIREMENTS_FILE = "requirements.txt"
+# Where the file lands on the side that installs it: inside the image for the
+# Docker path, on the host for the native one. The instance template gets it
+# through the render context so the two cannot drift apart.
+REQUIREMENTS_TARGET = "/opt/odoo/requirements.txt"
 
 PG_PROFILES: dict[str, dict] = {
     "small": {

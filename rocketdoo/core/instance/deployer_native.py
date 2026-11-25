@@ -30,6 +30,8 @@ from .config_manager import (
     DEBIAN_PG_MAX_CONNECTIONS,
     LOG_LEVEL_BY_ENV,
     NATIVE_ADDONS_PATH,
+    REQUIREMENTS_FILE,
+    REQUIREMENTS_TARGET,
     db_maxconn,
     resources_for,
 )
@@ -148,6 +150,13 @@ class NativeInstanceDeployer:
             if self.cfg.get("use_gitman", False)
             else []
         )
+        # Independent of gitman: install_dependencies.sh only ever sees each
+        # source's own requirements, never the project's (#336).
+        requirements = (
+            [(f"Installing {REQUIREMENTS_FILE} from the project", self._install_requirements)]
+            if (self.project_path / REQUIREMENTS_FILE).is_file()
+            else []
+        )
         return [
             ("Installing system dependencies + PostgreSQL", self._install_system_deps),
             (f"Adding Odoo {self.odoo_version} nightly repository", self._add_odoo_repo),
@@ -157,6 +166,7 @@ class NativeInstanceDeployer:
             (f"Syncing extra-addons → {self.remote_addons}", self._sync_addons),
             *enterprise,
             *gitman,
+            *requirements,
             (
                 f"Seeding database {self.db_name} from the local {self.seed_database}"
                 if self.seed_database
@@ -173,6 +183,15 @@ class NativeInstanceDeployer:
         packages = "curl wget gnupg2 apt-transport-https postgresql postgresql-client"
         if self.cfg.get("use_gitman", False):
             packages += " git python3-venv python3-pip"
+        if (self.project_path / REQUIREMENTS_FILE).is_file():
+            # The Odoo nightly deb depends on neither pip nor a toolchain, and
+            # python3-pip only came in with gitman: without this the
+            # requirements step fails on every project that does not use
+            # third-party repos. python3-dev and build-essential because a
+            # dependency with no wheel (python-ldap, M2Crypto, any sdist) has
+            # nothing to compile with otherwise -- the two Dockerfiles install
+            # them, the VPS did not (#336).
+            packages += " python3-pip python3-dev build-essential"
         cmd = f"apt-get update -qq && apt-get install -y --no-install-recommends {packages}"
         return self._ssh(f'sudo bash -c "{cmd}"')
 
@@ -225,6 +244,62 @@ class NativeInstanceDeployer:
         path = save(self.project_path, self.env, {PG_PASS: generated})
         console.print(f"[green]✔[/green] Generated database password, stored in {path}")
         return generated
+
+    def _install_requirements(self) -> bool:
+        """Install the project's requirements.txt into the interpreter Odoo runs.
+
+        The system Python here, same as the gitman `scripts:` do -- a virtualenv
+        would be invisible to the Odoo the Debian package starts.
+
+        No --break-system-packages: the flag arrived in pip 23 and odoo nightly
+        on an older base may predate it. Removing EXTERNALLY-MANAGED is a no-op
+        where it does not exist, which is the mechanism both Dockerfiles use.
+        --ignore-installed for the same reason as there: pip otherwise refuses
+        to uninstall what apt put in place.
+        """
+        # By stdin and not rsync: this is the only transfer of the native
+        # deployer whose destination lives under a root-owned directory that
+        # nothing else creates. rsync does not make the directory and does not
+        # use sudo, so with the wizard's default user (`ubuntu`) it fails with
+        # "change_dir failed" or "Permission denied". `_configure_odoo` already
+        # writes a root-owned file this way (#336).
+        written = self._ssh(
+            f"sudo mkdir -p {Path(REQUIREMENTS_TARGET).parent} && sudo tee {REQUIREMENTS_TARGET} > /dev/null",
+            input=(self.project_path / REQUIREMENTS_FILE).read_text(),
+        )
+        if not written:
+            console.print(f"[red]✗ Failed to write {REQUIREMENTS_TARGET}[/red]")
+            return False
+        if not self._ssh(
+            "{ sudo rm -f /usr/lib/python*/EXTERNALLY-MANAGED; "
+            f"sudo python3 -m pip install --ignore-installed -r {REQUIREMENTS_TARGET}; }}"
+        ):
+            return False
+        # Measured on a real build: a project declaring authlib gets cryptography
+        # bumped and apt's pyOpenSSL stops working, so Odoo does not import at
+        # all. Without this, the step reports success and `_verify_odoo_answers`
+        # fails thirty lines later with no idea why -- after the restart has
+        # already taken the running Odoo down with it (#336).
+        #
+        # `odoo.addons.base` and not `odoo`: from 19.0 the `odoo` package has no
+        # __init__.py (PEP 420 namespace package, startup moved to init.py), so
+        # `import odoo` runs no Odoo code and exits 0 on a broken interpreter --
+        # measured on odoo:19.0 and 20.0, which is the series the nightly deb
+        # installs too. `odoo.addons.base` is what load_server_wide_modules()
+        # imports, and it exits 1 on all six series.
+        #
+        # Under sudo, same as the install: sudo resets PATH to secure_path, so
+        # without it the check would run whatever python3 the SSH user's profile
+        # puts first -- a pyenv or an activated venv would report Odoo missing
+        # and block a perfectly healthy deploy with a hint about pyopenssl.
+        if not self._ssh('sudo python3 -c "import odoo.addons.base"'):
+            console.print(
+                "[red]✗ Odoo stopped importing after installing the requirements[/red]\n"
+                "  A dependency upgraded a package Odoo relies on. If the error above\n"
+                "  names OpenSSL/GEN_EMAIL, add `pyopenssl` to the project's requirements.txt."
+            )
+            return False
+        return True
 
     def _ensure_db_role(self) -> bool:
         """

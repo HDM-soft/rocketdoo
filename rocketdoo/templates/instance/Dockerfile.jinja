@@ -50,6 +50,41 @@ RUN /opt/odoo/gitman-venv/bin/gitman install{% if environment == 'stage' %} --fo
 {% endif %}
 {% endif %}
 
+{% if requirements %}
+# The project's own requirements.txt: what its modules declare under
+# external_dependencies. install_dependencies.sh does not cover this one -- the
+# `scripts:` of each gitman source run it with `cd` inside the cloned repo, so
+# it sees that repo's requirements and not the project's (#336).
+#
+# The rm of EXTERNALLY-MANAGED and not --break-system-packages, for the reason
+# templates/Dockerfile.jinja already documents: the flag arrived in pip 23 and
+# odoo:15.0/16.0 ship pip 20.3, odoo:17.0 ships 22.0. The rm is a no-op where
+# the marker does not exist, and it goes in this layer because the apt install
+# above pulls python3-dev, which puts the file back.
+#
+# --ignore-installed because pip otherwise dies with "Cannot uninstall
+# cryptography, RECORD file not found" as soon as a dependency wants a newer
+# version of something apt installed. It installs without uninstalling, so two
+# versions coexist -- which is also why updating cryptography can leave apt's
+# pyOpenSSL broken. Adding `pyopenssl` to the project's requirements.txt is the
+# remedy, and CLAUDE.md says so. The `import odoo` right after is what keeps
+# that from shipping as a green build and a container that never starts:
+# measured, a project declaring authlib gets cryptography bumped and Odoo
+# stops importing entirely.
+#
+# What is imported is `odoo.addons.base` and not `odoo`: from 19.0 the `odoo`
+# package has no __init__.py -- it is a PEP 420 namespace package and the
+# startup code moved to odoo/init.py -- so `import odoo` runs no Odoo code at
+# all and the check passes on a broken interpreter. Measured: with authlib
+# installed, `import odoo` exits 0 on odoo:19.0 and 20.0 while the server dies
+# with "Couldn't load module base". `odoo.addons.base` is what
+# load_server_wide_modules() imports, and it exits 1 on all six series.
+COPY requirements.txt {{ requirements_target }}
+RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED && \
+    python3 -m pip install --ignore-installed -r {{ requirements_target }} && \
+    { cd / && python3 -c "import odoo.addons.base" || { echo "ERROR: Odoo stopped importing after installing requirements.txt. A dependency upgraded a package Odoo relies on; if the traceback above names OpenSSL/GEN_EMAIL, add 'pyopenssl' to requirements.txt (#336)." >&2; exit 1; }; }
+
+{% endif -%}
 RUN chown -R odoo:odoo /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %}{% if use_gitman %} /opt/odoo/gitman{% endif %} /etc/odoo
 
 USER odoo
