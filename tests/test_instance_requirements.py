@@ -13,6 +13,7 @@ requirements -- never the project's, which is where a proprietary or custom
 module declares what it needs.
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,9 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from rocketdoo.core.instance.config_manager import REQUIREMENTS_FILE, REQUIREMENTS_TARGET
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "rocketdoo" / "templates"
+# The scaffold copies it next to install_dependencies.sh, for the reason
+# test_the_glob_shares_a_copy_with_a_source_that_always_exists explains.
+SCAFFOLD_REQ = "/usr/lib/python3/dist-packages/odoo/requirements.txt"
 
 
 def _render(name: str, **ctx) -> str:
@@ -109,12 +113,26 @@ class TestTheScaffoldImage:
     def test_it_uses_a_glob_that_tolerates_the_file_being_absent(self):
         out = _render("Dockerfile.jinja", **self.CTX)
 
-        assert "COPY requirements.tx[t]" in out
+        assert "requirements.tx[t]" in out
+
+    def test_the_glob_shares_a_copy_with_a_source_that_always_exists(self):
+        """A COPY whose only source is a glob with no matches is rejected by the
+        classic builder ("COPY failed: no source files were specified"), and
+        `docker compose build` honours DOCKER_BUILDKIT=0 and falls back to it —
+        so `rkd build --rebuild` broke every project without the file. With a
+        source that always exists alongside, both builders accept it."""
+        out = _render("Dockerfile.jinja", **self.CTX)
+
+        copy = next(line for line in out.splitlines() if "requirements.tx[t]" in line)
+
+        assert "install_dependencies.sh" in copy
+        assert copy.index("install_dependencies.sh") < copy.index("requirements.tx[t]")
+        assert _instructions(out).count("install_dependencies.sh") == 1, "two COPYs again"
 
     def test_the_install_is_guarded(self):
         out = _render("Dockerfile.jinja", **self.CTX)
 
-        assert "if [ -f /opt/odoo/requirements.txt ]" in out
+        assert f"if [ -f {SCAFFOLD_REQ} ]" in out
         assert "--ignore-installed" in out
 
     def test_it_does_not_pass_the_flag_either(self):
@@ -313,7 +331,8 @@ class TestTheNativeDeployer:
 
         assert deployer._install_requirements() is True
 
-        write, install = calls
+        write, install, smoke = calls
+        assert smoke[0] == 'sudo python3 -c "import odoo.addons.base"'
         assert "sudo mkdir -p /opt/odoo" in write[0]
         assert f"sudo tee {REQUIREMENTS_TARGET}" in write[0]
         assert write[1] == "authlib>=1.6.12\n"
@@ -353,3 +372,98 @@ class TestTheNativeDeployer:
         deployer._install_system_deps()
 
         assert "build-essential" not in sent[0]
+
+    def test_a_broken_interpreter_is_not_reported_as_success(self, tmp_path, monkeypatch, capsys):
+        """Measured on a real build: a project declaring authlib gets
+        cryptography bumped and apt's pyOpenSSL stops working, so Odoo does not
+        import at all. Without this check the step reports success, the restart
+        takes the running Odoo down with it, and `_verify_odoo_answers` fails
+        thirty lines later with no idea why."""
+        (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
+        deployer = self._deployer(tmp_path)
+        calls = self._record(deployer, monkeypatch, results=[True, True, False])
+
+        assert deployer._install_requirements() is False
+
+        assert "import odoo.addons.base" in calls[-1][0]
+        assert "pyopenssl" in capsys.readouterr().out.lower()
+
+    def test_a_failed_install_does_not_blame_the_interpreter(self, tmp_path, monkeypatch, capsys):
+        """A pip that failed is a pip that failed: pointing at pyopenssl there
+        sends the user after the wrong thing."""
+        (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
+        deployer = self._deployer(tmp_path)
+        calls = self._record(deployer, monkeypatch, results=[True, False])
+
+        assert deployer._install_requirements() is False
+        assert len(calls) == 2, "smoke-testing an interpreter pip never finished with"
+        assert "pyopenssl" not in capsys.readouterr().out.lower()
+
+
+class TestTheImportCheck:
+    """Both images verify the interpreter still works before calling it a build.
+
+    Measured against real `odoo:18.0`/`19.0`/`20.0` builds: a requirements.txt
+    with `authlib` bumps cryptography to 50.0.2, leaves apt's pyOpenSSL
+    incompatible and Odoo stops importing entirely. Without the check the build
+    is green and the container never starts -- the same silent failure #336 came
+    to remove, one step lower.
+    """
+
+    CASES = (
+        ("instance/Dockerfile.jinja", {**INSTANCE_CTX, "requirements": True}),
+        ("Dockerfile.jinja", TestTheScaffoldImage.CTX),
+    )
+
+    @staticmethod
+    def _flat(rendered: str) -> str:
+        """The RUN as docker sees it: line continuations collapsed."""
+        return re.sub(r"[ \t]*\\\n\s*", " ", rendered)
+
+    @pytest.mark.parametrize("name,ctx", CASES)
+    def test_the_chain_is_pip_then_check_then_hint(self, name, ctx):
+        """`pip && { check || hint }`, never `pip || hint`: blaming pyopenssl for
+        a dependency that does not exist sends the user after the wrong thing."""
+        flat = self._flat(_render(name, **ctx))
+
+        assert re.search(
+            r"pip install --ignore-installed -r \S+ && \{ (cd / && )?python3 -c "
+            r'"import odoo\.addons\.base" \|\| \{ echo "ERROR: [^"]*pyopenssl[^"]*" >&2; exit 1; \}; \}',
+            flat,
+        ), flat
+
+    @pytest.mark.parametrize("name,ctx", CASES)
+    def test_it_imports_a_module_that_runs_odoo_code(self, name, ctx):
+        """`import odoo` would be a no-op where it matters most: from 19.0 the
+        `odoo` package has no __init__.py (PEP 420 namespace package, startup
+        moved to init.py), so it runs no Odoo code and exits 0 on a broken
+        interpreter -- measured on odoo:19.0 and 20.0, which are golden profiles
+        and the series the nightly deb installs. `odoo.addons.base` is what
+        load_server_wide_modules() imports and exits 1 on all six series."""
+        flat = self._flat(_render(name, **ctx))
+
+        assert 'python3 -c "import odoo.addons.base"' in flat
+        assert 'python3 -c "import odoo"' not in flat
+
+    def test_the_instance_image_does_not_check_without_the_file(self):
+        rendered = _render("instance/Dockerfile.jinja", **INSTANCE_CTX, requirements=False)
+
+        assert "import odoo" not in rendered
+
+    def test_the_scaffold_check_lives_inside_the_guard(self):
+        """Outside the `if`, a project without the file would run it too -- which
+        is fine, until it is not: this RUN must stay a no-op without the file."""
+        rendered = _render("Dockerfile.jinja", **TestTheScaffoldImage.CTX)
+
+        guarded = rendered.split(f"if [ -f {SCAFFOLD_REQ} ]; then")[1].split("else")[0]
+
+        assert "import odoo.addons.base" in guarded
+
+    def test_the_instance_check_leaves_the_gitman_workdir(self):
+        """With use_gitman the WORKDIR is still /opt/odoo/gitman, and `python3 -c`
+        prepends the cwd to sys.path: a gitman file with `location: odoo` would
+        shadow the real package with an empty directory and the check would pass
+        on anything."""
+        flat = self._flat(_render("instance/Dockerfile.jinja", **INSTANCE_CTX, requirements=True))
+
+        assert "{ cd / && python3 -c" in flat
