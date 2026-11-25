@@ -58,4 +58,28 @@ RUN git config --global http.postBuffer 104857600
 #RUN gitman install -r /usr/lib/python3/dist-packages/odoo/
 
 
+# El requirements.txt del proyecto: lo que sus modulos declaran en
+# external_dependencies. install_dependencies.sh no lo cubre, porque los
+# `scripts:` de cada fuente de gitman lo corren con `cd` dentro del repo
+# clonado y ahi ve el de ese repo (#336).
+#
+# El COPY va con el glob `requirements.tx[t]` y no con un condicional de Jinja:
+# este Dockerfile se renderiza UNA sola vez, en `rkd init`, asi que un
+# condicional se evaluaria contra un archivo que todavia no existe. Un glob sin
+# coincidencias no copia nada y no falla el build, y la guarda del RUN se ocupa
+# del resto. El de instance si usa condicional: se renderiza en cada deploy.
+#
+# EXTERNALLY-MANAGED ya se borro arriba, en la capa del apt. --ignore-installed
+# porque pip muere con "Cannot uninstall X, RECORD file not found" apenas una
+# dependencia pide una version mas nueva de algo que instalo apt; instala sin
+# desinstalar, asi que conviven dos versiones -- y por eso mismo actualizar
+# cryptography puede dejar roto el pyOpenSSL de apt. El remedio es sumar
+# `pyopenssl` al requirements.txt del proyecto.
+COPY requirements.tx[t] /opt/odoo/
+RUN if [ -f /opt/odoo/requirements.txt ]; then \
+        python3 -m pip install --ignore-installed -r /opt/odoo/requirements.txt; \
+    else \
+        echo "no requirements.txt in the project, skipping"; \
+    fi
+
 CMD python3 -m debugpy --listen 0.0.0.0:8888 /usr/bin/odoo -c /etc/odoo/odoo.conf

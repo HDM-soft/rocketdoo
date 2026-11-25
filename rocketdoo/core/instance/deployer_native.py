@@ -30,6 +30,8 @@ from .config_manager import (
     DEBIAN_PG_MAX_CONNECTIONS,
     LOG_LEVEL_BY_ENV,
     NATIVE_ADDONS_PATH,
+    REMOTE_REQUIREMENTS,
+    REQUIREMENTS_FILE,
     db_maxconn,
     resources_for,
 )
@@ -148,6 +150,13 @@ class NativeInstanceDeployer:
             if self.cfg.get("use_gitman", False)
             else []
         )
+        # Independent of gitman: install_dependencies.sh only ever sees each
+        # source's own requirements, never the project's (#336).
+        requirements = (
+            [(f"Installing {REQUIREMENTS_FILE} from the project", self._install_requirements)]
+            if (self.project_path / REQUIREMENTS_FILE).is_file()
+            else []
+        )
         return [
             ("Installing system dependencies + PostgreSQL", self._install_system_deps),
             (f"Adding Odoo {self.odoo_version} nightly repository", self._add_odoo_repo),
@@ -157,6 +166,7 @@ class NativeInstanceDeployer:
             (f"Syncing extra-addons → {self.remote_addons}", self._sync_addons),
             *enterprise,
             *gitman,
+            *requirements,
             (
                 f"Seeding database {self.db_name} from the local {self.seed_database}"
                 if self.seed_database
@@ -225,6 +235,26 @@ class NativeInstanceDeployer:
         path = save(self.project_path, self.env, {PG_PASS: generated})
         console.print(f"[green]✔[/green] Generated database password, stored in {path}")
         return generated
+
+    def _install_requirements(self) -> bool:
+        """Install the project's requirements.txt into the interpreter Odoo runs.
+
+        The system Python here, same as the gitman `scripts:` do -- a virtualenv
+        would be invisible to the Odoo the Debian package starts.
+
+        No --break-system-packages: the flag arrived in pip 23 and odoo nightly
+        on an older base may predate it. Removing EXTERNALLY-MANAGED is a no-op
+        where it does not exist, which is the mechanism both Dockerfiles use.
+        --ignore-installed for the same reason as there: pip otherwise refuses
+        to uninstall what apt put in place.
+        """
+        if not self._rsync(str(self.project_path / REQUIREMENTS_FILE), REMOTE_REQUIREMENTS):
+            console.print(f"[red]✗ Failed to transfer {REQUIREMENTS_FILE}[/red]")
+            return False
+        return self._ssh(
+            "{ sudo rm -f /usr/lib/python*/EXTERNALLY-MANAGED; "
+            f"sudo python3 -m pip install --ignore-installed -r {REMOTE_REQUIREMENTS}; }}"
+        )
 
     def _ensure_db_role(self) -> bool:
         """

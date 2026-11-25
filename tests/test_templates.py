@@ -68,6 +68,9 @@ INSTANCE_CONTEXT = {
     "use_gitman": False,
     "gitman_config_file": "gitman.stage.yml",
     "install_script": False,
+    # The project's own requirements.txt (#336): absent here, so the snapshot
+    # stays what it was.
+    "requirements": False,
     "ssh_hosts": ["github.com"],
     "addons_path": "/mnt/extra-addons",
     "pg": PG_PROFILES["small"],
