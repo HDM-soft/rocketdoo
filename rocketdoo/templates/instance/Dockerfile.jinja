@@ -67,10 +67,14 @@ RUN /opt/odoo/gitman-venv/bin/gitman install{% if environment == 'stage' %} --fo
 # version of something apt installed. It installs without uninstalling, so two
 # versions coexist -- which is also why updating cryptography can leave apt's
 # pyOpenSSL broken. Adding `pyopenssl` to the project's requirements.txt is the
-# remedy, and CLAUDE.md says so.
+# remedy, and CLAUDE.md says so. The `import odoo` right after is what keeps
+# that from shipping as a green build and a container that never starts:
+# measured, a project declaring authlib gets cryptography bumped and Odoo
+# stops importing entirely.
 COPY requirements.txt {{ requirements_target }}
 RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED && \
-    python3 -m pip install --ignore-installed -r {{ requirements_target }}
+    python3 -m pip install --ignore-installed -r {{ requirements_target }} && \
+    { python3 -c "import odoo" || { echo "ERROR: Odoo stopped importing after installing requirements.txt. A dependency upgraded a package Odoo relies on; if the traceback above names OpenSSL/GEN_EMAIL, add 'pyopenssl' to requirements.txt (#336)." >&2; exit 1; }; }
 
 {% endif -%}
 RUN chown -R odoo:odoo /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %}{% if use_gitman %} /opt/odoo/gitman{% endif %} /etc/odoo

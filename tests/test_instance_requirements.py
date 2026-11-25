@@ -313,7 +313,8 @@ class TestTheNativeDeployer:
 
         assert deployer._install_requirements() is True
 
-        write, install = calls
+        write, install, smoke = calls
+        assert 'python3 -c "import odoo"' in smoke[0]
         assert "sudo mkdir -p /opt/odoo" in write[0]
         assert f"sudo tee {REQUIREMENTS_TARGET}" in write[0]
         assert write[1] == "authlib>=1.6.12\n"
@@ -353,3 +354,65 @@ class TestTheNativeDeployer:
         deployer._install_system_deps()
 
         assert "build-essential" not in sent[0]
+
+    def test_a_broken_interpreter_is_not_reported_as_success(self, tmp_path, monkeypatch, capsys):
+        """Measured on a real build: a project declaring authlib gets
+        cryptography bumped and apt's pyOpenSSL stops working, so Odoo does not
+        import at all. Without this check the step reports success, the restart
+        takes the running Odoo down with it, and `_verify_odoo_answers` fails
+        thirty lines later with no idea why."""
+        (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
+        deployer = self._deployer(tmp_path)
+        calls = self._record(deployer, monkeypatch, results=[True, True, False])
+
+        assert deployer._install_requirements() is False
+
+        assert 'python3 -c "import odoo"' in calls[-1][0]
+        assert "pyopenssl" in capsys.readouterr().out.lower()
+
+    def test_a_failed_install_does_not_blame_the_interpreter(self, tmp_path, monkeypatch, capsys):
+        """A pip that failed is a pip that failed: pointing at pyopenssl there
+        sends the user after the wrong thing."""
+        (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
+        deployer = self._deployer(tmp_path)
+        calls = self._record(deployer, monkeypatch, results=[True, False])
+
+        assert deployer._install_requirements() is False
+        assert len(calls) == 2, "smoke-testing an interpreter pip never finished with"
+        assert "pyopenssl" not in capsys.readouterr().out.lower()
+
+
+class TestTheImportCheck:
+    """Both images verify the interpreter still works before calling it a build."""
+
+    def test_the_instance_image_checks_and_names_the_remedy(self):
+        rendered = _render("instance/Dockerfile.jinja", **INSTANCE_CTX, requirements=True)
+
+        block = rendered.split("pip install --ignore-installed")[1]
+        assert 'python3 -c "import odoo"' in block
+        assert "pyopenssl" in block
+        assert "exit 1" in block
+
+    def test_the_instance_image_does_not_check_without_the_file(self):
+        rendered = _render("instance/Dockerfile.jinja", **INSTANCE_CTX, requirements=False)
+
+        assert 'python3 -c "import odoo"' not in rendered
+
+    def test_the_scaffold_image_checks_inside_the_guard(self):
+        rendered = _render("Dockerfile.jinja", **TestTheScaffoldImage.CTX)
+
+        guarded = rendered.split("if [ -f /opt/odoo/requirements.txt ]; then")[1].split("else")[0]
+        assert 'python3 -c "import odoo"' in guarded
+        assert "pyopenssl" in guarded
+
+    def test_the_check_runs_only_when_pip_succeeded(self):
+        """`pip || hint` would blame pyopenssl for a dependency that simply does
+        not exist. The chain is `pip && { check || hint; }`."""
+        for name, ctx in (
+            ("instance/Dockerfile.jinja", {**INSTANCE_CTX, "requirements": True}),
+            ("Dockerfile.jinja", TestTheScaffoldImage.CTX),
+        ):
+            rendered = _render(name, **ctx)
+            before = rendered.split('python3 -c "import odoo"')[0]
+            assert before.rstrip().endswith("{"), name
+            assert before.rstrip("{ \\\n\t").rstrip().endswith("&&"), name

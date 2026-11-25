@@ -270,10 +270,24 @@ class NativeInstanceDeployer:
         if not written:
             console.print(f"[red]✗ Failed to write {REQUIREMENTS_TARGET}[/red]")
             return False
-        return self._ssh(
+        if not self._ssh(
             "{ sudo rm -f /usr/lib/python*/EXTERNALLY-MANAGED; "
             f"sudo python3 -m pip install --ignore-installed -r {REQUIREMENTS_TARGET}; }}"
-        )
+        ):
+            return False
+        # Measured on a real build: a project declaring authlib gets cryptography
+        # bumped and apt's pyOpenSSL stops working, so Odoo does not import at
+        # all. Without this, the step reports success and `_verify_odoo_answers`
+        # fails thirty lines later with no idea why -- after the restart has
+        # already taken the running Odoo down with it (#336).
+        if not self._ssh('python3 -c "import odoo"'):
+            console.print(
+                "[red]✗ Odoo stopped importing after installing the requirements[/red]\n"
+                "  A dependency upgraded a package Odoo relies on. If the error above\n"
+                "  names OpenSSL/GEN_EMAIL, add `pyopenssl` to the project's requirements.txt."
+            )
+            return False
+        return True
 
     def _ensure_db_role(self) -> bool:
         """

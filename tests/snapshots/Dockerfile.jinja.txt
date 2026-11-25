@@ -74,10 +74,14 @@ RUN git config --global http.postBuffer 104857600
 # dependencia pide una version mas nueva de algo que instalo apt; instala sin
 # desinstalar, asi que conviven dos versiones -- y por eso mismo actualizar
 # cryptography puede dejar roto el pyOpenSSL de apt. El remedio es sumar
-# `pyopenssl` al requirements.txt del proyecto.
+# `pyopenssl` al requirements.txt del proyecto, y el `import odoo` de abajo es
+# lo que evita que eso se entregue como un build en verde y un contenedor que
+# no arranca: medido, un proyecto que declara authlib sube cryptography y Odoo
+# deja de importar.
 COPY requirements.tx[t] /opt/odoo/
 RUN if [ -f /opt/odoo/requirements.txt ]; then \
-        python3 -m pip install --ignore-installed -r /opt/odoo/requirements.txt; \
+        python3 -m pip install --ignore-installed -r /opt/odoo/requirements.txt && \
+        { python3 -c "import odoo" || { echo "ERROR: Odoo stopped importing after installing requirements.txt. A dependency upgraded a package Odoo relies on; if the traceback above names OpenSSL/GEN_EMAIL, add 'pyopenssl' to requirements.txt (#336)." >&2; exit 1; }; }; \
     else \
         echo "no requirements.txt in the project, skipping"; \
     fi
