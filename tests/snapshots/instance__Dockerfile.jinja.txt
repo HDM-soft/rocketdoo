@@ -17,10 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 
-
 RUN mkdir -p /mnt/extra-addons /root/.ssh
 RUN ssh-keyscan github.com >> /root/.ssh/known_hosts
-
 
 
 RUN chown -R odoo:odoo /mnt/extra-addons /etc/odoo

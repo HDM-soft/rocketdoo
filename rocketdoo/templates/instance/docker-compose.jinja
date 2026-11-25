@@ -31,7 +31,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
-      {#- Every router declares a `.service`, the HTTP redirect one included: two
+      {# Every router declares a `.service`, the HTTP redirect one included: two
           services are declared and Traefik only infers one when the container
           declares exactly one, so a router without it is dropped whole and the
           host answers 404. See core/traefik.py's docstring (#342). A Jinja

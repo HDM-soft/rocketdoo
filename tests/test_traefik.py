@@ -26,6 +26,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from rocketdoo.core.traefik import render_override
@@ -516,16 +517,21 @@ class TestArgvParityAcrossCliAndGui:
 # ---------------------------------------------------------------------------
 
 
-def _routers_and_services(labels: str) -> tuple[dict[str, str | None], set[str]]:
-    """Parse Traefik docker labels into {router: service_or_None} and {service}."""
+def _routers_and_services(doc: str) -> tuple[dict[str, str | None], set[str]]:
+    """Parse a compose document into {router: service_or_None} and {service}.
+
+    Through `yaml.safe_load` and not line by line: parsing text was how the
+    first attempt at this fix passed its own tests over a compose that `docker
+    compose` rejects. A label glued to the one before it starts with the
+    previous label's key, so a text parser silently drops it and still reports
+    a complete set of routers (#342).
+    """
     routers: dict[str, str | None] = {}
     services: set[str] = set()
-    for line in labels.splitlines():
-        label = line.strip().lstrip("- ").strip('"')
+    for label in yaml.safe_load(doc)["services"]["web"]["labels"]:
         if not label.startswith("traefik.http."):
             continue
-        rest = label[len("traefik.http.") :]
-        kind, _, tail = rest.partition(".")
+        kind, _, tail = label[len("traefik.http.") :].partition(".")
         name = tail.split(".", 1)[0]
         if kind == "routers":
             routers.setdefault(name, None)
@@ -536,20 +542,29 @@ def _routers_and_services(labels: str) -> tuple[dict[str, str | None], set[str]]
     return routers, services
 
 
-# The labels rkd writes, from both generators: the instance compose rendered by
-# the Docker deployer and the override `rkd traefik on` writes in each mode.
-# INSTANCE_CONTEXT comes from test_templates so the two files cannot drift.
+INSTANCE = "instance/docker-compose.jinja"
+LOCAL = "override (local)"
+PRODUCTION = "override (production)"
+SOURCES = (INSTANCE, LOCAL, PRODUCTION)
+
+
 def _label_sources() -> dict[str, str]:
+    """The compose documents rkd writes labels into, from both generators.
+
+    INSTANCE_CONTEXT and `render` come from test_templates so this file cannot
+    drift from the snapshots -- and so the instance template is rendered with
+    the deployer's own Jinja options, which is what the VPS gets.
+    """
     from tests.test_templates import INSTANCE_CONTEXT, render
 
     return {
-        "instance/docker-compose.jinja": render("instance/docker-compose.jinja", **INSTANCE_CONTEXT),
-        "override (local)": render_override("demo", "demo.localhost", "local"),
-        "override (production)": render_override("demo", "odoo.example.com", "production"),
+        INSTANCE: render(INSTANCE, **INSTANCE_CONTEXT),
+        LOCAL: render_override("demo", "demo.localhost", "local"),
+        PRODUCTION: render_override("demo", "odoo.example.com", "production"),
     }
 
 
-@pytest.mark.parametrize("source", list(_label_sources()))
+@pytest.mark.parametrize("source", SOURCES)
 def test_every_router_declares_a_service(source):
     """Traefik's docker provider only infers a router's service when the
     container declares exactly one. These declare two -- Odoo on 8069 and
@@ -564,12 +579,12 @@ def test_every_router_declares_a_service(source):
     """
     routers, services = _routers_and_services(_label_sources()[source])
 
-    assert len(services) > 1, f"{source}: fix the fixture, not the assertion"
+    assert len(services) > 1, f"{source}: two services is the premise of this test"
     assert routers, f"{source}: no routers parsed"
-    assert [name for name, svc in routers.items() if svc is None] == []
+    assert [name for name, svc in routers.items() if not svc] == []
 
 
-@pytest.mark.parametrize("source", list(_label_sources()))
+@pytest.mark.parametrize("source", SOURCES)
 def test_every_router_names_a_service_that_exists(source):
     """A `.service` pointing at a name nothing declares fails the same way as
     no `.service` at all, and a typo is invisible in review."""
@@ -578,10 +593,38 @@ def test_every_router_names_a_service_that_exists(source):
     assert {svc for svc in routers.values() if svc} <= services
 
 
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        (LOCAL, {"demo": "demo-svc", "demo-lp": "demo-lp-svc"}),
+        (
+            PRODUCTION,
+            {"demo-http": "demo-svc", "demo": "demo-svc", "demo-lp": "demo-lp-svc"},
+        ),
+        (
+            INSTANCE,
+            {
+                "demo-stage-http": "demo-stage-svc",
+                "demo-stage": "demo-stage-svc",
+                "demo-stage-lp": "demo-stage-lp-svc",
+            },
+        ),
+    ],
+)
+def test_each_router_points_at_the_right_service(source, expected):
+    """Which service, not just that there is one: swapping the main router for
+    the longpolling one passes every assertion above, and `UPDATE_SNAPSHOTS=1`
+    would bless it in silence."""
+    routers, _ = _routers_and_services(_label_sources()[source])
+
+    assert routers == expected
+
+
 def test_the_local_override_routes_both_ports():
     """The regression that stayed hidden longest: in `local` mode neither
     router declared a service, so the mode wrote its files, created the network,
     started Traefik, restarted the project, reported success -- and served 404."""
-    routers, _ = _routers_and_services(render_override("demo", "demo.localhost", "local"))
+    routers, services = _routers_and_services(render_override("demo", "demo.localhost", "local"))
 
     assert routers == {"demo": "demo-svc", "demo-lp": "demo-lp-svc"}
+    assert services == {"demo-svc", "demo-lp-svc"}
