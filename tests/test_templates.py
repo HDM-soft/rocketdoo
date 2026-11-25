@@ -94,13 +94,27 @@ CI_INSTALL_TRIGGERS = ("pull_request", "push", "manual", "never")
 ALL_TEMPLATES = sorted(p.relative_to(TEMPLATES).as_posix() for p in TEMPLATES.rglob("*.jinja"))
 
 
-def _env(subdir: Path) -> Environment:
-    return Environment(loader=FileSystemLoader(str(subdir)), undefined=StrictUndefined)
+def _env(subdir: Path, *, trim: bool = False) -> Environment:
+    return Environment(
+        loader=FileSystemLoader(str(subdir)),
+        undefined=StrictUndefined,
+        trim_blocks=trim,
+        lstrip_blocks=trim,
+    )
 
 
 def render(rel_path: str, **context) -> str:
+    """Render a template the way its own producer does.
+
+    The instance deployer passes trim_blocks/lstrip_blocks and the other two
+    producers (init_project, ci_cli) do not, so rendering everything one way
+    means the snapshots of the instance templates are not the files that reach
+    the VPS. That gap hid a Jinja comment that concatenated two labels into one
+    line and left the compose invalid YAML: it rendered clean here and `docker
+    compose build` rejected it on the server, at step 4 of 7 (#342).
+    """
     path = TEMPLATES / rel_path
-    return _env(path.parent).get_template(path.name).render(**context)
+    return _env(path.parent, trim=rel_path.startswith("instance/")).get_template(path.name).render(**context)
 
 
 def _context_for(rel_path: str) -> dict:

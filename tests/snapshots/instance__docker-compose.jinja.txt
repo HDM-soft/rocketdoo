@@ -21,7 +21,6 @@ services:
     volumes:
       - demo-stage-data:/var/lib/odoo
       - ../extra-addons:/mnt/extra-addons
-
       - ./config/odoo.conf:/etc/odoo/odoo.conf
     networks:
       - traefik-public
@@ -32,6 +31,7 @@ services:
       - "traefik.http.routers.demo-stage-http.rule=Host(`stage.example.com`)"
       - "traefik.http.routers.demo-stage-http.entrypoints=web"
       - "traefik.http.routers.demo-stage-http.middlewares=redirect-https"
+      - "traefik.http.routers.demo-stage-http.service=demo-stage-svc"
       - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
       - "traefik.http.routers.demo-stage.rule=Host(`stage.example.com`)"
       - "traefik.http.routers.demo-stage.entrypoints=websecure"
@@ -72,7 +72,6 @@ services:
       -c wal_buffers=8MB
       -c checkpoint_completion_target=0.9
       -c max_wal_size=1GB
-
     volumes:
       - demo-stage-db:/var/lib/postgresql/data/pgdata
     secrets:
