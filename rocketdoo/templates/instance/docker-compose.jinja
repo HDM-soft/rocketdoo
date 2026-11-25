@@ -31,9 +31,15 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
+      {#- Every router declares a `.service`, the HTTP redirect one included: two
+          services are declared and Traefik only infers one when the container
+          declares exactly one, so a router without it is dropped whole and the
+          host answers 404. See core/traefik.py's docstring (#342). A Jinja
+          comment with a leading dash: it leaves nothing in the user's file. #}
       - "traefik.http.routers.{{ slug }}-http.rule=Host(`{{ domain }}`)"
       - "traefik.http.routers.{{ slug }}-http.entrypoints=web"
       - "traefik.http.routers.{{ slug }}-http.middlewares=redirect-https"
+      - "traefik.http.routers.{{ slug }}-http.service={{ slug }}-svc"
       - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
       - "traefik.http.routers.{{ slug }}.rule=Host(`{{ domain }}`)"
       - "traefik.http.routers.{{ slug }}.entrypoints=websecure"

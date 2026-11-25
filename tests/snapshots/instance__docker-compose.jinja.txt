@@ -32,6 +32,7 @@ services:
       - "traefik.http.routers.demo-stage-http.rule=Host(`stage.example.com`)"
       - "traefik.http.routers.demo-stage-http.entrypoints=web"
       - "traefik.http.routers.demo-stage-http.middlewares=redirect-https"
+      - "traefik.http.routers.demo-stage-http.service=demo-stage-svc"
       - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
       - "traefik.http.routers.demo-stage.rule=Host(`stage.example.com`)"
       - "traefik.http.routers.demo-stage.entrypoints=websecure"

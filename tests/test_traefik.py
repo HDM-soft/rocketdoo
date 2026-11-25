@@ -28,6 +28,8 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
+from rocketdoo.core.traefik import render_override
+
 fastapi_testclient = pytest.importorskip("fastapi.testclient")
 
 from rocketdoo import traefik_cli  # noqa: E402
@@ -507,3 +509,79 @@ class TestArgvParityAcrossCliAndGui:
         cli_normalized = [(argv, _relative_cwd(cwd, cli_dir)) for argv, cwd in cli_calls]
         gui_normalized = [(argv, _relative_cwd(cwd, gui_dir)) for argv, cwd in gui_calls]
         assert cli_normalized == gui_normalized
+
+
+# ---------------------------------------------------------------------------
+# (d) Every router names a service, in both generators (#342)
+# ---------------------------------------------------------------------------
+
+
+def _routers_and_services(labels: str) -> tuple[dict[str, str | None], set[str]]:
+    """Parse Traefik docker labels into {router: service_or_None} and {service}."""
+    routers: dict[str, str | None] = {}
+    services: set[str] = set()
+    for line in labels.splitlines():
+        label = line.strip().lstrip("- ").strip('"')
+        if not label.startswith("traefik.http."):
+            continue
+        rest = label[len("traefik.http.") :]
+        kind, _, tail = rest.partition(".")
+        name = tail.split(".", 1)[0]
+        if kind == "routers":
+            routers.setdefault(name, None)
+            if ".service=" in tail:
+                routers[name] = tail.split(".service=", 1)[1]
+        elif kind == "services":
+            services.add(name)
+    return routers, services
+
+
+# The labels rkd writes, from both generators: the instance compose rendered by
+# the Docker deployer and the override `rkd traefik on` writes in each mode.
+# INSTANCE_CONTEXT comes from test_templates so the two files cannot drift.
+def _label_sources() -> dict[str, str]:
+    from tests.test_templates import INSTANCE_CONTEXT, render
+
+    return {
+        "instance/docker-compose.jinja": render("instance/docker-compose.jinja", **INSTANCE_CONTEXT),
+        "override (local)": render_override("demo", "demo.localhost", "local"),
+        "override (production)": render_override("demo", "odoo.example.com", "production"),
+    }
+
+
+@pytest.mark.parametrize("source", list(_label_sources()))
+def test_every_router_declares_a_service(source):
+    """Traefik's docker provider only infers a router's service when the
+    container declares exactly one. These declare two -- Odoo on 8069 and
+    longpolling on 8072 -- so a router without `.service` is dropped whole and
+    the entrypoint answers 404 for that host. Measured against a real
+    traefik:v2.11: three of rkd's six routers were being dropped, which is why
+    `http://<domain>` returned 404 in every deploy with a domain and
+    `rkd traefik on --mode local` never routed anything at all (#342).
+
+    It holds for the HTTP redirect router too, which never reaches a backend:
+    Traefik requires the router to be complete to load it, needed or not.
+    """
+    routers, services = _routers_and_services(_label_sources()[source])
+
+    assert len(services) > 1, f"{source}: fix the fixture, not the assertion"
+    assert routers, f"{source}: no routers parsed"
+    assert [name for name, svc in routers.items() if svc is None] == []
+
+
+@pytest.mark.parametrize("source", list(_label_sources()))
+def test_every_router_names_a_service_that_exists(source):
+    """A `.service` pointing at a name nothing declares fails the same way as
+    no `.service` at all, and a typo is invisible in review."""
+    routers, services = _routers_and_services(_label_sources()[source])
+
+    assert {svc for svc in routers.values() if svc} <= services
+
+
+def test_the_local_override_routes_both_ports():
+    """The regression that stayed hidden longest: in `local` mode neither
+    router declared a service, so the mode wrote its files, created the network,
+    started Traefik, restarted the project, reported success -- and served 404."""
+    routers, _ = _routers_and_services(render_override("demo", "demo.localhost", "local"))
+
+    assert routers == {"demo": "demo-svc", "demo-lp": "demo-lp-svc"}

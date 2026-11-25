@@ -163,6 +163,16 @@ api:
 
 
 def render_override(project: str, domain: str, mode: str) -> str:
+    """Traefik labels for the project's web service.
+
+    Every router declares a `.service`, including the HTTP one that only
+    redirects: the service list has two entries (Odoo on 8069 and longpolling
+    on 8072) and Traefik's docker provider only infers a router's service when
+    the container declares exactly one. With two it drops the whole router --
+    measured against a real traefik:v2.11 -- and the entrypoint is left with no
+    rule for the host, so it answers 404. In `local` mode neither router
+    declared one, which is why that mode never routed anything (#342).
+    """
     slug = project.replace("-", "_").replace(" ", "_")
 
     if mode == "local":
@@ -171,9 +181,11 @@ def render_override(project: str, domain: str, mode: str) -> str:
             f'      - "traefik.docker.network=traefik-public"\n'
             f'      - "traefik.http.routers.{slug}.rule=Host(`{domain}`)"\n'
             f'      - "traefik.http.routers.{slug}.entrypoints=web"\n'
+            f'      - "traefik.http.routers.{slug}.service={slug}-svc"\n'
             f'      - "traefik.http.services.{slug}-svc.loadbalancer.server.port=8069"\n'
             f'      - "traefik.http.routers.{slug}-lp.rule=Host(`{domain}`) && (PathPrefix(`/longpolling`) || PathPrefix(`/websocket`))"\n'
             f'      - "traefik.http.routers.{slug}-lp.entrypoints=web"\n'
+            f'      - "traefik.http.routers.{slug}-lp.service={slug}-lp-svc"\n'
             f'      - "traefik.http.services.{slug}-lp-svc.loadbalancer.server.port=8072"'
         )
     else:
@@ -182,6 +194,7 @@ def render_override(project: str, domain: str, mode: str) -> str:
             f'      - "traefik.docker.network=traefik-public"\n'
             f'      - "traefik.http.routers.{slug}-http.rule=Host(`{domain}`)"\n'
             f'      - "traefik.http.routers.{slug}-http.entrypoints=web"\n'
+            f'      - "traefik.http.routers.{slug}-http.service={slug}-svc"\n'
             f'      - "traefik.http.routers.{slug}-http.middlewares=redirect-https"\n'
             f'      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"\n'
             f'      - "traefik.http.routers.{slug}.rule=Host(`{domain}`)"\n'
