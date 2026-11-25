@@ -280,7 +280,19 @@ class NativeInstanceDeployer:
         # all. Without this, the step reports success and `_verify_odoo_answers`
         # fails thirty lines later with no idea why -- after the restart has
         # already taken the running Odoo down with it (#336).
-        if not self._ssh('python3 -c "import odoo"'):
+        #
+        # `odoo.addons.base` and not `odoo`: from 19.0 the `odoo` package has no
+        # __init__.py (PEP 420 namespace package, startup moved to init.py), so
+        # `import odoo` runs no Odoo code and exits 0 on a broken interpreter --
+        # measured on odoo:19.0 and 20.0, which is the series the nightly deb
+        # installs too. `odoo.addons.base` is what load_server_wide_modules()
+        # imports, and it exits 1 on all six series.
+        #
+        # Under sudo, same as the install: sudo resets PATH to secure_path, so
+        # without it the check would run whatever python3 the SSH user's profile
+        # puts first -- a pyenv or an activated venv would report Odoo missing
+        # and block a perfectly healthy deploy with a hint about pyopenssl.
+        if not self._ssh('sudo python3 -c "import odoo.addons.base"'):
             console.print(
                 "[red]✗ Odoo stopped importing after installing the requirements[/red]\n"
                 "  A dependency upgraded a package Odoo relies on. If the error above\n"
