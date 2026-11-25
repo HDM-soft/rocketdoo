@@ -26,6 +26,8 @@ from . import preflight
 from .config_manager import (
     LOG_LEVEL_BY_ENV,
     PG_PROFILES,
+    REQUIREMENTS_FILE,
+    REQUIREMENTS_TARGET,
     db_maxconn,
     resources_for,
 )
@@ -261,6 +263,9 @@ class DockerInstanceDeployer:
         admin_passwd = creds["admin_passwd"]
         # One source for the seven tuning values, shared with the native
         # deployer and with the pre-flight's memory check (#332).
+        # Independent of gitman: this is the project's own requirements.txt,
+        # which install_dependencies.sh never sees (#336).
+        requirements = (self.project_path / REQUIREMENTS_FILE).is_file()
         tuning = resources_for(self.env, self.cfg)
 
         ctx = {
@@ -284,6 +289,8 @@ class DockerInstanceDeployer:
             "use_gitman": use_gitman,
             "gitman_config_file": gitman_config,
             "install_script": use_gitman and install_script,
+            "requirements": requirements,
+            "requirements_target": REQUIREMENTS_TARGET,
             "needs_ssh": self._needs_ssh(),
             "ssh_hosts": list(dict.fromkeys(ssh_hosts)),
             "addons_path": ",".join(addons_path),
@@ -323,6 +330,11 @@ class DockerInstanceDeployer:
                 console.print(f"[yellow]⚠ Gitman config {gitman_config} not found locally — skipping[/yellow]")
             if install_script:
                 shutil.copy(self.project_path / preflight.INSTALL_SCRIPT, tmp / preflight.INSTALL_SCRIPT)
+
+        # Outside the gitman branch on purpose: the project's requirements.txt
+        # has nothing to do with third-party repos (#336).
+        if requirements:
+            shutil.copy(self.project_path / REQUIREMENTS_FILE, tmp / REQUIREMENTS_FILE)
 
     def _show_generated_files(self, tmp: Path):
         console.print("\n[bold]Generated files (dry-run):[/bold]")
@@ -435,6 +447,18 @@ class DockerInstanceDeployer:
                 if local.exists() and not self._rsync(str(local), f"{self.remote_path}/{name}"):
                     console.print(f"[red]✗ Failed to transfer {name}, which the Dockerfile copies[/red]")
                     return False
+
+        # Outside the gitman branch, because the project's requirements.txt has
+        # nothing to do with third-party repos. Copying it into tmp is not
+        # enough: this method sends named files one at a time, never the whole
+        # temporary directory, so without this the build dies on
+        # `failed to compute cache key: "/requirements.txt": not found` -- and
+        # the message rkd prints next points at the SSH agent, which has
+        # nothing to do with it (#336).
+        local_requirements = tmp / REQUIREMENTS_FILE
+        if local_requirements.exists() and not self._rsync(str(local_requirements), f"{self.remote_path}/{REQUIREMENTS_FILE}"):
+            console.print(f"[red]✗ Failed to transfer {REQUIREMENTS_FILE}, which the Dockerfile copies[/red]")
+            return False
 
         # The build context is remote_path: enterprise and extra-addons are
         # mounted at runtime and must not travel to the daemon, nor must
