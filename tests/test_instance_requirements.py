@@ -165,6 +165,72 @@ class TestTheDockerDeployer:
         assert not (out / REQUIREMENTS_FILE).exists()
         assert "requirements.txt" not in (out / "Dockerfile.prod").read_text()
 
+    @pytest.mark.parametrize("use_gitman", [False, True])
+    def test_it_actually_travels_to_the_vps(self, project, tmp_path, monkeypatch, use_gitman):
+        """Copying it into tmp is not enough, and this is the test that was
+        missing: `_transfer` sends named files one at a time, never the whole
+        temporary directory. Without its own rsync the build dies on
+        `failed to compute cache key: "/requirements.txt": not found`, and the
+        message rkd prints next points at the SSH agent instead.
+
+        Parametrised over gitman because the copy sits outside that branch: a
+        project with a requirements.txt and no third-party repos has to get it
+        too.
+        """
+        (project / REQUIREMENTS_FILE).write_text("authlib>=1.6.12\n")
+        if use_gitman:
+            (project / "gitman.yaml").write_text("location: external_addons\nsources: []\n")
+        deployer = self._deployer(project)
+        deployer.cfg["use_gitman"] = use_gitman
+        out = tmp_path / "ctx"
+        out.mkdir()
+        deployer._render_templates(out, dry_run=True)
+        sent = []
+        monkeypatch.setattr(deployer, "_rsync", lambda src, dest, *a: sent.append(dest) or True)
+        monkeypatch.setattr(deployer, "_ssh", lambda *a, **kw: True)
+
+        assert deployer._transfer(out) is True
+
+        assert f"{deployer.remote_path}/{REQUIREMENTS_FILE}" in sent
+
+    def test_a_project_without_it_sends_nothing_extra(self, project, tmp_path, monkeypatch):
+        deployer = self._deployer(project)
+        out = tmp_path / "ctx"
+        out.mkdir()
+        deployer._render_templates(out, dry_run=True)
+        sent = []
+        monkeypatch.setattr(deployer, "_rsync", lambda src, dest, *a: sent.append(dest) or True)
+        monkeypatch.setattr(deployer, "_ssh", lambda *a, **kw: True)
+
+        assert deployer._transfer(out) is True
+
+        assert not [dest for dest in sent if REQUIREMENTS_FILE in dest]
+
+    def test_a_failed_transfer_fails_the_step(self, project, tmp_path, monkeypatch):
+        # A build that cannot find the file in its context is worse than a
+        # deploy that stops here saying why.
+        (project / REQUIREMENTS_FILE).write_text("authlib\n")
+        deployer = self._deployer(project)
+        out = tmp_path / "ctx"
+        out.mkdir()
+        deployer._render_templates(out, dry_run=True)
+        monkeypatch.setattr(deployer, "_ssh", lambda *a, **kw: True)
+        monkeypatch.setattr(deployer, "_rsync", lambda src, dest, *a: REQUIREMENTS_FILE not in dest)
+
+        assert deployer._transfer(out) is False
+
+    def test_the_dockerignore_does_not_exclude_it(self, project, tmp_path, monkeypatch):
+        (project / REQUIREMENTS_FILE).write_text("authlib\n")
+        deployer = self._deployer(project)
+        out = tmp_path / "ctx"
+        out.mkdir()
+        deployer._render_templates(out, dry_run=True)
+        monkeypatch.setattr(deployer, "_rsync", lambda *a, **kw: True)
+        monkeypatch.setattr(deployer, "_ssh", lambda *a, **kw: True)
+        deployer._transfer(out)
+
+        assert REQUIREMENTS_FILE not in (out / ".dockerignore").read_text()
+
     def test_it_does_not_depend_on_gitman(self, project, tmp_path):
         """The copy sits outside the gitman branch: a project with a
         requirements.txt and no third-party repos still gets it."""

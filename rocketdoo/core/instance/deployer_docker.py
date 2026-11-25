@@ -446,6 +446,18 @@ class DockerInstanceDeployer:
                     console.print(f"[red]✗ Failed to transfer {name}, which the Dockerfile copies[/red]")
                     return False
 
+        # Outside the gitman branch, because the project's requirements.txt has
+        # nothing to do with third-party repos. Copying it into tmp is not
+        # enough: this method sends named files one at a time, never the whole
+        # temporary directory, so without this the build dies on
+        # `failed to compute cache key: "/requirements.txt": not found` -- and
+        # the message rkd prints next points at the SSH agent, which has
+        # nothing to do with it (#336).
+        local_requirements = tmp / REQUIREMENTS_FILE
+        if local_requirements.exists() and not self._rsync(str(local_requirements), f"{self.remote_path}/{REQUIREMENTS_FILE}"):
+            console.print(f"[red]✗ Failed to transfer {REQUIREMENTS_FILE}, which the Dockerfile copies[/red]")
+            return False
+
         # The build context is remote_path: enterprise and extra-addons are
         # mounted at runtime and must not travel to the daemon, nor must
         # both environments' directories (odoo_pg_pass and the conf).
