@@ -30,6 +30,8 @@ from .config_manager import (
     DEBIAN_PG_MAX_CONNECTIONS,
     LOG_LEVEL_BY_ENV,
     NATIVE_ADDONS_PATH,
+    REQUIREMENTS_FILE,
+    REQUIREMENTS_TARGET,
     db_maxconn,
     resources_for,
 )
@@ -148,6 +150,13 @@ class NativeInstanceDeployer:
             if self.cfg.get("use_gitman", False)
             else []
         )
+        # Independent of gitman: install_dependencies.sh only ever sees each
+        # source's own requirements, never the project's (#336).
+        requirements = (
+            [(f"Installing {REQUIREMENTS_FILE} from the project", self._install_requirements)]
+            if (self.project_path / REQUIREMENTS_FILE).is_file()
+            else []
+        )
         return [
             ("Installing system dependencies + PostgreSQL", self._install_system_deps),
             (f"Adding Odoo {self.odoo_version} nightly repository", self._add_odoo_repo),
@@ -157,6 +166,7 @@ class NativeInstanceDeployer:
             (f"Syncing extra-addons → {self.remote_addons}", self._sync_addons),
             *enterprise,
             *gitman,
+            *requirements,
             (
                 f"Seeding database {self.db_name} from the local {self.seed_database}"
                 if self.seed_database
@@ -173,6 +183,15 @@ class NativeInstanceDeployer:
         packages = "curl wget gnupg2 apt-transport-https postgresql postgresql-client"
         if self.cfg.get("use_gitman", False):
             packages += " git python3-venv python3-pip"
+        if (self.project_path / REQUIREMENTS_FILE).is_file():
+            # The Odoo nightly deb depends on neither pip nor a toolchain, and
+            # python3-pip only came in with gitman: without this the
+            # requirements step fails on every project that does not use
+            # third-party repos. python3-dev and build-essential because a
+            # dependency with no wheel (python-ldap, M2Crypto, any sdist) has
+            # nothing to compile with otherwise -- the two Dockerfiles install
+            # them, the VPS did not (#336).
+            packages += " python3-pip python3-dev build-essential"
         cmd = f"apt-get update -qq && apt-get install -y --no-install-recommends {packages}"
         return self._ssh(f'sudo bash -c "{cmd}"')
 
@@ -225,6 +244,36 @@ class NativeInstanceDeployer:
         path = save(self.project_path, self.env, {PG_PASS: generated})
         console.print(f"[green]✔[/green] Generated database password, stored in {path}")
         return generated
+
+    def _install_requirements(self) -> bool:
+        """Install the project's requirements.txt into the interpreter Odoo runs.
+
+        The system Python here, same as the gitman `scripts:` do -- a virtualenv
+        would be invisible to the Odoo the Debian package starts.
+
+        No --break-system-packages: the flag arrived in pip 23 and odoo nightly
+        on an older base may predate it. Removing EXTERNALLY-MANAGED is a no-op
+        where it does not exist, which is the mechanism both Dockerfiles use.
+        --ignore-installed for the same reason as there: pip otherwise refuses
+        to uninstall what apt put in place.
+        """
+        # By stdin and not rsync: this is the only transfer of the native
+        # deployer whose destination lives under a root-owned directory that
+        # nothing else creates. rsync does not make the directory and does not
+        # use sudo, so with the wizard's default user (`ubuntu`) it fails with
+        # "change_dir failed" or "Permission denied". `_configure_odoo` already
+        # writes a root-owned file this way (#336).
+        written = self._ssh(
+            f"sudo mkdir -p {Path(REQUIREMENTS_TARGET).parent} && sudo tee {REQUIREMENTS_TARGET} > /dev/null",
+            input=(self.project_path / REQUIREMENTS_FILE).read_text(),
+        )
+        if not written:
+            console.print(f"[red]✗ Failed to write {REQUIREMENTS_TARGET}[/red]")
+            return False
+        return self._ssh(
+            "{ sudo rm -f /usr/lib/python*/EXTERNALLY-MANAGED; "
+            f"sudo python3 -m pip install --ignore-installed -r {REQUIREMENTS_TARGET}; }}"
+        )
 
     def _ensure_db_role(self) -> bool:
         """

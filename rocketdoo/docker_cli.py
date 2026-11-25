@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -180,4 +181,12 @@ def build(tag, rebuild):
 
         click.echo("🔨 Building Docker image...")
         click.echo(f"🚀 Executing: {' '.join(command)}")
-        subprocess.run(command, check=True)
+        # BuildKit explicitly: the generated Dockerfile copies the project's
+        # requirements.txt with the glob `requirements.tx[t]`, which the classic
+        # builder rejects with "COPY failed: no source files were specified"
+        # when the file is absent. Docker >= 23 defaults to BuildKit, but
+        # DOCKER_BUILDKIT=0 in the environment or Docker <= 22.x (20.10 ships
+        # with Ubuntu 20.04/22.04) would break the build of every project
+        # without that file (#336). `docker compose` already uses BuildKit, so
+        # --rebuild was never affected.
+        subprocess.run(command, check=True, env={**os.environ, "DOCKER_BUILDKIT": "1"})
