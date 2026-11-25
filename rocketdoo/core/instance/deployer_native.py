@@ -30,8 +30,8 @@ from .config_manager import (
     DEBIAN_PG_MAX_CONNECTIONS,
     LOG_LEVEL_BY_ENV,
     NATIVE_ADDONS_PATH,
-    REMOTE_REQUIREMENTS,
     REQUIREMENTS_FILE,
+    REQUIREMENTS_TARGET,
     db_maxconn,
     resources_for,
 )
@@ -183,6 +183,15 @@ class NativeInstanceDeployer:
         packages = "curl wget gnupg2 apt-transport-https postgresql postgresql-client"
         if self.cfg.get("use_gitman", False):
             packages += " git python3-venv python3-pip"
+        if (self.project_path / REQUIREMENTS_FILE).is_file():
+            # The Odoo nightly deb depends on neither pip nor a toolchain, and
+            # python3-pip only came in with gitman: without this the
+            # requirements step fails on every project that does not use
+            # third-party repos. python3-dev and build-essential because a
+            # dependency with no wheel (python-ldap, M2Crypto, any sdist) has
+            # nothing to compile with otherwise -- the two Dockerfiles install
+            # them, the VPS did not (#336).
+            packages += " python3-pip python3-dev build-essential"
         cmd = f"apt-get update -qq && apt-get install -y --no-install-recommends {packages}"
         return self._ssh(f'sudo bash -c "{cmd}"')
 
@@ -248,12 +257,22 @@ class NativeInstanceDeployer:
         --ignore-installed for the same reason as there: pip otherwise refuses
         to uninstall what apt put in place.
         """
-        if not self._rsync(str(self.project_path / REQUIREMENTS_FILE), REMOTE_REQUIREMENTS):
-            console.print(f"[red]✗ Failed to transfer {REQUIREMENTS_FILE}[/red]")
+        # By stdin and not rsync: this is the only transfer of the native
+        # deployer whose destination lives under a root-owned directory that
+        # nothing else creates. rsync does not make the directory and does not
+        # use sudo, so with the wizard's default user (`ubuntu`) it fails with
+        # "change_dir failed" or "Permission denied". `_configure_odoo` already
+        # writes a root-owned file this way (#336).
+        written = self._ssh(
+            f"sudo mkdir -p {Path(REQUIREMENTS_TARGET).parent} && sudo tee {REQUIREMENTS_TARGET} > /dev/null",
+            input=(self.project_path / REQUIREMENTS_FILE).read_text(),
+        )
+        if not written:
+            console.print(f"[red]✗ Failed to write {REQUIREMENTS_TARGET}[/red]")
             return False
         return self._ssh(
             "{ sudo rm -f /usr/lib/python*/EXTERNALLY-MANAGED; "
-            f"sudo python3 -m pip install --ignore-installed -r {REMOTE_REQUIREMENTS}; }}"
+            f"sudo python3 -m pip install --ignore-installed -r {REQUIREMENTS_TARGET}; }}"
         )
 
     def _ensure_db_role(self) -> bool:

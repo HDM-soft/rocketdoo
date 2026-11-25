@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from rocketdoo.core.instance.config_manager import REMOTE_REQUIREMENTS, REQUIREMENTS_FILE
+from rocketdoo.core.instance.config_manager import REQUIREMENTS_FILE, REQUIREMENTS_TARGET
 
 TEMPLATES = Path(__file__).resolve().parents[1] / "rocketdoo" / "templates"
 
@@ -47,6 +47,7 @@ INSTANCE_CTX = {
     "use_enterprise": False,
     "environment": "prod",
     "needs_ssh": False,
+    "requirements_target": REQUIREMENTS_TARGET,
 }
 
 
@@ -59,8 +60,8 @@ class TestTheInstanceImage:
     def test_with_the_file_it_is_copied_and_installed(self):
         out = _render("instance/Dockerfile.jinja", **INSTANCE_CTX, requirements=True)
 
-        assert "COPY requirements.txt /opt/odoo/requirements.txt" in out
-        assert "pip install --ignore-installed -r /opt/odoo/requirements.txt" in out
+        assert f"COPY requirements.txt {REQUIREMENTS_TARGET}" in out
+        assert f"pip install --ignore-installed -r {REQUIREMENTS_TARGET}" in out
 
     def test_it_comes_after_the_gitman_layer(self):
         """Touching a dependency must not reclone the third-party repos."""
@@ -266,34 +267,89 @@ class TestTheNativeDeployer:
 
         assert [one for one in labels if REQUIREMENTS_FILE in one]
 
-    def test_it_runs_before_the_database_and_the_restart(self, tmp_path):
-        """The module's dependencies have to be there when installing `base`
-        touches it, and certainly before the service restarts."""
+    @pytest.mark.parametrize("seeded", [False, True])
+    def test_it_runs_before_the_database_and_the_restart(self, tmp_path, seeded):
+        """The order is load-bearing, and more so when seeding.
+
+        `_ensure_database` does not only run `-i base`: when the mark is
+        missing it runs `odoo shell`, which loads the registry — and a restored
+        database brings the project's modules already **installed**, so that
+        shell imports their Python and needs these dependencies. The step can
+        not merely go before the database: it has to.
+        """
         (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
-        labels = [label for label, _ in self._deployer(tmp_path)._steps()]
+        deployer = self._deployer(tmp_path)
+        if seeded:
+            deployer.cfg["seed_database"] = "dev_db"
+            deployer.seed_database = "dev_db"
+        labels = [label for label, _ in deployer._steps()]
         where = next(i for i, one in enumerate(labels) if REQUIREMENTS_FILE in one)
 
         assert where < next(i for i, one in enumerate(labels) if "database" in one.lower())
         assert where < next(i for i, one in enumerate(labels) if "service" in one.lower())
 
-    def test_it_transfers_and_installs_into_the_system_interpreter(self, tmp_path, monkeypatch):
-        (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
+    @staticmethod
+    def _record(deployer, monkeypatch, results=None):
+        calls = []
+
+        def _ssh(command, **kw):
+            calls.append((command, kw.get("input")))
+            return True if results is None else results.pop(0)
+
+        monkeypatch.setattr(deployer, "_ssh", _ssh)
+        monkeypatch.setattr(deployer, "_rsync", lambda *a, **kw: pytest.fail("rsync cannot reach a root-owned path"))
+        return calls
+
+    def test_the_file_is_written_by_stdin_under_sudo(self, tmp_path, monkeypatch):
+        """Not rsync: this is the only transfer of the native deployer whose
+        destination lives under a root-owned directory that nothing else
+        creates. rsync neither makes the directory nor uses sudo, so with the
+        wizard's default user (`ubuntu`) it fails with "change_dir failed" or
+        "Permission denied". `_configure_odoo` already writes a root-owned file
+        this way."""
+        (tmp_path / REQUIREMENTS_FILE).write_text("authlib>=1.6.12\n")
         deployer = self._deployer(tmp_path)
-        seen = {}
-        monkeypatch.setattr(deployer, "_rsync", lambda src, dest, *a: seen.update(rsync=(src, dest)) or True)
-        monkeypatch.setattr(deployer, "_ssh", lambda command, **kw: seen.update(ssh=command) or True)
+        calls = self._record(deployer, monkeypatch)
 
         assert deployer._install_requirements() is True
 
-        assert seen["rsync"][1] == REMOTE_REQUIREMENTS
-        assert "EXTERNALLY-MANAGED" in seen["ssh"]
-        assert f"pip install --ignore-installed -r {REMOTE_REQUIREMENTS}" in seen["ssh"]
-        assert "--break-system-packages" not in seen["ssh"]
+        write, install = calls
+        assert "sudo mkdir -p /opt/odoo" in write[0]
+        assert f"sudo tee {REQUIREMENTS_TARGET}" in write[0]
+        assert write[1] == "authlib>=1.6.12\n"
+        assert "EXTERNALLY-MANAGED" in install[0]
+        assert f"pip install --ignore-installed -r {REQUIREMENTS_TARGET}" in install[0]
+        assert "--break-system-packages" not in install[0]
 
-    def test_a_failed_transfer_fails_the_step(self, tmp_path, monkeypatch):
+    def test_a_failed_write_does_not_try_to_install(self, tmp_path, monkeypatch):
         (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
         deployer = self._deployer(tmp_path)
-        monkeypatch.setattr(deployer, "_rsync", lambda *a, **kw: False)
-        monkeypatch.setattr(deployer, "_ssh", lambda *a, **kw: pytest.fail("must not install what did not arrive"))
+        calls = self._record(deployer, monkeypatch, results=[False])
 
         assert deployer._install_requirements() is False
+        assert len(calls) == 1, "installing what never arrived"
+
+    def test_pip_is_installed_even_without_gitman(self, tmp_path):
+        """The Odoo nightly deb depends on neither pip nor a toolchain, and
+        python3-pip only came in with gitman: without this the step failed on
+        every project that does not use third-party repos."""
+        (tmp_path / REQUIREMENTS_FILE).write_text("authlib\n")
+        deployer = self._deployer(tmp_path)
+        assert deployer.cfg.get("use_gitman") is None
+        sent = []
+        deployer._ssh = lambda command, **kw: sent.append(command) or True
+
+        deployer._install_system_deps()
+
+        assert "python3-pip" in sent[0]
+        # A dependency with no wheel has to have something to compile with.
+        assert "python3-dev" in sent[0] and "build-essential" in sent[0]
+
+    def test_a_project_without_the_file_does_not_pull_the_toolchain(self, tmp_path):
+        deployer = self._deployer(tmp_path)
+        sent = []
+        deployer._ssh = lambda command, **kw: sent.append(command) or True
+
+        deployer._install_system_deps()
+
+        assert "build-essential" not in sent[0]

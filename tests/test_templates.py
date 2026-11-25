@@ -71,6 +71,7 @@ INSTANCE_CONTEXT = {
     # The project's own requirements.txt (#336): absent here, so the snapshot
     # stays what it was.
     "requirements": False,
+    "requirements_target": "/opt/odoo/requirements.txt",
     "ssh_hosts": ["github.com"],
     "addons_path": "/mnt/extra-addons",
     "pg": PG_PROFILES["small"],

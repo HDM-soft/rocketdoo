@@ -27,6 +27,7 @@ from .config_manager import (
     LOG_LEVEL_BY_ENV,
     PG_PROFILES,
     REQUIREMENTS_FILE,
+    REQUIREMENTS_TARGET,
     db_maxconn,
     resources_for,
 )
@@ -289,6 +290,7 @@ class DockerInstanceDeployer:
             "gitman_config_file": gitman_config,
             "install_script": use_gitman and install_script,
             "requirements": requirements,
+            "requirements_target": REQUIREMENTS_TARGET,
             "needs_ssh": self._needs_ssh(),
             "ssh_hosts": list(dict.fromkeys(ssh_hosts)),
             "addons_path": ",".join(addons_path),

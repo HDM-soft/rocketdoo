@@ -68,9 +68,9 @@ RUN /opt/odoo/gitman-venv/bin/gitman install{% if environment == 'stage' %} --fo
 # versions coexist -- which is also why updating cryptography can leave apt's
 # pyOpenSSL broken. Adding `pyopenssl` to the project's requirements.txt is the
 # remedy, and CLAUDE.md says so.
-COPY requirements.txt /opt/odoo/requirements.txt
+COPY requirements.txt {{ requirements_target }}
 RUN rm -f /usr/lib/python*/EXTERNALLY-MANAGED && \
-    python3 -m pip install --ignore-installed -r /opt/odoo/requirements.txt
+    python3 -m pip install --ignore-installed -r {{ requirements_target }}
 
 {% endif -%}
 RUN chown -R odoo:odoo /mnt/extra-addons{% if use_enterprise %} /mnt/enterprise{% endif %}{% if use_gitman %} /opt/odoo/gitman{% endif %} /etc/odoo

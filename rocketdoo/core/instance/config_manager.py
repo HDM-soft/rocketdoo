@@ -43,7 +43,10 @@ DEFAULT_GITMAN_FILE = "gitman.yaml"
 # `scripts:` of each gitman source run with `cd` inside the cloned repo and so
 # only ever sees that repo's file (#336).
 REQUIREMENTS_FILE = "requirements.txt"
-REMOTE_REQUIREMENTS = "/opt/odoo/requirements.txt"
+# Where the file lands on the side that installs it: inside the image for the
+# Docker path, on the host for the native one. The instance template gets it
+# through the render context so the two cannot drift apart.
+REQUIREMENTS_TARGET = "/opt/odoo/requirements.txt"
 
 PG_PROFILES: dict[str, dict] = {
     "small": {
